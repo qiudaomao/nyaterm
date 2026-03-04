@@ -4,13 +4,13 @@ import { SettingNumberInput, SettingRow, SettingSwitch } from "./SettingFormItem
 
 export function TerminalTab() {
   const { t } = useTranslation();
-  const { appSettings, updateAppSettings } = useApp();
+  const { appSettings, updateAppSettings, updateUi } = useApp();
 
   return (
     <div className="space-y-4">
       <SettingNumberInput
-        label={t("settings.scrollbackLines", "Scrollback Buffer (lines)")}
-        desc={t("settings.scrollbackLinesDesc", "Number of lines kept in memory for scrolling up.")}
+        label={t("settings.scrollbackLines")}
+        desc={t("settings.scrollbackLinesDesc")}
         min={100}
         max={100000}
         step={100}
@@ -21,11 +21,8 @@ export function TerminalTab() {
       />
 
       <SettingNumberInput
-        label={t("settings.keepAliveInterval", "Keep-Alive Interval (seconds)")}
-        desc={t(
-          "settings.keepAliveIntervalDesc",
-          "Send SSH keep-alive packets every X seconds. 0 to disable.",
-        )}
+        label={t("settings.keepAliveInterval")}
+        desc={t("settings.keepAliveIntervalDesc")}
         min={0}
         max={600}
         step={5}
@@ -36,17 +33,24 @@ export function TerminalTab() {
       />
 
       <SettingRow
-        label={t("settings.hardwareAcceleration", "Hardware Acceleration")}
-        desc={t(
-          "settings.hardwareAccelerationDesc",
-          "Use GPU for terminal rendering (WebGL/Canvas). Requires restart.",
-        )}
+        label={t("settings.hardwareAcceleration")}
+        desc={t("settings.hardwareAccelerationDesc")}
       >
         <SettingSwitch
           checked={appSettings.terminal.hardware_acceleration}
           onChange={(v) =>
             updateAppSettings({ terminal: { ...appSettings.terminal, hardware_acceleration: v } })
           }
+        />
+      </SettingRow>
+
+      <SettingRow
+        label={t("settings.showRemoteStats")}
+        desc={t("settings.showRemoteStatsDesc")}
+      >
+        <SettingSwitch
+          checked={appSettings.ui.show_remote_stats ?? false}
+          onChange={(v) => updateUi({ show_remote_stats: v })}
         />
       </SettingRow>
     </div>

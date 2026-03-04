@@ -21,7 +21,7 @@ export function SearchTab() {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="font-medium text-sm">
-            {t("settings.customEngines", "Search Engines")}
+            {t("settings.customEngines")}
           </Label>
           <Button
             variant="ghost"
@@ -35,7 +35,7 @@ export function SearchTab() {
               updateAppSettings({ search: { ...appSettings.search, custom_engines: newEngines } });
             }}
           >
-            <MdAdd className="text-[14px]" /> {t("common.add", "Add")}
+            <MdAdd className="text-[0.875rem]" /> {t("common.add")}
           </Button>
         </div>
 
@@ -50,7 +50,7 @@ export function SearchTab() {
                   <button
                     type="button"
                     className="w-8 h-8 rounded-md border flex items-center justify-center hover:bg-secondary transition-colors shrink-0"
-                    title={t("settings.selectIcon", "Select Icon")}
+                    title={t("settings.selectIcon")}
                   >
                     {engine.icon && SEARCH_ICONS[engine.icon] ? (
                       (() => {
@@ -129,7 +129,7 @@ export function SearchTab() {
                 variant="ghost"
                 size="icon-sm"
                 className="text-destructive hover:bg-destructive/10"
-                title={t("common.delete", "Delete")}
+                title={t("common.delete")}
                 onClick={() => {
                   const newEngines = appSettings.search.custom_engines.filter(
                     (_, idx) => idx !== i,
@@ -139,21 +139,18 @@ export function SearchTab() {
                   });
                 }}
               >
-                <MdDelete className="text-[16px]" />
+                <MdDelete className="text-[1rem]" />
               </Button>
             </div>
           ))}
           {appSettings.search.custom_engines.length === 0 && (
             <div className="text-center py-6 text-xs text-muted-foreground">
-              {t("settings.noCustomEngines", "No search engines available.")}
+              {t("settings.noCustomEngines")}
             </div>
           )}
         </div>
         <p className="text-xs mt-1 text-muted-foreground">
-          {t(
-            "settings.engineUrl",
-            "Use %s to represent the searched text in the URL template.",
-          )}
+          {t("settings.engineUrl")}
         </p>
       </div>
     </div>

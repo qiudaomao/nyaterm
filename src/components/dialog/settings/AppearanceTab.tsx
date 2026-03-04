@@ -12,14 +12,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp } from "@/context/AppContext";
-import { AVAILABLE_LANGUAGES } from "@/i18n";
 import { themeList } from "@/themes";
 import { SettingNumberInput, SettingRow, SettingSelect, SettingSwitch } from "./SettingFormItems";
 
 export function AppearanceTab() {
-  const { t, i18n } = useTranslation();
-  const { appSettings, updateAppSettings, uiConfig, updateUiConfig } = useApp();
+  const { t } = useTranslation();
+  const { appSettings, updateAppSettings } = useApp();
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
+
+  const PACKAGE_FONTS = ["JetBrains Mono", "Noto Sans SC Variable", "Inter"];
+  const applicationFonts = Array.from(new Set([...PACKAGE_FONTS, ...systemFonts]));
 
   useEffect(() => {
     invoke<string[]>("get_system_fonts")
@@ -30,8 +32,8 @@ export function AppearanceTab() {
   return (
     <div className="space-y-5">
       <SettingSelect
-        label={t("settings.theme", "Theme")}
-        desc={t("settings.themeDesc", "Select the color theme for the terminal and application.")}
+        label={t("settings.theme")}
+        desc={t("settings.themeDesc")}
         value={appSettings.appearance.theme || "github-dark"}
         onValueChange={(v) =>
           updateAppSettings({ appearance: { ...appSettings.appearance, theme: v } })
@@ -44,33 +46,11 @@ export function AppearanceTab() {
         ))}
       </SettingSelect>
 
-      <SettingSelect
-        label={t("settings.language", "Language")}
-        desc={t(
-          "settings.languageDesc",
-          "Select the display language for the application interface.",
-        )}
-        value={uiConfig.language || "en"}
-        onValueChange={(lng) => {
-          i18n.changeLanguage(lng);
-          updateUiConfig({ language: lng });
-        }}
-      >
-        {AVAILABLE_LANGUAGES.map((lng) => (
-          <SelectItem key={lng.id} value={lng.id}>
-            {lng.name}
-          </SelectItem>
-        ))}
-      </SettingSelect>
-
       {/* Font Family */}
       <div className="space-y-2">
-        <Label className="font-medium text-sm">{t("settings.fontFamily", "Font Family")}</Label>
+        <Label className="font-medium text-sm">{t("settings.fontFamily")}</Label>
         <p className="text-xs text-muted-foreground">
-          {t(
-            "settings.fontFamilyDesc",
-            "The font family used in the terminal and app UI. Topmost font has highest priority.",
-          )}
+          {t("settings.fontFamilyDesc")}
         </p>
         <div className="space-y-2">
           {appSettings.appearance.font_family
@@ -80,11 +60,11 @@ export function AppearanceTab() {
               <div key={idx} className="flex items-center gap-2">
                 <span className="text-xs w-20 shrink-0 text-muted-foreground">
                   {idx === 0
-                    ? t("settings.fontPrimary", "Primary")
-                    : `${t("settings.fontFallback", "Fallback")} ${idx}`}
+                    ? t("settings.fontPrimary")
+                    : `${t("settings.fontFallback")} ${idx}`}
                 </span>
                 <Select
-                  value={systemFonts.includes(font) ? font : ""}
+                  value={applicationFonts.includes(font) ? font : ""}
                   onValueChange={(v) => {
                     const newFonts = [...arr];
                     newFonts[idx] = v;
@@ -99,13 +79,13 @@ export function AppearanceTab() {
                   <SelectTrigger className="flex-1 h-9 px-3 text-sm shadow-xs focus:ring-1 focus:ring-ring focus:outline-none">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    {!systemFonts.includes(font) && (
+                  <SelectContent position="popper">
+                    {!applicationFonts.includes(font) && (
                       <SelectItem value={font}>{font} (Custom/Missing)</SelectItem>
                     )}
-                    {systemFonts.map((f) => (
+                    {applicationFonts.map((f) => (
                       <SelectItem key={f} value={f}>
-                        {f}
+                        {f} {PACKAGE_FONTS.includes(f) && `(${t("settings.fontBuiltIn")})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -114,7 +94,7 @@ export function AppearanceTab() {
                   variant="ghost"
                   size="icon-xs"
                   className="text-destructive hover:bg-destructive/10"
-                  title={t("common.remove", "Remove")}
+                  title={t("common.remove")}
                   onClick={() => {
                     const newFonts = arr.filter((_, i) => i !== idx);
                     if (newFonts.length === 0) newFonts.push("Consolas");
@@ -123,7 +103,7 @@ export function AppearanceTab() {
                     });
                   }}
                 >
-                  <MdClose className="text-[16px]" />
+                  <MdClose className="text-[1rem]" />
                 </Button>
               </div>
             ))}
@@ -135,20 +115,20 @@ export function AppearanceTab() {
           onClick={() => {
             const newFonts = [
               ...appSettings.appearance.font_family.split(",").map((f) => f.trim()),
-              systemFonts[0] || "Arial",
+              applicationFonts[0] || "Arial",
             ];
             updateAppSettings({
               appearance: { ...appSettings.appearance, font_family: newFonts.join(", ") },
             });
           }}
         >
-          <MdAdd className="text-[14px]" /> {t("settings.addFallbackFont", "Add Fallback")}
+          <MdAdd className="text-[0.875rem]" /> {t("settings.addFallbackFont")}
         </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <SettingNumberInput
-          label={t("settings.fontSize", "Font Size (px)")}
+          label={t("settings.fontSize")}
           min={8}
           max={72}
           value={appSettings.appearance.font_size}
@@ -156,20 +136,29 @@ export function AppearanceTab() {
             updateAppSettings({ appearance: { ...appSettings.appearance, font_size: v || 14 } })
           }
         />
+        <SettingNumberInput
+          label={t("settings.uiFontSize")}
+          min={12}
+          max={24}
+          value={appSettings.appearance.ui_font_size}
+          onChange={(v) =>
+            updateAppSettings({ appearance: { ...appSettings.appearance, ui_font_size: v || 16 } })
+          }
+        />
         <SettingSelect
-          label={t("settings.cursorStyle", "Cursor Style")}
+          label={t("settings.cursorStyle")}
           value={appSettings.appearance.cursor_style}
           onValueChange={(v) =>
             updateAppSettings({ appearance: { ...appSettings.appearance, cursor_style: v } })
           }
         >
-          <SelectItem value="block">{t("settings.cursorBlock", "Block")}</SelectItem>
-          <SelectItem value="underline">{t("settings.cursorUnderline", "Underline")}</SelectItem>
-          <SelectItem value="bar">{t("settings.cursorBar", "Bar")}</SelectItem>
+          <SelectItem value="block">{t("settings.cursorBlock")}</SelectItem>
+          <SelectItem value="underline">{t("settings.cursorUnderline")}</SelectItem>
+          <SelectItem value="bar">{t("settings.cursorBar")}</SelectItem>
         </SettingSelect>
       </div>
 
-      <SettingRow label={t("settings.cursorBlink", "Cursor Blink")}>
+      <SettingRow label={t("settings.cursorBlink")}>
         <SettingSwitch
           checked={appSettings.appearance.cursor_blink}
           onChange={(v) =>
@@ -179,11 +168,8 @@ export function AppearanceTab() {
       </SettingRow>
 
       <SettingRow
-        label={t("settings.fontLigatures", "Enable Font Ligatures")}
-        desc={t(
-          "settings.fontLigaturesDesc",
-          "Combine multiple characters into a single typographical glyph.",
-        )}
+        label={t("settings.fontLigatures")}
+        desc={t("settings.fontLigaturesDesc")}
       >
         <SettingSwitch
           checked={appSettings.appearance.ligatures}

@@ -16,8 +16,8 @@ export function ProxyTab() {
   return (
     <div className="space-y-4">
       <SettingRow
-        label={t("settings.enableProxy", "Enable Proxy")}
-        desc={t("settings.enableProxyDesc", "Route SSH connections through a proxy server.")}
+        label={t("settings.enableProxy")}
+        desc={t("settings.enableProxyDesc")}
       >
         <SettingSwitch
           checked={appSettings.proxy.enabled}
@@ -29,7 +29,7 @@ export function ProxyTab() {
         className={`space-y-4 ${!appSettings.proxy.enabled ? "opacity-50 pointer-events-none" : ""}`}
       >
         <SettingSelect
-          label={t("settings.proxyProtocol", "Protocol")}
+          label={t("settings.proxyProtocol")}
           value={appSettings.proxy.protocol}
           onValueChange={(v) => updateAppSettings({ proxy: { ...appSettings.proxy, protocol: v } })}
         >
@@ -40,7 +40,7 @@ export function ProxyTab() {
         <div className="flex gap-2">
           <div className="flex-1">
             <SettingInput
-              label={t("settings.proxyHost", "Host")}
+              label={t("settings.proxyHost")}
               placeholder="127.0.0.1"
               value={appSettings.proxy.host}
               onChange={(e) =>
@@ -50,7 +50,7 @@ export function ProxyTab() {
           </div>
           <div className="w-32">
             <SettingNumberInput
-              label={t("settings.proxyPort", "Port")}
+              label={t("settings.proxyPort")}
               min={1}
               max={65535}
               value={appSettings.proxy.port || 0}

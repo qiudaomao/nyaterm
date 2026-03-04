@@ -17,15 +17,12 @@ export function SecurityTab() {
     <div className="space-y-6">
       <div className="space-y-4">
         <h4 className="font-semibold text-sm">
-          {t("settings.credentialStorage", "Credential Storage")}
+          {t("settings.credentialStorage")}
         </h4>
 
         <SettingRow
-          label={t("settings.useOsKeyring", "Use OS Keyring")}
-          desc={t(
-            "settings.useOsKeyringDesc",
-            "Securely store SSH passwords and keys in your system's native keychain.",
-          )}
+          label={t("settings.useOsKeyring")}
+          desc={t("settings.useOsKeyringDesc")}
         >
           <SettingSwitch
             checked={appSettings.security.use_os_keyring}
@@ -36,11 +33,8 @@ export function SecurityTab() {
         </SettingRow>
 
         <SettingRow
-          label={t("settings.requireMasterPassword", "Require Master Password")}
-          desc={t(
-            "settings.requireMasterPasswordDesc",
-            "Require a master password to encrypt your session database.",
-          )}
+          label={t("settings.requireMasterPassword")}
+          desc={t("settings.requireMasterPasswordDesc")}
         >
           <SettingSwitch
             checked={appSettings.security.require_master_password}
@@ -55,15 +49,12 @@ export function SecurityTab() {
 
       <div className="border-t pt-4 space-y-4">
         <h4 className="font-semibold text-sm">
-          {t("settings.sessionSecurity", "Session Security")}
+          {t("settings.sessionSecurity")}
         </h4>
 
         <SettingRow
-          label={t("settings.idleLockMinutes", "Session Lock Interval")}
-          desc={t(
-            "settings.idleLockMinutesDesc",
-            "Lock the application after a specified duration of inactivity (0 to disable).",
-          )}
+          label={t("settings.idleLockMinutes")}
+          desc={t("settings.idleLockMinutesDesc")}
         >
           <div className="flex items-center gap-3">
             <SettingNumberInput
@@ -78,22 +69,19 @@ export function SecurityTab() {
                 })
               }
             />
-            <span className="text-sm text-muted-foreground">{t("common.minutes", "mins")}</span>
+            <span className="text-sm text-muted-foreground">{t("common.minutes")}</span>
           </div>
         </SettingRow>
 
         {appSettings.security.idle_lock_minutes > 0 && (
           <SettingInput
-            label={t("settings.lockPassword", "Unlock Password")}
-            desc={t(
-              "settings.lockPasswordDesc",
-              "Set a password required to unlock the application. Leave empty for click-to-unlock.",
-            )}
+            label={t("settings.lockPassword")}
+            desc={t("settings.lockPasswordDesc")}
             type="password"
             placeholder={
               appSettings.security.lock_password === "__SET__"
                 ? "••••••••"
-                : t("settings.lockPasswordPlaceholder", "Optional")
+                : t("settings.lockPasswordPlaceholder")
             }
             value={
               appSettings.security.lock_password === "__SET__"
@@ -111,24 +99,21 @@ export function SecurityTab() {
         )}
 
         <SettingSelect
-          label={t("settings.hostKeyPolicy", "Host Key Policy")}
-          desc={t(
-            "settings.hostKeyPolicyDesc",
-            "How the application handles unrecognized SSH host keys.",
-          )}
+          label={t("settings.hostKeyPolicy")}
+          desc={t("settings.hostKeyPolicyDesc")}
           value={appSettings.security.host_key_policy}
           onValueChange={(v) =>
             updateAppSettings({ security: { ...appSettings.security, host_key_policy: v } })
           }
         >
           <SelectItem value="strict">
-            {t("settings.hostKeyStrict", "Strict (Reject unknown hosts)")}
+            {t("settings.hostKeyStrict")}
           </SelectItem>
           <SelectItem value="prompt">
-            {t("settings.hostKeyPrompt", "Prompt (Ask user for confirmation)")}
+            {t("settings.hostKeyPrompt")}
           </SelectItem>
           <SelectItem value="accept">
-            {t("settings.hostKeyAccept", "Accept (Automatically add new hosts)")}
+            {t("settings.hostKeyAccept")}
           </SelectItem>
         </SettingSelect>
       </div>

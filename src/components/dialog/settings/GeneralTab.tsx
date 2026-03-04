@@ -1,19 +1,34 @@
 import { useTranslation } from "react-i18next";
+import { SelectItem } from "@/components/ui/select";
 import { useApp } from "../../../context/AppContext";
-import { SettingInput, SettingRow, SettingSwitch } from "./SettingFormItems";
+import { AVAILABLE_LANGUAGES } from "@/i18n";
+import { SettingInput, SettingRow, SettingSelect, SettingSwitch } from "./SettingFormItems";
 
 export function GeneralTab() {
-  const { t } = useTranslation();
-  const { appSettings, updateAppSettings } = useApp();
+  const { t, i18n } = useTranslation();
+  const { appSettings, updateAppSettings, updateUi } = useApp();
 
   return (
     <div className="space-y-4">
+      <SettingSelect
+        label={t("settings.language")}
+        desc={t("settings.languageDesc")}
+        value={appSettings.ui.language || "en"}
+        onValueChange={(lng) => {
+          i18n.changeLanguage(lng);
+          updateUi({ language: lng });
+        }}
+      >
+        {AVAILABLE_LANGUAGES.map((lng) => (
+          <SelectItem key={lng.id} value={lng.id}>
+            {lng.name}
+          </SelectItem>
+        ))}
+      </SettingSelect>
+
       <SettingRow
-        label={t("settings.startupRestore", "Restore previous session on startup")}
-        desc={t(
-          "settings.startupRestoreDesc",
-          "Automatically reconnect to tabs that were open when you last closed the app.",
-        )}
+        label={t("settings.startupRestore")}
+        desc={t("settings.startupRestoreDesc")}
       >
         <SettingSwitch
           checked={appSettings.general.startup_restore}
@@ -24,11 +39,8 @@ export function GeneralTab() {
       </SettingRow>
 
       <SettingInput
-        label={t("settings.defaultLocalShell", "Default Local Shell")}
-        desc={t(
-          "settings.defaultLocalShellDesc",
-          "The shell path to use when opening a local terminal.",
-        )}
+        label={t("settings.defaultLocalShell")}
+        desc={t("settings.defaultLocalShellDesc")}
         value={appSettings.general.default_local_shell}
         onChange={(e) =>
           updateAppSettings({
@@ -38,11 +50,8 @@ export function GeneralTab() {
       />
 
       <SettingRow
-        label={t("settings.minimizeToTray", "Minimize to tray on close")}
-        desc={t(
-          "settings.minimizeToTrayDesc",
-          "Keep the application running in the background when the window is closed.",
-        )}
+        label={t("settings.minimizeToTray")}
+        desc={t("settings.minimizeToTrayDesc")}
       >
         <SettingSwitch
           checked={appSettings.general.minimize_to_tray}

@@ -10,8 +10,8 @@ export function InteractionTab() {
   return (
     <div className="space-y-4">
       <SettingRow
-        label={t("settings.copyOnSelect", "Copy on Select")}
-        desc={t("settings.copyOnSelectDesc", "Automatically copy selected text to the clipboard.")}
+        label={t("settings.copyOnSelect")}
+        desc={t("settings.copyOnSelectDesc")}
       >
         <SettingSwitch
           checked={appSettings.interaction.copy_on_select}
@@ -22,11 +22,8 @@ export function InteractionTab() {
       </SettingRow>
 
       <SettingRow
-        label={t("settings.rightClickPaste", "Right-click Paste")}
-        desc={t(
-          "settings.rightClickPasteDesc",
-          "Paste clipboard content on right-click instead of opening context menu.",
-        )}
+        label={t("settings.rightClickPaste")}
+        desc={t("settings.rightClickPasteDesc")}
       >
         <SettingSwitch
           checked={appSettings.interaction.right_click_paste}
@@ -37,11 +34,8 @@ export function InteractionTab() {
       </SettingRow>
 
       <SettingInput
-        label={t("settings.wordSeparators", "Word Separators")}
-        desc={t(
-          "settings.wordSeparatorsDesc",
-          "Characters that separate words for double-click selection.",
-        )}
+        label={t("settings.wordSeparators")}
+        desc={t("settings.wordSeparatorsDesc")}
         value={appSettings.interaction.word_separators}
         onChange={(e) =>
           updateAppSettings({
@@ -51,7 +45,7 @@ export function InteractionTab() {
       />
 
       <SettingSelect
-        label={t("settings.defaultEncoding", "Default Encoding")}
+        label={t("settings.defaultEncoding")}
         value={appSettings.interaction.default_encoding}
         onValueChange={(v) =>
           updateAppSettings({ interaction: { ...appSettings.interaction, default_encoding: v } })
