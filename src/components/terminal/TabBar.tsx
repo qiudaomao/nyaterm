@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { MdAdd, MdClose, MdDns, MdTerminal } from "react-icons/md";
+import { CONNECTION_ICONS } from "../icons";
+import { useApp } from "../../context/AppContext";
 import type { Tab } from "../../types";
 
 interface TabBarProps {
@@ -15,12 +17,26 @@ interface TabBarProps {
 /** Tab strip for terminal sessions. Closes backend session on tab close. */
 function TabBar({ tabs, activeTabId, onTabChange, onTabClose, onAddTab }: TabBarProps) {
   const { t } = useTranslation();
+  const { savedConnections } = useApp();
 
   const handleClose = (e: React.MouseEvent, tab: Tab) => {
     e.stopPropagation();
-    // Close the backend session
     invoke("close_session", { sessionId: tab.sessionId }).catch(() => {});
     onTabClose(tab.id);
+  };
+
+  const renderTabIcon = (tab: Tab) => {
+    if (tab.type === "SSH" && tab.connectionId) {
+      const conn = savedConnections.find((c) => c.id === tab.connectionId);
+      const iconDef = conn?.icon ? CONNECTION_ICONS[conn.icon] : null;
+      if (iconDef) {
+        const IconComp = iconDef.icon;
+        return <IconComp className="text-sm shrink-0" style={{ color: iconDef.color }} />;
+      }
+    }
+    return tab.type === "SSH"
+      ? <MdDns className="text-sm shrink-0" />
+      : <MdTerminal className="text-sm shrink-0" />;
   };
 
   return (
@@ -40,10 +56,10 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose, onAddTab }: TabBar
           }}
           onClick={() => onTabChange(tab.id)}
         >
-          {tab.type === "SSH" ? <MdDns className="text-sm" /> : <MdTerminal className="text-sm" />}
+          {renderTabIcon(tab)}
           <span className="whitespace-nowrap max-w-[160px] truncate">{tab.name}</span>
           <MdClose
-            className="text-[10px] hover:text-red-500 transition-colors"
+            className="text-[0.625rem] hover:text-red-500 transition-colors"
             style={{ color: "var(--df-text-dimmed)" }}
             onClick={(e) => handleClose(e, tab)}
           />

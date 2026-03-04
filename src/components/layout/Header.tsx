@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { appLogDir } from "@tauri-apps/api/path";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
@@ -8,6 +9,7 @@ import {
   MdContentCopy,
   MdContentPaste,
   MdDashboard,
+  MdFileUpload,
   MdFullscreen,
   MdInfo,
   MdMenu,
@@ -26,6 +28,7 @@ import packageJson from "../../../package.json";
 import { useApp } from "../../context/AppContext";
 import { useTheme } from "../../context/ThemeContext";
 import { AVAILABLE_LANGUAGES } from "../../i18n";
+import ImportDialog from "../dialog/saved-connections/ImportDialog";
 
 import {
   Menubar,
@@ -61,6 +64,7 @@ const iconMap: Record<string, React.ElementType> = {
   menu: MdMenu,
   view_sidebar: MdViewSidebar,
   settings: MdSettings,
+  file_upload: MdFileUpload,
 };
 
 function DynamicIcon({ name, className }: { name: string; className?: string }) {
@@ -93,20 +97,22 @@ export default function Header({
   onAbout,
 }: HeaderProps) {
   const { themeName, setTheme, themeNames } = useTheme();
-  const { uiConfig, updateUiConfig, setShowSettingsDialog } = useApp();
+  const { appSettings, updateUi, setShowSettingsDialog } = useApp();
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const uiConfig = appSettings.ui;
   const { t, i18n } = useTranslation();
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
-    updateUiConfig({ language: lng });
+    updateUi({ language: lng });
   };
 
   const handleZoom = (delta: number) => {
     const newZoom = Math.max(0.5, Math.min(2.0, uiConfig.zoom_level + delta));
-    updateUiConfig({ zoom_level: parseFloat(newZoom.toFixed(1)) });
+    updateUi({ zoom_level: parseFloat(newZoom.toFixed(1)) });
   };
 
-  const handleResetZoom = () => updateUiConfig({ zoom_level: 1.0 });
+  const handleResetZoom = () => updateUi({ zoom_level: 1.0 });
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -129,6 +135,7 @@ export default function Header({
   const menus: Record<string, MenuItem[]> = {
     file: [
       { label: t("menu.newSshConnection"), action: onNewSession, icon: "add" },
+      { label: t("savedConnections.importSessions"), action: () => setShowImportDialog(true), icon: "file_upload" },
       { label: "separator", separator: true },
     ],
     edit: [
@@ -144,28 +151,44 @@ export default function Header({
           {
             label: t("panel.fileExplorer"),
             checked: uiConfig.show_file_explorer,
-            action: () => updateUiConfig({ show_file_explorer: !uiConfig.show_file_explorer }),
+            action: () => updateUi({ show_file_explorer: !uiConfig.show_file_explorer }),
+          },
+          {
+            label: t("panel.fileTransfer"),
+            checked: uiConfig.show_file_transfer,
+            action: () => updateUi({ show_file_transfer: !uiConfig.show_file_transfer }),
           },
           {
             label: t("panel.savedConnections"),
             checked: uiConfig.show_saved_connections,
             action: () =>
-              updateUiConfig({ show_saved_connections: !uiConfig.show_saved_connections }),
+              updateUi({ show_saved_connections: !uiConfig.show_saved_connections }),
           },
           {
             label: t("panel.activeSessions"),
             checked: uiConfig.show_active_sessions,
-            action: () => updateUiConfig({ show_active_sessions: !uiConfig.show_active_sessions }),
+            action: () => updateUi({ show_active_sessions: !uiConfig.show_active_sessions }),
           },
           {
             label: t("panel.commandHistory"),
             checked: uiConfig.show_command_history,
-            action: () => updateUiConfig({ show_command_history: !uiConfig.show_command_history }),
+            action: () => updateUi({ show_command_history: !uiConfig.show_command_history }),
           },
           {
             label: t("panel.quickCommands"),
             checked: uiConfig.show_quick_commands,
-            action: () => updateUiConfig({ show_quick_commands: !uiConfig.show_quick_commands }),
+            action: () => updateUi({ show_quick_commands: !uiConfig.show_quick_commands }),
+          },
+          { label: "separator", separator: true },
+          {
+            label: t("menu.resetLayout"),
+            action: () =>
+              updateUi({
+                panel_layout: {
+                  left: ["fileExplorer", "fileTransfer"],
+                  right: ["savedConnections", "activeSessions", "commandHistory"],
+                },
+              }),
           },
         ],
       },
@@ -238,7 +261,7 @@ export default function Header({
             {item.icon && (
               <DynamicIcon
                 name={item.icon}
-                className="text-[16px] mr-2 text-[var(--df-text-muted)]"
+                className="text-[1rem] mr-2 text-[var(--df-text-muted)]"
               />
             )}
             <span className="flex-1">{item.label}</span>
@@ -274,7 +297,7 @@ export default function Header({
         }}
       >
         {item.icon && (
-          <DynamicIcon name={item.icon} className="text-[16px] mr-2 text-[var(--df-text-muted)]" />
+          <DynamicIcon name={item.icon} className="text-[1rem] mr-2 text-[var(--df-text-muted)]" />
         )}
         <span className="flex-1">{item.label}</span>
       </MenubarItem>
@@ -324,6 +347,7 @@ export default function Header({
           onClick={() => setShowSettingsDialog(true)}
         />
       </div>
+      <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
     </header>
   );
 }

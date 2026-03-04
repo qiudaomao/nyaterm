@@ -30,7 +30,7 @@ function ActiveSessions({ onSessionClick }: ActiveSessionsProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div
-        className="p-2 text-[10px] uppercase tracking-wider font-bold border-b flex justify-between items-center"
+        className="p-2 text-[0.625rem] uppercase tracking-wider font-bold border-b flex justify-between items-center"
         style={{
           color: "var(--df-text-muted)",
           borderColor: "var(--df-border)",
@@ -38,13 +38,13 @@ function ActiveSessions({ onSessionClick }: ActiveSessionsProps) {
         }}
       >
         <span>{t("panel.activeSessions")}</span>
-        <span className="text-[10px] font-normal" style={{ color: "var(--df-text-dimmed)" }}>
+        <span className="text-[0.625rem] font-normal" style={{ color: "var(--df-text-dimmed)" }}>
           {sessions.length}
         </span>
       </div>
       <div className="flex-1 overflow-y-auto p-2 text-xs space-y-0.5 terminal-scroll">
         {sessions.length === 0 ? (
-          <div className="text-center py-4 text-[11px]" style={{ color: "var(--df-text-dimmed)" }}>
+          <div className="text-center py-4 text-[0.6875rem]" style={{ color: "var(--df-text-dimmed)" }}>
             {t("panel.noActiveSessions")}
           </div>
         ) : (
@@ -61,7 +61,7 @@ function ActiveSessions({ onSessionClick }: ActiveSessionsProps) {
               <span className="flex-1 truncate" style={{ color: "var(--df-text)" }}>
                 {session.name}
               </span>
-              <span className="text-[10px]" style={{ color: "var(--df-text-dimmed)" }}>
+              <span className="text-[0.625rem]" style={{ color: "var(--df-text-dimmed)" }}>
                 {session.session_type}
               </span>
             </div>

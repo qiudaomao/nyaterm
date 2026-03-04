@@ -11,11 +11,13 @@ import {
   MdDeleteSweep,
   MdSearch,
   MdSelectAll,
+  MdTranslate,
   MdTravelExplore,
 } from "react-icons/md";
 import { useApp } from "@/context/AppContext";
-import { SearchEngine } from "@/types";
-import { SEARCH_ICONS, QuickIconDef } from "../icons";
+import type { SearchEngine } from "@/types";
+import { SEARCH_ICONS, type QuickIconDef } from "../icons";
+import TranslationDialog from "../dialog/terminal/TranslationDialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -44,6 +46,16 @@ export default function TerminalContextMenu({
   const { appSettings } = useApp();
 
   const [ctxSelection, setCtxSelection] = useState({ text: "", hasSelection: false });
+  const [translateState, setTranslateState] = useState({ open: false, text: "", provider: "" });
+
+  const translationProviders = [
+    { id: "google", free: true },
+    { id: "microsoft", free: true },
+    { id: "deepl", free: false, configured: !!appSettings.translation.deepl_api_key },
+    { id: "baidu", free: false, configured: !!(appSettings.translation.baidu_app_id && appSettings.translation.baidu_app_key) },
+    { id: "ali", free: false, configured: !!(appSettings.translation.ali_app_id && appSettings.translation.ali_app_key) },
+    { id: "youdao", free: false, configured: !!(appSettings.translation.youdao_app_id && appSettings.translation.youdao_app_key) },
+  ].filter((p) => p.free || p.configured);
 
   // Right-click context menu: capture selection state
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -137,6 +149,7 @@ export default function TerminalContextMenu({
   }, [terminalRef]);
 
   return (
+    <>
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="h-full w-full" onContextMenu={handleContextMenu}>
@@ -147,16 +160,16 @@ export default function TerminalContextMenu({
         {ctxSelection.hasSelection ? (
           <>
             <ContextMenuItem onClick={() => doCopy(ctxSelection.text)}>
-              <MdContentCopy className="text-[14px] text-muted-foreground mr-2" />
+              <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("terminalCtx.copy")}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onFind(ctxSelection.text)}>
-              <MdSearch className="text-[14px] text-muted-foreground mr-2" />
+              <MdSearch className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("terminalCtx.find")}
             </ContextMenuItem>
             <ContextMenuSub>
               <ContextMenuSubTrigger>
-                <MdTravelExplore className="text-[14px] text-muted-foreground mr-2" />
+                <MdTravelExplore className="text-[0.875rem] text-muted-foreground mr-2" />
                 {t("terminalCtx.searchOnline")}
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
@@ -175,7 +188,7 @@ export default function TerminalContextMenu({
                       onClick={() => doSearchOnline(ctxSelection.text, engine)}
                     >
                       {IconComponent && (
-                        <IconComponent className="text-[14px] mr-2" style={{ color }} />
+                        <IconComponent className="text-[0.875rem] mr-2" style={{ color }} />
                       )}
                       {engine.name}
                     </ContextMenuItem>
@@ -183,43 +196,70 @@ export default function TerminalContextMenu({
                 })}
               </ContextMenuSubContent>
             </ContextMenuSub>
+            {translationProviders.length > 0 && (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  <MdTranslate className="text-[0.875rem] text-muted-foreground mr-2" />
+                  {t("terminalCtx.translate")}
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  {translationProviders.map((p) => (
+                    <ContextMenuItem
+                      key={p.id}
+                      onClick={() =>
+                        setTranslateState({ open: true, text: ctxSelection.text, provider: p.id })
+                      }
+                    >
+                      {t(`translation.${p.id}`)}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            )}
             <ContextMenuSeparator />
             <ContextMenuItem onClick={doPaste}>
-              <MdContentPaste className="text-[14px] text-muted-foreground mr-2" />
+              <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("terminalCtx.paste")}
             </ContextMenuItem>
             <ContextMenuItem onClick={doPasteSelected}>
-              <MdContentPasteGo className="text-[14px] text-muted-foreground mr-2" />
+              <MdContentPasteGo className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("terminalCtx.pasteSelectedText")}
             </ContextMenuItem>
           </>
         ) : (
           <>
             <ContextMenuItem onClick={doPaste}>
-              <MdContentPaste className="text-[14px] text-muted-foreground mr-2" />
+              <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("terminalCtx.paste")}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onFind()}>
-              <MdSearch className="text-[14px] text-muted-foreground mr-2" />
+              <MdSearch className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("terminalCtx.find")}
             </ContextMenuItem>
           </>
         )}
         <ContextMenuSeparator />
         <ContextMenuItem onClick={doClearScreen}>
-          <MdClearAll className="text-[14px] text-muted-foreground mr-2" />
+          <MdClearAll className="text-[0.875rem] text-muted-foreground mr-2" />
           {t("terminalCtx.clearScreen")}
         </ContextMenuItem>
         <ContextMenuItem onClick={doClearAll}>
-          <MdDeleteSweep className="text-[14px] text-muted-foreground mr-2" />
+          <MdDeleteSweep className="text-[0.875rem] text-muted-foreground mr-2" />
           {t("terminalCtx.clearAll")}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onClick={doSelectAll}>
-          <MdSelectAll className="text-[14px] text-muted-foreground mr-2" />
+          <MdSelectAll className="text-[0.875rem] text-muted-foreground mr-2" />
           {t("terminalCtx.selectAll")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+    <TranslationDialog
+      open={translateState.open}
+      onClose={() => setTranslateState({ open: false, text: "", provider: "" })}
+      text={translateState.text}
+      provider={translateState.provider}
+    />
+    </>
   );
 }

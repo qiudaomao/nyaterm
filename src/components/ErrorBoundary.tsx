@@ -37,7 +37,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             height: "100vh",
             backgroundColor: "#0d1117",
             color: "#c9d1d9",
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'JetBrains Mono', 'Noto Sans SC Variable', monospace",
             padding: "2rem",
           }}
         >

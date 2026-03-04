@@ -85,7 +85,7 @@ function TransferRow({ item }: { item: TransferItem }) {
             {item.fileName}
           </div>
           <div
-            className="flex items-center gap-1 text-[10px]"
+            className="flex items-center gap-1 text-[0.625rem]"
             style={{ color: "var(--df-text-dimmed)" }}
           >
             <span>{formatTime(item.timestamp)}</span>
@@ -116,7 +116,7 @@ function TransferRow({ item }: { item: TransferItem }) {
 
         {/* Status icon or percentage */}
         {item.status === "transferring" ? (
-          <span className="text-[10px] font-mono font-bold shrink-0" style={{ color: statusColor }}>
+          <span className="text-[0.625rem] font-mono font-bold shrink-0" style={{ color: statusColor }}>
             {statusText}
           </span>
         ) : (
@@ -166,7 +166,7 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
       style={{ backgroundColor: "var(--df-bg-panel)" }}
     >
       <div
-        className="p-2 text-[10px] uppercase tracking-wider font-bold border-b flex justify-between items-center"
+        className="p-2 text-[0.625rem] uppercase tracking-wider font-bold border-b flex justify-between items-center"
         style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
       >
         <span>{t("panel.fileTransfer") || "FILE TRANSFER"}</span>

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdClose, MdTerminal } from "react-icons/md";
 import { Toaster } from "@/components/ui/sonner";
-import AboutDialog from "./components/dialog/AboutDialog";
-import LockScreen from "./components/dialog/LockScreen";
-import NewSessionDialog from "./components/dialog/NewSessionDialog";
-import SettingsDialog from "./components/dialog/SettingsDialog";
+import AboutDialog from "./components/dialog/app/AboutDialog";
+import LockScreen from "./components/dialog/app/LockScreen";
+import NewSessionDialog from "./components/dialog/app/NewSessionDialog";
+import SettingsDialog from "./components/dialog/app/SettingsDialog";
+import DraggablePanel from "./components/layout/DraggablePanel";
 import Header from "./components/layout/Header";
 import ResizeHandle from "./components/layout/ResizeHandle";
 import StatusBar from "./components/layout/StatusBar";
@@ -20,7 +21,32 @@ import XTerminal from "./components/terminal/XTerminal";
 import { useApp } from "./context/AppContext";
 import { TransferProvider } from "./context/TransferContext";
 import { useIdleLock } from "./hooks/useIdleLock";
-import type { SavedConnection } from "./types";
+import type { PanelId, PanelLayout, SavedConnection, UiConfig } from "./types";
+
+const PANEL_VISIBILITY: Record<PanelId, keyof UiConfig & `show_${string}`> = {
+  fileExplorer: "show_file_explorer",
+  fileTransfer: "show_file_transfer",
+  savedConnections: "show_saved_connections",
+  activeSessions: "show_active_sessions",
+  commandHistory: "show_command_history",
+};
+
+const PANEL_HEIGHT_KEY: Partial<Record<PanelId, keyof UiConfig>> = {
+  fileTransfer: "file_transfer_height",
+  savedConnections: "saved_conn_height",
+  commandHistory: "history_height",
+};
+
+const PANEL_DEFAULT_HEIGHT: Partial<Record<PanelId, number>> = {
+  fileTransfer: 240,
+  savedConnections: 240,
+  commandHistory: 200,
+};
+
+const DEFAULT_PANEL_LAYOUT: PanelLayout = {
+  left: ["fileExplorer", "fileTransfer"],
+  right: ["savedConnections", "activeSessions", "commandHistory"],
+};
 
 /** Root layout: header, sidebars, terminal area, dialogs. Wraps content in ToastProvider. */
 function App() {
@@ -30,8 +56,7 @@ function App() {
     setActiveTabId,
     addTab,
     closeTab,
-    uiConfig,
-    updateUiConfig,
+    updateUi,
     showNewSession,
     setShowNewSession,
     editingConnection,
@@ -40,20 +65,23 @@ function App() {
     appSettings,
     isLocked,
     setIsLocked,
+    settingsLoaded,
   } = useApp();
+  const uiConfig = appSettings.ui;
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
+    if (!settingsLoaded) return;
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
       getCurrentWindow().show();
     });
-  }, []);
+  }, [settingsLoaded]);
 
   useEffect(() => {
-    if (uiConfig.language && uiConfig.language !== i18n.language) {
-      i18n.changeLanguage(uiConfig.language);
+    if (appSettings.ui.language && appSettings.ui.language !== i18n.language) {
+      i18n.changeLanguage(appSettings.ui.language);
     }
-  }, [uiConfig.language, i18n]);
+  }, [appSettings.ui.language, i18n]);
 
   // Mobile state
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
@@ -65,8 +93,11 @@ function App() {
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
-  const handleNewSession = () => {
+  const [initialGroupId, setInitialGroupId] = useState<string | undefined>();
+
+  const handleNewSession = (parentGroupId?: string) => {
     setEditingConnection(undefined);
+    setInitialGroupId(parentGroupId);
     setShowNewSession(true);
   };
 
@@ -101,11 +132,15 @@ function App() {
   const handleHistoryCommand = useCallback(
     (command: string, execute: boolean = true) => {
       if (activeTab) {
+        const { sessionId } = activeTab;
         import("@tauri-apps/api/core").then(({ invoke }) => {
           invoke("write_to_session", {
-            sessionId: activeTab.sessionId,
+            sessionId,
             data: execute ? `${command}\r` : command,
           });
+        });
+        import("@tauri-apps/api/event").then(({ emit }) => {
+          emit(`focus-terminal-${sessionId}`);
         });
       }
     },
@@ -115,61 +150,166 @@ function App() {
   // Resize handlers
   const handleLeftResize = useCallback(
     (delta: number) => {
-      updateUiConfig((prev) => ({
+      updateUi((prev) => ({
         left_width: Math.max(160, Math.min(480, (prev.left_width || 256) + delta)),
       }));
     },
-    [updateUiConfig],
+    [updateUi],
   );
 
   const handleRightResize = useCallback(
     (delta: number) => {
-      updateUiConfig((prev) => ({
+      updateUi((prev) => ({
         right_width: Math.max(200, Math.min(480, (prev.right_width || 288) - delta)),
       }));
     },
-    [updateUiConfig],
-  );
-
-  const handleSavedConnResize = useCallback(
-    (delta: number) => {
-      updateUiConfig((prev) => ({
-        saved_conn_height: Math.max(80, Math.min(500, (prev.saved_conn_height || 240) + delta)),
-      }));
-    },
-    [updateUiConfig],
-  );
-
-  const handleHistoryResize = useCallback(
-    (delta: number) => {
-      // delta > 0 means mouse moves down → shrink history (it's at the bottom in flex col, but here it's actually growing/shrinking height)
-      updateUiConfig((prev) => ({
-        history_height: Math.max(80, Math.min(500, (prev.history_height || 200) - delta)),
-      }));
-    },
-    [updateUiConfig],
+    [updateUi],
   );
 
   const handleQuickCmdResize = useCallback(
     (delta: number) => {
-      updateUiConfig((prev) => ({
+      updateUi((prev) => ({
         quick_cmd_height: Math.max(36, Math.min(300, (prev.quick_cmd_height || 36) - delta)),
       }));
     },
-    [updateUiConfig],
+    [updateUi],
   );
 
-  const handleFileTransferResize = useCallback(
-    (delta: number) => {
-      updateUiConfig((prev) => ({
-        file_transfer_height: Math.max(
-          80,
-          Math.min(500, (prev.file_transfer_height || 240) - delta),
-        ),
-      }));
-    },
-    [updateUiConfig],
+  const panelLayout = uiConfig.panel_layout ?? DEFAULT_PANEL_LAYOUT;
+
+  const isPanelVisible = useCallback(
+    (id: PanelId) => uiConfig[PANEL_VISIBILITY[id]] as boolean,
+    [uiConfig],
   );
+
+  const visibleLeftPanels = useMemo(
+    () => panelLayout.left.filter(isPanelVisible),
+    [panelLayout.left, isPanelVisible],
+  );
+  const visibleRightPanels = useMemo(
+    () => panelLayout.right.filter(isPanelVisible),
+    [panelLayout.right, isPanelVisible],
+  );
+
+  const handlePanelDrop = useCallback(
+    (
+      draggedId: PanelId,
+      fromSidebar: "left" | "right",
+      targetId: PanelId,
+      targetSidebar: "left" | "right",
+      position: "before" | "after",
+    ) => {
+      updateUi((prev) => {
+        const layout = prev.panel_layout ?? DEFAULT_PANEL_LAYOUT;
+        const newLeft = [...layout.left];
+        const newRight = [...layout.right];
+
+        const sourceArr = fromSidebar === "left" ? newLeft : newRight;
+        const sourceIdx = sourceArr.indexOf(draggedId);
+        if (sourceIdx >= 0) sourceArr.splice(sourceIdx, 1);
+
+        const targetArr = targetSidebar === "left" ? newLeft : newRight;
+        let insertIdx = targetArr.indexOf(targetId);
+        if (insertIdx < 0) insertIdx = targetArr.length;
+        if (position === "after") insertIdx++;
+        targetArr.splice(insertIdx, 0, draggedId);
+
+        return { panel_layout: { left: newLeft, right: newRight } };
+      });
+    },
+    [updateUi],
+  );
+
+  const handlePanelResize = useCallback(
+    (aboveId: PanelId, belowId: PanelId, delta: number) => {
+      const aboveKey = PANEL_HEIGHT_KEY[aboveId];
+      const belowKey = PANEL_HEIGHT_KEY[belowId];
+
+      if (aboveKey) {
+        updateUi((prev) => ({
+          [aboveKey]: Math.max(
+            80,
+            Math.min(500, ((prev[aboveKey] as number) || PANEL_DEFAULT_HEIGHT[aboveId] || 200) + delta),
+          ),
+        }));
+      } else if (belowKey) {
+        updateUi((prev) => ({
+          [belowKey]: Math.max(
+            80,
+            Math.min(500, ((prev[belowKey] as number) || PANEL_DEFAULT_HEIGHT[belowId] || 200) - delta),
+          ),
+        }));
+      }
+    },
+    [updateUi],
+  );
+
+  function renderPanelContent(id: PanelId) {
+    switch (id) {
+      case "fileExplorer":
+        return <FileExplorer activeSessionId={activeTab?.sessionId ?? null} />;
+      case "fileTransfer":
+        return <FileTransfer activeSessionId={activeTab?.sessionId ?? null} />;
+      case "savedConnections":
+        return (
+          <SavedConnections
+            onNewConnection={handleNewSession}
+            onEditConnection={handleEditConnection}
+            onSessionCreated={handleSessionConnected}
+          />
+        );
+      case "activeSessions":
+        return <ActiveSessions onSessionClick={handleSessionClick} />;
+      case "commandHistory":
+        return <CommandHistory onCommandSend={handleHistoryCommand} />;
+    }
+  }
+
+  function renderSidebarPanels(panels: PanelId[], sidebar: "left" | "right") {
+    if (panels.length === 0) return null;
+
+    const flexIndex = panels.findIndex((id) => !PANEL_HEIGHT_KEY[id]);
+    const actualFlexIndex = flexIndex >= 0 ? flexIndex : 0;
+
+    const elements: ReactNode[] = [];
+
+    panels.forEach((panelId, idx) => {
+      if (idx > 0) {
+        const aboveId = panels[idx - 1];
+        if (PANEL_HEIGHT_KEY[aboveId] || PANEL_HEIGHT_KEY[panelId]) {
+          elements.push(
+            <ResizeHandle
+              key={`resize-${aboveId}-${panelId}`}
+              direction="vertical"
+              onResize={(delta) => handlePanelResize(aboveId, panelId, delta)}
+            />,
+          );
+        }
+      }
+
+      const isFlex = panels.length === 1 || idx === actualFlexIndex;
+      const heightKey = PANEL_HEIGHT_KEY[panelId];
+
+      elements.push(
+        <DraggablePanel
+          key={panelId}
+          panelId={panelId}
+          sidebar={sidebar}
+          onPanelDrop={handlePanelDrop}
+          className={isFlex ? "flex-1 min-h-0 overflow-hidden" : "shrink-0 overflow-hidden"}
+          style={
+            !isFlex && heightKey
+              ? { height: (uiConfig[heightKey] as number) || PANEL_DEFAULT_HEIGHT[panelId] }
+              : undefined
+          }
+        >
+          {renderPanelContent(panelId)}
+        </DraggablePanel>,
+      );
+    });
+
+    return elements;
+  }
 
   return (
     <TransferProvider>
@@ -179,7 +319,7 @@ function App() {
       >
         {/* Header */}
         <Header
-          onNewSession={handleNewSession}
+          onNewSession={() => handleNewSession()}
           onToggleLeft={() => setMobileLeftOpen(!mobileLeftOpen)}
           onToggleRight={() => setMobileRightOpen(!mobileRightOpen)}
           onAbout={() => setShowAbout(true)}
@@ -198,8 +338,8 @@ function App() {
             />
           )}
 
-          {/* Left Sidebar - File Explorer & File Transfer */}
-          {(uiConfig.show_file_explorer || uiConfig.show_file_transfer) && (
+          {/* Left Sidebar */}
+          {visibleLeftPanels.length > 0 && (
             <>
               <div
                 style={{ width: uiConfig.left_width, backgroundColor: "var(--df-bg)" }}
@@ -209,7 +349,6 @@ function App() {
                   ${mobileLeftOpen ? "translate-x-0" : "-translate-x-full"}
                 `}
               >
-                {/* Mobile placeholder for header height if needed, or close button */}
                 <div
                   className="lg:hidden h-10 flex items-center justify-end px-2 border-b shrink-0"
                   style={{ borderColor: "var(--df-border)" }}
@@ -223,36 +362,9 @@ function App() {
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 pt-10 lg:pt-0">
-                  {uiConfig.show_file_explorer && (
-                    <div className="flex-1 min-h-0 overflow-hidden">
-                      <FileExplorer activeSessionId={activeTab?.sessionId ?? null} />
-                    </div>
-                  )}
-
-                  {uiConfig.show_file_transfer && (
-                    <>
-                      {uiConfig.show_file_explorer && (
-                        <ResizeHandle direction="vertical" onResize={handleFileTransferResize} />
-                      )}
-                      <div
-                        style={{
-                          height: uiConfig.show_file_explorer
-                            ? uiConfig.file_transfer_height || 240
-                            : "100%",
-                        }}
-                        className={
-                          uiConfig.show_file_explorer
-                            ? "shrink-0 overflow-hidden"
-                            : "flex-1 min-h-0 overflow-hidden"
-                        }
-                      >
-                        <FileTransfer activeSessionId={activeTab?.sessionId ?? null} />
-                      </div>
-                    </>
-                  )}
+                  {renderSidebarPanels(visibleLeftPanels, "left")}
                 </div>
               </div>
-              {/* Only show resize handle on desktop */}
               <ResizeHandle
                 direction="horizontal"
                 onResize={handleLeftResize}
@@ -275,7 +387,7 @@ function App() {
               activeTabId={activeTabId}
               onTabChange={setActiveTabId}
               onTabClose={closeTab}
-              onAddTab={handleNewSession}
+              onAddTab={() => handleNewSession()}
             />
 
             {/* Terminal Instances */}
@@ -287,7 +399,7 @@ function App() {
                     <p className="text-sm">{t("app.noActiveSessions")}</p>
                     <button
                       className="px-4 py-2 text-xs bg-primary hover:bg-primary/80 text-white rounded transition-colors"
-                      onClick={handleNewSession}
+                      onClick={() => handleNewSession()}
                     >
                       {t("app.newConnection")}
                     </button>
@@ -318,12 +430,9 @@ function App() {
             )}
           </section>
 
-          {/* Right Sidebar: three independent panels */}
-          {(uiConfig.show_saved_connections ||
-            uiConfig.show_active_sessions ||
-            uiConfig.show_command_history) && (
+          {/* Right Sidebar */}
+          {visibleRightPanels.length > 0 && (
             <>
-              {/* Only show resize handle on desktop */}
               <ResizeHandle
                 direction="horizontal"
                 onResize={handleRightResize}
@@ -341,7 +450,6 @@ function App() {
                   ${mobileRightOpen ? "translate-x-0" : "translate-x-full"}
                 `}
               >
-                {/* Mobile placeholder for header height if needed, or close button */}
                 <div
                   className="md:hidden h-10 flex items-center justify-end px-2 border-b shrink-0"
                   style={{ borderColor: "var(--df-border)" }}
@@ -354,47 +462,7 @@ function App() {
                   </button>
                 </div>
 
-                {/* Saved Connections - fixed pixel height at top */}
-                {uiConfig.show_saved_connections && (
-                  <>
-                    <div
-                      style={{ height: uiConfig.saved_conn_height }}
-                      className="shrink-0 overflow-hidden"
-                    >
-                      <SavedConnections
-                        onEditConnection={handleEditConnection}
-                        onSessionCreated={handleSessionConnected}
-                      />
-                    </div>
-                    {/* Show resize handle only if there's something below it */}
-                    {(uiConfig.show_active_sessions || uiConfig.show_command_history) && (
-                      <ResizeHandle direction="vertical" onResize={handleSavedConnResize} />
-                    )}
-                  </>
-                )}
-
-                {/* Active Sessions - flexible middle */}
-                {uiConfig.show_active_sessions && (
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <ActiveSessions onSessionClick={handleSessionClick} />
-                  </div>
-                )}
-
-                {/* Command History - fixed pixel height at bottom */}
-                {uiConfig.show_command_history && (
-                  <>
-                    {/* Show resize handle only if there's something above it */}
-                    {(uiConfig.show_saved_connections || uiConfig.show_active_sessions) && (
-                      <ResizeHandle direction="vertical" onResize={handleHistoryResize} />
-                    )}
-                    <div
-                      style={{ height: uiConfig.history_height }}
-                      className="shrink-0 overflow-hidden"
-                    >
-                      <CommandHistory onCommandSend={handleHistoryCommand} />
-                    </div>
-                  </>
-                )}
+                {renderSidebarPanels(visibleRightPanels, "right")}
               </aside>
             </>
           )}
@@ -409,14 +477,17 @@ function App() {
           onClose={() => {
             setShowNewSession(false);
             setEditingConnection(undefined);
+            setInitialGroupId(undefined);
           }}
           onConnect={handleSessionConnected}
           onSaved={() => {
             setShowNewSession(false);
             setEditingConnection(undefined);
+            setInitialGroupId(undefined);
             refreshConnections();
           }}
           initialData={editingConnection}
+          initialGroupId={initialGroupId}
         />
 
         <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />

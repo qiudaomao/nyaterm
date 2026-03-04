@@ -14,7 +14,9 @@ function shouldLog(level: LogLevel): boolean {
 }
 
 function formatMessage(level: LogLevel, message: string): string {
-  const timestamp = new Date().toISOString();
+  const now = new Date();
+  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+  const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}`;
   return `[${timestamp}] [${level.toUpperCase()}] ${message}`;
 }
 

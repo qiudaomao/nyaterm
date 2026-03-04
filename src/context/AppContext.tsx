@@ -19,15 +19,12 @@ interface AppContextType {
   addTab: (sessionId: string, name: string, type: SessionType, connectionId?: string) => void;
   closeTab: (tabId: string) => void;
 
-  // UI Config
-  uiConfig: UiConfig;
-  updateUiConfig: (updates: Partial<UiConfig> | ((prev: UiConfig) => Partial<UiConfig>)) => void;
-
-  // App Settings
+  // App Settings (includes UI config)
   appSettings: AppSettings;
   updateAppSettings: (
     updates: Partial<AppSettings> | ((prev: AppSettings) => Partial<AppSettings>),
   ) => void;
+  updateUi: (updates: Partial<UiConfig> | ((prev: UiConfig) => Partial<UiConfig>)) => void;
 
   // Data
   savedConnections: SavedConnection[];
@@ -45,31 +42,16 @@ interface AppContextType {
   // Idle Lock
   isLocked: boolean;
   setIsLocked: (locked: boolean) => void;
+
+  // Loading
+  settingsLoaded: boolean;
 }
 
 /**
- * App-wide state: tabs, UI config (debounced save), saved connections (polled),
+ * App-wide state: tabs, settings (debounced save), saved connections (polled),
  * and dialog visibility. Updates via setState/useCallback; config persisted to backend.
  */
 const AppContext = createContext<AppContextType | null>(null);
-
-const DEFAULT_UI_CONFIG: UiConfig = {
-  open_tabs: [],
-  left_width: 256,
-  right_width: 288,
-  saved_conn_height: 240,
-  history_height: 200,
-  quick_cmd_height: 36,
-  file_transfer_height: 240,
-  show_file_explorer: true,
-  show_file_transfer: true,
-  show_saved_connections: true,
-  show_active_sessions: true,
-  show_command_history: true,
-  show_quick_commands: true,
-  zoom_level: 1.0,
-  language: "en",
-};
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
@@ -80,12 +62,13 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   appearance: {
     theme: "github-dark",
-    font_family: "JetBrains Mono, Fira Code, Consolas, monospace",
+    font_family: "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace, Inter",
     font_size: 14,
     ligatures: false,
     background_opacity: 1.0,
     cursor_style: "block",
     cursor_blink: true,
+    ui_font_size: 16,
   },
   proxy: {
     enabled: false,
@@ -101,8 +84,14 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     ],
   },
   translation: {
-    provider: "deepl",
-    api_key: "",
+    target_language: "zh-CN",
+    deepl_api_key: "",
+    baidu_app_id: "",
+    baidu_app_key: "",
+    ali_app_id: "",
+    ali_app_key: "",
+    youdao_app_id: "",
+    youdao_app_key: "",
   },
   security: {
     use_os_keyring: true,
@@ -116,25 +105,42 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     hardware_acceleration: false,
   },
   interaction: {
-    copy_on_select: true,
-    right_click_paste: true,
+    copy_on_select: false,
+    right_click_paste: false,
     word_separators: " ()[]{}\"'",
     default_encoding: "UTF-8",
   },
+  ui: {
+    open_tabs: [],
+    left_width: 256,
+    right_width: 288,
+    saved_conn_height: 240,
+    history_height: 200,
+    quick_cmd_height: 36,
+    file_transfer_height: 240,
+    show_file_explorer: true,
+    show_file_transfer: true,
+    show_saved_connections: true,
+    show_active_sessions: true,
+    show_command_history: true,
+    show_quick_commands: true,
+    zoom_level: 1.0,
+    language: "en",
+    panel_layout: {
+      left: ["fileExplorer", "fileTransfer"],
+      right: ["savedConnections", "activeSessions", "commandHistory"],
+    },
+    show_remote_stats: false,
+  },
 };
 
-/** Provides tabs, uiConfig, savedConnections, and dialog state to the app. */
+/** Provides tabs, appSettings, savedConnections, and dialog state to the app. */
 export function AppProvider({ children }: { children: ReactNode }) {
   // Tabs State
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
-  // UI Config State
-  const [uiConfig, setUiConfig] = useState<UiConfig>(DEFAULT_UI_CONFIG);
-  const uiConfigLoaded = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // App Settings State
+  // App Settings State (includes UI config)
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const appSettingsLoaded = useRef(false);
   const appSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -152,52 +158,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Idle Lock State
   const [isLocked, setIsLocked] = useState(false);
-  // 1. Load UI Config
-  useEffect(() => {
-    invoke<UiConfig>("get_ui_config")
-      .then((cfg) => {
-        setUiConfig(cfg);
-        uiConfigLoaded.current = true;
-      })
-      .catch(() => {
-        uiConfigLoaded.current = true;
-      });
-  }, []);
 
-  // 1.5. Load App Settings
+  // Loading State
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // 1. Load App Settings
   useEffect(() => {
     invoke<AppSettings>("get_app_settings")
       .then((cfg) => {
         setAppSettings(cfg);
         appSettingsLoaded.current = true;
+        setSettingsLoaded(true);
       })
       .catch(() => {
         appSettingsLoaded.current = true;
+        setSettingsLoaded(true);
       });
   }, []);
 
-  // 2. Save UI Config Debounced
-  const updateUiConfig = useCallback(
-    (updates: Partial<UiConfig> | ((prev: UiConfig) => Partial<UiConfig>)) => {
-      setUiConfig((prev) => {
-        const nextUpdates = typeof updates === "function" ? updates(prev) : updates;
-        const next = { ...prev, ...nextUpdates };
-        // Debounce save
-        if (uiConfigLoaded.current) {
-          if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-          saveTimerRef.current = setTimeout(() => {
-            invoke("save_ui_config", { config: next }).catch((e) =>
-              logger.error("Failed to save UI config", e),
-            );
-          }, 500);
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  // Apply UI font size to root element
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${appSettings.appearance.ui_font_size}px`;
+  }, [appSettings.appearance.ui_font_size]);
 
-  // 2.5 Save App Settings Debounced
+  // 2. Save App Settings Debounced
   const updateAppSettings = useCallback(
     (updates: Partial<AppSettings> | ((prev: AppSettings) => Partial<AppSettings>)) => {
       setAppSettings((prev) => {
@@ -217,6 +201,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Convenience helper to update just the UI config portion
+  const updateUi = useCallback(
+    (updates: Partial<UiConfig> | ((prev: UiConfig) => Partial<UiConfig>)) => {
+      updateAppSettings((prev) => {
+        const nextUpdates = typeof updates === "function" ? updates(prev.ui) : updates;
+        return { ui: { ...prev.ui, ...nextUpdates } };
+      });
+    },
+    [updateAppSettings],
+  );
+
   // 3. Load Connections
   const refreshConnections = useCallback(async () => {
     try {
@@ -233,7 +228,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshConnections();
-    const interval = setInterval(refreshConnections, 5000); // Poll every 5s
+    const interval = setInterval(refreshConnections, 5000);
     return () => clearInterval(interval);
   }, [refreshConnections]);
 
@@ -268,18 +263,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [activeTabId],
   );
+
   // 5. Startup Restore Logic
   const hasRestored = useRef(false);
 
   useEffect(() => {
-    if (!hasRestored.current && uiConfigLoaded.current && appSettingsLoaded.current) {
+    if (!hasRestored.current && appSettingsLoaded.current) {
       hasRestored.current = true;
       if (
         appSettings.general.startup_restore &&
-        uiConfig.open_tabs &&
-        uiConfig.open_tabs.length > 0
+        appSettings.ui.open_tabs &&
+        appSettings.ui.open_tabs.length > 0
       ) {
-        uiConfig.open_tabs.forEach((tab) => {
+        appSettings.ui.open_tabs.forEach((tab) => {
           if (tab.session_type === "SSH" && tab.connection_id) {
             invoke<string>("create_ssh_session", { connectionId: tab.connection_id })
               .then((sessionId) => {
@@ -296,12 +292,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
     }
-  }, [uiConfig, appSettings, addTab]);
+  }, [appSettings, addTab]);
 
   // 6. Sync opened tabs
   useEffect(() => {
     if (hasRestored.current && appSettings.general.startup_restore) {
-      updateUiConfig({
+      updateUi({
         open_tabs: tabs.map((t) => ({
           title: t.name,
           session_type: t.type,
@@ -309,7 +305,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })),
       });
     }
-  }, [tabs, appSettings.general.startup_restore, updateUiConfig]);
+  }, [tabs, appSettings.general.startup_restore, updateUi]);
 
   return (
     <AppContext.Provider
@@ -319,10 +315,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActiveTabId,
         addTab,
         closeTab,
-        uiConfig,
-        updateUiConfig,
         appSettings,
         updateAppSettings,
+        updateUi,
         savedConnections,
         savedGroups,
         refreshConnections,
@@ -334,6 +329,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setShowSettingsDialog,
         isLocked,
         setIsLocked,
+        settingsLoaded,
       }}
     >
       {children}

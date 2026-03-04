@@ -29,7 +29,7 @@ function HighlightedCommand({ command, indices }: { command: string; indices: nu
   }
 
   return (
-    <span className="font-mono text-[12px]">
+    <span className="font-mono text-[0.75rem]">
       {parts.map((part, idx) =>
         part.highlighted ? (
           <span key={idx} className="font-semibold" style={{ color: "var(--df-accent)" }}>
@@ -92,10 +92,10 @@ function CommandSuggestions({
       }}
     >
       <div
-        className="px-2 py-1.5 text-[10px] uppercase tracking-wider border-b flex items-center gap-1.5"
+        className="px-2 py-1.5 text-[0.625rem] uppercase tracking-wider border-b flex items-center gap-1.5"
         style={{ color: "var(--df-text-dimmed)", borderColor: "var(--df-border)" }}
       >
-        <MdHistory className="text-[12px]" />
+        <MdHistory className="text-[0.75rem]" />
         <span>{t("suggestions.history")}</span>
         <span className="ml-auto" style={{ color: "var(--df-text-dimmed)" }}>
           {suggestions.length}{" "}
@@ -120,7 +120,7 @@ function CommandSuggestions({
           onClick={() => onSelect(result.command)}
         >
           <MdChevronRight
-            className="text-[12px] shrink-0"
+            className="text-[0.75rem] shrink-0"
             style={{
               color: index === selectedIndex ? "var(--df-accent)" : "var(--df-text-dimmed)",
             }}
@@ -130,12 +130,12 @@ function CommandSuggestions({
       ))}
 
       <div
-        className="px-2 py-1 border-t flex items-center gap-3 text-[10px]"
+        className="px-2 py-1 border-t flex items-center gap-3 text-[0.625rem]"
         style={{ borderColor: "var(--df-border)", color: "var(--df-text-dimmed)" }}
       >
         <span>
           <kbd
-            className="px-1 py-0.5 rounded text-[9px]"
+            className="px-1 py-0.5 rounded text-[0.5625rem]"
             style={{ backgroundColor: "var(--df-bg-hover)", color: "var(--df-text-muted)" }}
           >
             ↑↓
@@ -144,7 +144,7 @@ function CommandSuggestions({
         </span>
         <span>
           <kbd
-            className="px-1 py-0.5 rounded text-[9px]"
+            className="px-1 py-0.5 rounded text-[0.5625rem]"
             style={{ backgroundColor: "var(--df-bg-hover)", color: "var(--df-text-muted)" }}
           >
             Enter
@@ -153,7 +153,7 @@ function CommandSuggestions({
         </span>
         <span>
           <kbd
-            className="px-1 py-0.5 rounded text-[9px]"
+            className="px-1 py-0.5 rounded text-[0.5625rem]"
             style={{ backgroundColor: "var(--df-bg-hover)", color: "var(--df-text-muted)" }}
           >
             Tab
@@ -162,7 +162,7 @@ function CommandSuggestions({
         </span>
         <span>
           <kbd
-            className="px-1 py-0.5 rounded text-[9px]"
+            className="px-1 py-0.5 rounded text-[0.5625rem]"
             style={{ backgroundColor: "var(--df-bg-hover)", color: "var(--df-text-muted)" }}
           >
             Esc

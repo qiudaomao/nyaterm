@@ -47,10 +47,10 @@ import {
   MdUpload,
 } from "react-icons/md";
 import { toast } from "sonner";
-import AutoUploadDialog, { type AutoUploadDialogData } from "../dialog/AutoUploadDialog";
-import MoveDialog, { type MoveDialogData } from "../dialog/MoveDialog";
-import PropertiesDialog, { type PropertiesDialogData } from "../dialog/PropertiesDialog";
-import RenameDialog, { type RenameDialogData } from "../dialog/RenameDialog";
+import AutoUploadDialog, { type AutoUploadDialogData } from "../dialog/file-explorer/AutoUploadDialog";
+import MoveDialog, { type MoveDialogData } from "../dialog/file-explorer/MoveDialog";
+import PropertiesDialog, { type PropertiesDialogData } from "../dialog/file-explorer/PropertiesDialog";
+import RenameDialog, { type RenameDialogData } from "../dialog/file-explorer/RenameDialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -478,7 +478,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
       style={{ backgroundColor: "var(--df-bg-panel)" }}
     >
       <div
-        className="p-2 text-[10px] uppercase tracking-wider font-bold border-b flex justify-between items-center"
+        className="p-2 text-[0.625rem] uppercase tracking-wider font-bold border-b flex justify-between items-center"
         style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
       >
         <span>{t("panel.fileExplorer")}</span>
@@ -510,7 +510,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
           {isEditingPath ? (
             <input
               autoFocus
-              className="w-full text-[10px] font-mono bg-transparent outline-none m-0 p-0"
+              className="w-full text-[0.625rem] font-mono bg-transparent outline-none m-0 p-0"
               style={{ color: "var(--df-text)" }}
               value={pathInputText}
               onChange={(e) => setPathInputText(e.target.value)}
@@ -534,7 +534,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
             />
           ) : (
             <div
-              className="text-[10px] font-mono truncate cursor-text transition-colors flex-1"
+              className="text-[0.625rem] font-mono truncate cursor-text transition-colors flex-1"
               style={{ color: "var(--df-text-dimmed)" }}
               onMouseEnter={(e) => (e.currentTarget.style.color = "var(--df-text)")}
               onMouseLeave={(e) => (e.currentTarget.style.color = "var(--df-text-dimmed)")}
@@ -542,7 +542,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                 setPathInputText(currentPath || homeDir);
                 setIsEditingPath(true);
               }}
-              title={t("fileExplorer.editPath", "Click to edit path")}
+              title={t("fileExplorer.editPath")}
             >
               {displayPath}
             </div>
@@ -604,7 +604,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                       />
                       <span className="flex-1 truncate text-xs">{entry.name}</span>
                       {!entry.is_dir && (
-                        <span className="text-[10px]" style={{ color: "var(--df-text-dimmed)" }}>
+                        <span className="text-[0.625rem]" style={{ color: "var(--df-text-dimmed)" }}>
                           {formatSize(entry.size)}
                         </span>
                       )}
@@ -612,27 +612,27 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                   </ContextMenuTrigger>
                   <ContextMenuContent className="min-w-[200px]">
                     <ContextMenuItem onClick={() => handleItemClick(entry)}>
-                      <MdFileOpen className="text-[14px] text-muted-foreground mr-2" />
+                      <MdFileOpen className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmOpen")}
                     </ContextMenuItem>
                     {!entry.is_dir && (
                       <ContextMenuItem onClick={() => handleOpenDefault(entry)}>
-                        <MdOpenInNew className="text-[14px] text-muted-foreground mr-2" />
+                        <MdOpenInNew className="text-[0.875rem] text-muted-foreground mr-2" />
                         {t("fileExplorer.cmOpenDefault")}
                       </ContextMenuItem>
                     )}
                     <ContextMenuSeparator />
                     <ContextMenuItem onClick={() => loadDirectory(currentPath)}>
-                      <MdRefresh className="text-[14px] text-muted-foreground mr-2" />
+                      <MdRefresh className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmRefresh")}
                     </ContextMenuItem>
                     <ContextMenuItem onClick={() => handleUpload()}>
-                      <MdUpload className="text-[14px] text-muted-foreground mr-2" />
+                      <MdUpload className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmUpload")}
                     </ContextMenuItem>
                     {!entry.is_dir && (
                       <ContextMenuItem onClick={() => handleDownload(entry)}>
-                        <MdDownload className="text-[14px] text-muted-foreground mr-2" />
+                        <MdDownload className="text-[0.875rem] text-muted-foreground mr-2" />
                         {t("fileExplorer.cmDownload")}
                       </ContextMenuItem>
                     )}
@@ -648,7 +648,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                           });
                       }}
                     >
-                      <MdEdit className="text-[14px] text-muted-foreground mr-2" />
+                      <MdEdit className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmRename")}
                     </ContextMenuItem>
                     <ContextMenuItem
@@ -661,37 +661,37 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                           });
                       }}
                     >
-                      <MdDriveFileMove className="text-[14px] text-muted-foreground mr-2" />
+                      <MdDriveFileMove className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmMove")}
                     </ContextMenuItem>
                     <ContextMenuItem variant="destructive" onClick={() => handleDelete(entry)}>
-                      <MdDelete className="text-[14px] mr-2" />
+                      <MdDelete className="text-[0.875rem] mr-2" />
                       {t("fileExplorer.cmDelete")}
                     </ContextMenuItem>
                     <ContextMenuSeparator />
                     <ContextMenuItem onClick={() => handleCopyPath(entry, "full")}>
-                      <MdContentCopy className="text-[14px] text-muted-foreground mr-2" />
+                      <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmCopyPath")}
                     </ContextMenuItem>
                     <ContextMenuItem onClick={() => handleCopyPath(entry, "name")}>
-                      <MdCopyAll className="text-[14px] text-muted-foreground mr-2" />
+                      <MdCopyAll className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmCopyName")}
                     </ContextMenuItem>
                     <ContextMenuItem onClick={() => handleCopyPath(entry, "dir")}>
-                      <MdFolderCopy className="text-[14px] text-muted-foreground mr-2" />
+                      <MdFolderCopy className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmCopyDirPath")}
                     </ContextMenuItem>
                     <ContextMenuSeparator />
                     <ContextMenuItem onClick={() => handleSendToTerminal(entry, "full")}>
-                      <MdKeyboardReturn className="text-[14px] text-muted-foreground mr-2" />
+                      <MdKeyboardReturn className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmTerminalPath")}
                     </ContextMenuItem>
                     <ContextMenuItem onClick={() => handleSendToTerminal(entry, "name")}>
-                      <MdKeyboardArrowRight className="text-[14px] text-muted-foreground mr-2" />
+                      <MdKeyboardArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmTerminalName")}
                     </ContextMenuItem>
                     <ContextMenuItem onClick={() => handleSendToTerminal(entry, "dir")}>
-                      <MdKeyboardDoubleArrowRight className="text-[14px] text-muted-foreground mr-2" />
+                      <MdKeyboardDoubleArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmTerminalDirPath")}
                     </ContextMenuItem>
                     <ContextMenuSeparator />
@@ -707,7 +707,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                         }
                       }}
                     >
-                      <MdInfo className="text-[14px] text-muted-foreground mr-2" />
+                      <MdInfo className="text-[0.875rem] text-muted-foreground mr-2" />
                       {t("fileExplorer.cmProperties")}
                     </ContextMenuItem>
                   </ContextMenuContent>
@@ -729,7 +729,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
 
           return (
             <div
-              className="px-2 py-1.5 text-[10px] border-t flex items-center justify-between shrink-0"
+              className="px-2 py-1.5 text-[0.625rem] border-t flex items-center justify-between shrink-0"
               style={{
                 color: "var(--df-text-dimmed)",
                 borderColor: "var(--df-border)",

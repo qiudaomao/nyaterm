@@ -37,7 +37,7 @@ function CommandHistory({ onCommandSend }: CommandHistoryProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div
-        className="p-2 text-[10px] uppercase tracking-wider font-bold border-b flex justify-between items-center"
+        className="p-2 text-[0.625rem] uppercase tracking-wider font-bold border-b flex justify-between items-center"
         style={{
           color: "var(--df-text-muted)",
           borderColor: "var(--df-border)",
@@ -53,7 +53,7 @@ function CommandHistory({ onCommandSend }: CommandHistoryProps) {
       <div className="flex-1 overflow-y-auto p-2 text-xs font-mono space-y-0.5 terminal-scroll">
         {history.length === 0 ? (
           <div
-            className="text-center py-4 font-display text-[11px]"
+            className="text-center py-4 font-display text-[0.6875rem]"
             style={{ color: "var(--df-text-dimmed)" }}
           >
             {t("panel.noCommandsYet")}
@@ -68,7 +68,7 @@ function CommandHistory({ onCommandSend }: CommandHistoryProps) {
               onDoubleClick={() => handleDoubleClick(cmd)}
             >
               <MdChevronRight
-                className="text-[10px] transition-colors"
+                className="text-[0.625rem] transition-colors"
                 style={{ color: "var(--df-text-dimmed)" }}
               />
               <span className="truncate">{cmd}</span>
