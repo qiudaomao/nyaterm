@@ -54,6 +54,12 @@ pub struct UiConfig {
     pub panel_layout: PanelLayout,
     #[serde(default = "default_false")]
     pub show_remote_stats: bool,
+    #[serde(default = "default_sort_mode")]
+    pub saved_connections_sort_mode: String,
+}
+
+fn default_sort_mode() -> String {
+    "default".to_string()
 }
 
 fn default_transfer_height() -> f64 {
@@ -84,6 +90,7 @@ impl Default for UiConfig {
             language: Some("en".to_string()),
             panel_layout: PanelLayout::default(),
             show_remote_stats: false,
+            saved_connections_sort_mode: default_sort_mode(),
         }
     }
 }

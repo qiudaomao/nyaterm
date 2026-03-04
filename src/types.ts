@@ -105,6 +105,7 @@ export interface UiConfig {
   language?: string;
   panel_layout: PanelLayout;
   show_remote_stats: boolean;
+  saved_connections_sort_mode?: string;
 }
 
 /** Resource usage stats fetched from the active remote SSH host. */
@@ -200,6 +201,7 @@ export interface TranslateResult {
 export interface SecuritySettings {
   use_os_keyring: boolean;
   require_master_password: boolean;
+  enable_screen_lock: boolean;
   idle_lock_minutes: number;
   lock_password?: string;
   host_key_policy: string;

@@ -1,5 +1,5 @@
-use super::{default_false, default_true, get_config_dir, load_json, save_json};
 use super::ui::UiConfig;
+use super::{default_false, default_true, get_config_dir, load_json, save_json};
 use crate::error::AppResult;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -55,12 +55,24 @@ pub struct AppearanceSettings {
     pub ui_font_size: f64,
 }
 
-fn default_app_theme() -> String { "github-dark".to_string() }
-fn default_font() -> String { "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace".to_string() }
-fn default_font_size() -> f64 { 16.0 }
-fn default_opacity() -> f64 { 1.0 }
-fn default_cursor_style() -> String { "block".to_string() }
-fn default_ui_font_size() -> f64 { 16.0 }
+fn default_app_theme() -> String {
+    "github-dark".to_string()
+}
+fn default_font() -> String {
+    "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace".to_string()
+}
+fn default_font_size() -> f64 {
+    16.0
+}
+fn default_opacity() -> f64 {
+    1.0
+}
+fn default_cursor_style() -> String {
+    "block".to_string()
+}
+fn default_ui_font_size() -> f64 {
+    16.0
+}
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -125,7 +137,9 @@ fn default_custom_engines() -> Vec<SearchEngine> {
 
 impl Default for SearchSettings {
     fn default() -> Self {
-        Self { custom_engines: default_custom_engines() }
+        Self {
+            custom_engines: default_custom_engines(),
+        }
     }
 }
 
@@ -149,7 +163,9 @@ pub struct TranslationSettings {
     pub youdao_app_key: String,
 }
 
-fn default_target_language() -> String { "zh-CN".to_string() }
+fn default_target_language() -> String {
+    "zh-CN".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecuritySettings {
@@ -157,6 +173,8 @@ pub struct SecuritySettings {
     pub use_os_keyring: bool,
     #[serde(default = "default_false")]
     pub require_master_password: bool,
+    #[serde(default = "default_false")]
+    pub enable_screen_lock: bool,
     #[serde(default)]
     pub idle_lock_minutes: u32,
     #[serde(default)]
@@ -165,13 +183,16 @@ pub struct SecuritySettings {
     pub host_key_policy: String,
 }
 
-fn default_host_key_policy() -> String { "prompt".to_string() }
+fn default_host_key_policy() -> String {
+    "prompt".to_string()
+}
 
 impl Default for SecuritySettings {
     fn default() -> Self {
         Self {
             use_os_keyring: true,
             require_master_password: false,
+            enable_screen_lock: false,
             idle_lock_minutes: 0,
             lock_password: None,
             host_key_policy: default_host_key_policy(),
@@ -187,8 +208,12 @@ pub struct TerminalSettings {
     pub keep_alive_interval: u32,
 }
 
-fn default_scrollback() -> u32 { 10000 }
-fn default_keep_alive() -> u32 { 60 }
+fn default_scrollback() -> u32 {
+    10000
+}
+fn default_keep_alive() -> u32 {
+    60
+}
 
 impl Default for TerminalSettings {
     fn default() -> Self {
@@ -211,8 +236,12 @@ pub struct InteractionSettings {
     pub default_encoding: String,
 }
 
-fn default_word_separators() -> String { " ()[]{}\"'".to_string() }
-fn default_encoding() -> String { "UTF-8".to_string() }
+fn default_word_separators() -> String {
+    " ()[]{}\"'".to_string()
+}
+fn default_encoding() -> String {
+    "UTF-8".to_string()
+}
 
 impl Default for InteractionSettings {
     fn default() -> Self {
