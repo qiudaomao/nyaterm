@@ -44,7 +44,7 @@ export default function SavedConnections({
   onNewConnection,
   onEditConnection,
 }: SavedConnectionsProps) {
-  const { savedConnections, savedGroups, refreshConnections, addPendingTab, updateTabSession, closeTab } = useApp();
+  const { savedConnections, savedGroups, refreshConnections, addPendingTab, updateTabSession, closeTab, appSettings, updateUi } = useApp();
   const { t } = useTranslation();
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ export default function SavedConnections({
   const connectingIdRef = useRef<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("default");
+  const sortMode = (appSettings.ui.saved_connections_sort_mode || "default") as SortMode;
 
   // ── Dialog state ──────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<SavedConnection | null>(null);
@@ -456,7 +456,10 @@ export default function SavedConnections({
   };
 
   // ── Sort button helpers ───────────────────────────────────────────────────
-  const cycleSortMode = () => setSortMode((prev) => prev === "default" ? "name-asc" : prev === "name-asc" ? "name-desc" : "default");
+  const cycleSortMode = () => {
+    const next = sortMode === "default" ? "name-asc" : sortMode === "name-asc" ? "name-desc" : "default";
+    updateUi({ saved_connections_sort_mode: next });
+  };
   const sortTitle = sortMode === "default" ? t("savedConnections.sortDefault") : sortMode === "name-asc" ? t("savedConnections.sortNameAsc") : t("savedConnections.sortNameDesc");
   const SortIcon = sortMode === "default" ? MdSort : MdSortByAlpha;
   const sortActive = sortMode !== "default";

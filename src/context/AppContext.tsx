@@ -55,7 +55,7 @@ interface AppContextType {
  * App-wide state: tabs, settings (debounced save), saved connections (polled),
  * and dialog visibility. Updates via setState/useCallback; config persisted to backend.
  */
-const AppContext = createContext<AppContextType | null>(null);
+export const AppContext = createContext<AppContextType | null>(null);
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
@@ -100,6 +100,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   security: {
     use_os_keyring: true,
     require_master_password: false,
+    enable_screen_lock: false,
     idle_lock_minutes: 0,
     host_key_policy: "prompt",
   },
@@ -135,6 +136,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
       right: ["savedConnections", "activeSessions", "commandHistory"],
     },
     show_remote_stats: false,
+    saved_connections_sort_mode: "default",
   },
 };
 
@@ -173,6 +175,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAppSettings(cfg);
         appSettingsLoaded.current = true;
         setSettingsLoaded(true);
+        if (cfg.security?.enable_screen_lock) {
+          setIsLocked(true);
+        }
       })
       .catch(() => {
         appSettingsLoaded.current = true;
