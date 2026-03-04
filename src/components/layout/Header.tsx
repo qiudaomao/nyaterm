@@ -28,6 +28,7 @@ import packageJson from "../../../package.json";
 import { useApp } from "../../context/AppContext";
 import { useTheme } from "../../context/ThemeContext";
 import { AVAILABLE_LANGUAGES } from "../../i18n";
+import { openSettings } from "../../lib/windowManager";
 import ImportDialog from "../dialog/saved-connections/ImportDialog";
 
 import {
@@ -97,7 +98,7 @@ export default function Header({
   onAbout,
 }: HeaderProps) {
   const { themeName, setTheme, themeNames } = useTheme();
-  const { appSettings, updateUi, setShowSettingsDialog } = useApp();
+  const { appSettings, updateUi } = useApp();
   const [showImportDialog, setShowImportDialog] = useState(false);
   const uiConfig = appSettings.ui;
   const { t, i18n } = useTranslation();
@@ -344,7 +345,7 @@ export default function Header({
 
         <MdSettings
           className="text-base cursor-pointer hover:opacity-80 transition-opacity hidden sm:block"
-          onClick={() => setShowSettingsDialog(true)}
+          onClick={() => openSettings()}
         />
       </div>
       <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
