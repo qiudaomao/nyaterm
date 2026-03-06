@@ -28,11 +28,22 @@ pub async fn translate(
         "microsoft" => microsoft::translate(text, target_lang).await,
         "deepl" => deepl::translate(text, target_lang, &settings.deepl_api_key).await,
         "baidu" => {
-            baidu::translate(text, target_lang, &settings.baidu_app_id, &settings.baidu_app_key)
-                .await
+            baidu::translate(
+                text,
+                target_lang,
+                &settings.baidu_app_id,
+                &settings.baidu_app_key,
+            )
+            .await
         }
         "ali" => {
-            ali::translate(text, target_lang, &settings.ali_app_id, &settings.ali_app_key).await
+            ali::translate(
+                text,
+                target_lang,
+                &settings.ali_app_id,
+                &settings.ali_app_key,
+            )
+            .await
         }
         "youdao" => {
             youdao::translate(
@@ -63,8 +74,13 @@ pub async fn translate_text(
     target_language: String,
 ) -> AppResult<TranslateResult> {
     let settings = crate::config::load_app_settings(&app)?;
+    let fallback = if settings.translation.target_language.is_empty() {
+        "zh-CN".to_string()
+    } else {
+        settings.translation.target_language.clone()
+    };
     let target = if target_language.is_empty() {
-        &settings.translation.target_language
+        &fallback
     } else {
         &target_language
     };

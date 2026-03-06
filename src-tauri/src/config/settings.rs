@@ -27,7 +27,7 @@ fn default_shell() -> String {
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
-            startup_restore: true,
+            startup_restore: false,
             default_local_shell: default_shell(),
             minimize_to_tray: false,
             boss_key: None,
@@ -143,7 +143,7 @@ impl Default for SearchSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationSettings {
     #[serde(default = "default_target_language")]
     pub target_language: String,
@@ -165,6 +165,21 @@ pub struct TranslationSettings {
 
 fn default_target_language() -> String {
     "zh-CN".to_string()
+}
+
+impl Default for TranslationSettings {
+    fn default() -> Self {
+        Self {
+            target_language: default_target_language(),
+            deepl_api_key: String::new(),
+            baidu_app_id: String::new(),
+            baidu_app_key: String::new(),
+            ali_app_id: String::new(),
+            ali_app_key: String::new(),
+            youdao_app_id: String::new(),
+            youdao_app_key: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
