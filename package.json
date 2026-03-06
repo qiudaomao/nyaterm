@@ -15,9 +15,8 @@
   "type": "module",
   "scripts": {
     "version-sync": "node scripts/sync-version.mjs",
-    "release": "node scripts/sync-version.mjs --commit && tsc && vite build",
     "dev": "vite",
-    "build": "node scripts/sync-version.mjs && tsc && vite build",
+    "build": "node scripts/sync-version.mjs --commit && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "biome check src/",
