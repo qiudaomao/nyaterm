@@ -63,6 +63,22 @@ export default function NewSessionPage() {
   }, []);
 
   useEffect(() => {
+    let unlisten: () => void;
+    getCurrentWindow()
+      .onFocusChanged((event) => {
+        if (event.payload) {
+          invoke<SshKey[]>("get_ssh_keys").then(setSshKeys).catch(() => { });
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  useEffect(() => {
     invoke<Group[]>("get_groups").then(setGroups).catch(() => { });
     invoke<SshKey[]>("get_ssh_keys").then(setSshKeys).catch(() => { });
 
@@ -513,7 +529,7 @@ export default function NewSessionPage() {
                   className="px-3 py-1.5 text-xs cursor-pointer transition-colors hover:bg-accent text-primary border-t flex items-center gap-1.5"
                   onClick={() => {
                     setShowKeyDropdown(false);
-                    openSettings();
+                    openSettings("keyManagement");
                   }}
                 >
                   <MdSettings className="text-sm" />

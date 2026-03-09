@@ -25,11 +25,12 @@ export async function openChildWindow(opts: ChildWindowOptions) {
   });
 }
 
-export function openSettings() {
+export function openSettings(tab?: string) {
+  const url = tab ? `index.html?window=settings&tab=${encodeURIComponent(tab)}` : "index.html?window=settings";
   return openChildWindow({
     label: "settings",
     title: "Settings",
-    url: "index.html?window=settings",
+    url,
     width: 800,
     height: 560,
   });

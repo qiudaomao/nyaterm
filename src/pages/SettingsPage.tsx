@@ -26,7 +26,10 @@ import { TranslationTab } from "@/components/settings/TranslationTab";
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { appSettings } = useApp();
-  const [activeTab, setActiveTab] = useState("general");
+
+  const params = new URLSearchParams(window.location.search);
+  const initialTab = params.get("tab") || "general";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const tabs = [
     { id: "general", label: t("settings.general"), icon: "settings", Component: GeneralTab },
