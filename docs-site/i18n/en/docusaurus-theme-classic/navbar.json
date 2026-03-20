@@ -2,13 +2,13 @@
   "title": {
     "message": "Dragonfly"
   },
-  "tagline": {
-    "message": "Modern, High-Performance SSH Client"
+  "logo.alt": {
+    "message": "Dragonfly Logo"
   },
-  "theme.docs.sidebar.collapseButtonTitle": {
-    "message": "Collapse sidebar"
+  "item.label.文档": {
+    "message": "Docs"
   },
-  "theme.docs.sidebar.expandButtonTitle": {
-    "message": "Expand sidebar"
+  "item.label.GitHub": {
+    "message": "GitHub"
   }
 }
