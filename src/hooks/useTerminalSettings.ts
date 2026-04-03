@@ -7,7 +7,7 @@ export function useTerminalSettings(
   terminalRef: React.RefObject<Terminal | null>,
   fitAddonRef: React.RefObject<FitAddon | null>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  theme: any,
+  terminalTheme: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   appSettings: any,
 ) {
@@ -45,12 +45,12 @@ export function useTerminalSettings(
       }
     };
   }, [appSettings.terminal.hardware_acceleration, terminalRef]);
-  // React to theme changes: update terminal colors dynamically
+  // React to terminal theme changes: update terminal colors dynamically
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.theme = { ...theme.colors.terminal };
+      terminalRef.current.options.theme = { ...terminalTheme.colors.terminal };
     }
-  }, [theme, terminalRef]);
+  }, [terminalTheme, terminalRef]);
 
   // React to appearance settings changes: font family, size, cursor etc
   useEffect(() => {

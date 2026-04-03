@@ -12,6 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp } from "@/context/AppContext";
+import {
+  DEFAULT_TERMINAL_FONT_SIZE,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+} from "@/lib/terminalFontSize";
 import { themeList } from "@/lib/themes";
 import { SettingNumberInput, SettingRow, SettingSelect, SettingSwitch } from "./SettingFormItems";
 
@@ -39,6 +44,27 @@ export function AppearanceTab() {
           updateAppSettings({ appearance: { ...appSettings.appearance, theme: v } })
         }
       >
+        {themeList.map((tm) => (
+          <SelectItem key={tm.id} value={tm.id}>
+            {tm.name}
+          </SelectItem>
+        ))}
+      </SettingSelect>
+
+      <SettingSelect
+        label={t("settings.terminalTheme")}
+        desc={t("settings.terminalThemeDesc")}
+        value={appSettings.appearance.terminal_theme || "__follow__"}
+        onValueChange={(v) =>
+          updateAppSettings({
+            appearance: {
+              ...appSettings.appearance,
+              terminal_theme: v === "__follow__" ? null : v,
+            },
+          })
+        }
+      >
+        <SelectItem value="__follow__">{t("settings.followUiTheme")}</SelectItem>
         {themeList.map((tm) => (
           <SelectItem key={tm.id} value={tm.id}>
             {tm.name}
@@ -129,11 +155,16 @@ export function AppearanceTab() {
       <div className="grid grid-cols-2 gap-4">
         <SettingNumberInput
           label={t("settings.fontSize")}
-          min={8}
-          max={72}
+          min={MIN_TERMINAL_FONT_SIZE}
+          max={MAX_TERMINAL_FONT_SIZE}
           value={appSettings.appearance.font_size}
           onChange={(v) =>
-            updateAppSettings({ appearance: { ...appSettings.appearance, font_size: v || 14 } })
+            updateAppSettings({
+              appearance: {
+                ...appSettings.appearance,
+                font_size: v || DEFAULT_TERMINAL_FONT_SIZE,
+              },
+            })
           }
         />
         <SettingNumberInput

@@ -4,6 +4,7 @@ import i18n from "../i18n";
 import { AppContext } from "./AppContext";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
+import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
 import type { AppSettings, Group, SavedConnection, UiConfig } from "@/types/global";
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -15,8 +16,9 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   appearance: {
     theme: "github-dark",
+    terminal_theme: "default",
     font_family: "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace, Inter",
-    font_size: 14,
+    font_size: DEFAULT_TERMINAL_FONT_SIZE,
     ligatures: false,
     background_opacity: 1.0,
     cursor_style: "block",

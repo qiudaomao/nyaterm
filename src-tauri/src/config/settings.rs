@@ -53,6 +53,8 @@ pub struct AppearanceSettings {
     pub cursor_blink: bool,
     #[serde(default = "default_ui_font_size")]
     pub ui_font_size: f64,
+    #[serde(default)]
+    pub terminal_theme: Option<String>,
 }
 
 fn default_app_theme() -> String {
@@ -85,6 +87,7 @@ impl Default for AppearanceSettings {
             cursor_style: default_cursor_style(),
             cursor_blink: true,
             ui_font_size: default_ui_font_size(),
+            terminal_theme: None,
         }
     }
 }

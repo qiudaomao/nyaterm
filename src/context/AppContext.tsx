@@ -10,7 +10,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
-import type { AppSettings, Group, SavedConnection, SessionType, Tab, UiConfig } from "@/types/global";
+import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
 
 interface AppContextType {
   // Tabs
@@ -68,7 +68,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   appearance: {
     theme: "github-dark",
     font_family: "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace, Inter",
-    font_size: 14,
+    font_size: DEFAULT_TERMINAL_FONT_SIZE,
     ligatures: false,
     background_opacity: 1.0,
     cursor_style: "block",
@@ -82,6 +82,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     port: 1080,
   },
   search: {
+    terminal_theme: null,
     custom_engines: [
       { name: "Google", url_template: "https://google.com/search?q=%s" },
       { name: "Bing", url_template: "https://bing.com/search?q=%s" },

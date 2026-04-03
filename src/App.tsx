@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { MdClose, MdTerminal } from "react-icons/md";
@@ -23,6 +23,11 @@ import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useIdleLock } from "./hooks/useIdleLock";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
+import {
+  DEFAULT_TERMINAL_FONT_SIZE,
+  decreaseTerminalFontSize,
+  increaseTerminalFontSize,
+} from "./lib/terminalFontSize";
 import { openNewSession, openSettings } from "./lib/windowManager";
 import type { AppSettings, PanelId, PanelLayout, SavedConnection, UiConfig } from "./types/global";
 
@@ -50,6 +55,7 @@ const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   left: ["fileExplorer", "fileTransfer"],
   right: ["savedConnections", "activeSessions", "commandHistory"],
 };
+const CTRL_WHEEL_ZOOM_THROTTLE_MS = 50;
 
 /** Root layout: header, sidebars, terminal area, dialogs. Wraps content in ToastProvider. */
 function App() {
@@ -88,6 +94,7 @@ function App() {
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const lastCtrlWheelZoomAtRef = useRef(0);
 
   // Idle auto-lock
   useIdleLock(
@@ -241,20 +248,51 @@ function App() {
   }, [uiConfig, updateUi]);
 
   const handleZoomIn = useCallback(() => {
-    updateUi((prev) => ({
-      zoom_level: parseFloat(Math.min(2.0, prev.zoom_level + 0.1).toFixed(1)),
+    updateAppSettings((prev) => ({
+      appearance: {
+        ...prev.appearance,
+        font_size: increaseTerminalFontSize(prev.appearance.font_size),
+      },
     }));
-  }, [updateUi]);
+  }, [updateAppSettings]);
 
   const handleZoomOut = useCallback(() => {
-    updateUi((prev) => ({
-      zoom_level: parseFloat(Math.max(0.5, prev.zoom_level - 0.1).toFixed(1)),
+    updateAppSettings((prev) => ({
+      appearance: {
+        ...prev.appearance,
+        font_size: decreaseTerminalFontSize(prev.appearance.font_size),
+      },
     }));
-  }, [updateUi]);
+  }, [updateAppSettings]);
 
   const handleResetZoom = useCallback(() => {
-    updateUi({ zoom_level: 1.0 });
-  }, [updateUi]);
+    updateAppSettings((prev) => ({
+      appearance: { ...prev.appearance, font_size: DEFAULT_TERMINAL_FONT_SIZE },
+    }));
+  }, [updateAppSettings]);
+
+  useEffect(() => {
+    const handleCtrlWheelZoom = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      if (event.deltaY === 0) return;
+
+      event.preventDefault();
+      const now = Date.now();
+      if (now - lastCtrlWheelZoomAtRef.current < CTRL_WHEEL_ZOOM_THROTTLE_MS) return;
+      lastCtrlWheelZoomAtRef.current = now;
+
+      if (event.deltaY < 0) {
+        handleZoomIn();
+      } else {
+        handleZoomOut();
+      }
+    };
+
+    window.addEventListener("wheel", handleCtrlWheelZoom, { passive: false, capture: true });
+    return () => {
+      window.removeEventListener("wheel", handleCtrlWheelZoom, true);
+    };
+  }, [handleZoomIn, handleZoomOut]);
 
   const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -521,7 +559,6 @@ function App() {
             className="flex-1 flex flex-col relative min-w-0 origin-top-left"
             style={{
               backgroundColor: "var(--df-bg-terminal)",
-              zoom: uiConfig.zoom_level,
             }}
           >
             {/* Tab Bar */}

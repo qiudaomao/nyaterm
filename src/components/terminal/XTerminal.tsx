@@ -34,7 +34,7 @@ export default function XTerminal({ sessionId, active }: XTerminalProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
-  const { theme } = useTheme();
+  const { terminalTheme } = useTheme();
   const { t } = useTranslation();
   const { appSettings } = useApp();
 
@@ -95,7 +95,7 @@ export default function XTerminal({ sessionId, active }: XTerminalProps) {
       fontSize: appSettings.appearance.font_size,
       fontFamily: appSettings.appearance.font_family,
       wordSeparator: appSettings.interaction.word_separators,
-      theme: { ...theme.colors.terminal },
+      theme: { ...terminalTheme.colors.terminal },
       allowProposedApi: true,
     });
 
@@ -449,12 +449,11 @@ export default function XTerminal({ sessionId, active }: XTerminalProps) {
   // Appearance, theme, and interaction settings sync.
   // Declared AFTER the terminal creation effect so effects from these hooks
   // run after terminalRef.current is already set on initial mount.
-  useTerminalSettings(terminalRef, fitAddonRef, theme, appSettings);
+  useTerminalSettings(terminalRef, fitAddonRef, terminalTheme, appSettings);
 
-  // Keyword highlight rules sync (same ordering requirement as above).
-  // isDark is derived from the theme background so built-in rule colors
+  // isDark is derived from the terminal theme background so built-in rule colors
   // switch automatically when the user changes themes.
-  const isDark = hexLuminance(theme.colors.bg) < 0.5;
+  const isDark = hexLuminance(terminalTheme.colors.terminal.background) < 0.5;
   useKeywordHighlighter(terminalRef, appSettings, sessionId, isDark);
 
   // Re-fit and focus when tab becomes active

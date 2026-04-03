@@ -29,6 +29,11 @@ import { useApp } from "../../context/AppContext";
 import { useTheme } from "../../context/ThemeContext";
 import { AVAILABLE_LANGUAGES } from "../../i18n";
 import { openSettings } from "../../lib/windowManager";
+import {
+  DEFAULT_TERMINAL_FONT_SIZE,
+  decreaseTerminalFontSize,
+  increaseTerminalFontSize,
+} from "../../lib/terminalFontSize";
 import ImportDialog from "../dialog/saved-connections/ImportDialog";
 
 import { MOD } from "../../hooks/useGlobalShortcuts";
@@ -102,7 +107,7 @@ export default function Header({
   onAbout,
 }: HeaderProps) {
   const { themeName, setTheme, themeNames } = useTheme();
-  const { appSettings, updateUi } = useApp();
+  const { appSettings, updateAppSettings, updateUi } = useApp();
   const [showImportDialog, setShowImportDialog] = useState(false);
   const uiConfig = appSettings.ui;
   const { t, i18n } = useTranslation();
@@ -113,11 +118,21 @@ export default function Header({
   };
 
   const handleZoom = (delta: number) => {
-    const newZoom = Math.max(0.5, Math.min(2.0, uiConfig.zoom_level + delta));
-    updateUi({ zoom_level: parseFloat(newZoom.toFixed(1)) });
+    updateAppSettings((prev) => ({
+      appearance: {
+        ...prev.appearance,
+        font_size:
+          delta > 0
+            ? increaseTerminalFontSize(prev.appearance.font_size)
+            : decreaseTerminalFontSize(prev.appearance.font_size),
+      },
+    }));
   };
 
-  const handleResetZoom = () => updateUi({ zoom_level: 1.0 });
+  const handleResetZoom = () =>
+    updateAppSettings((prev) => ({
+      appearance: { ...prev.appearance, font_size: DEFAULT_TERMINAL_FONT_SIZE },
+    }));
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {

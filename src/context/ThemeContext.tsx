@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DEFAULT_THEME_ID, type Theme, type ThemeColors, themeList, themes } from "@/lib/themes";
 import { useApp } from "./AppContext";
 
@@ -6,6 +6,9 @@ interface ThemeContextType {
   theme: Theme;
   themeName: string;
   setTheme: (id: string) => void;
+  terminalTheme: Theme;
+  terminalThemeName: string | null;
+  setTerminalTheme: (id: string | null) => void;
   themeNames: typeof themeList;
 }
 
@@ -42,21 +45,40 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const initialId = appSettings.appearance.theme || DEFAULT_THEME_ID;
   const [themeName, setThemeName] = useState(initialId);
 
+  const initialTerminalId = appSettings.appearance.terminal_theme || null;
+  const [terminalThemeName, setTerminalThemeName] = useState<string | null>(initialTerminalId);
+
   const current = themes[themeName] || themes[DEFAULT_THEME_ID];
 
-  // Apply CSS vars whenever theme changes and cache the ID
+  const resolvedTerminalTheme = useMemo(() => {
+    if (terminalThemeName && themes[terminalThemeName]) {
+      return themes[terminalThemeName];
+    }
+    return current;
+  }, [terminalThemeName, current]);
+
+  // Apply CSS vars whenever UI theme changes and cache the ID
   useEffect(() => {
     applyThemeToDOM(current.colors);
     try { localStorage.setItem(THEME_CACHE_KEY, current.id); } catch { }
   }, [current]);
 
-  // Sync from backend when appSettings.appearance.theme changes (e.g. on load or from Settings dialog)
+  // Sync UI theme from backend
   useEffect(() => {
     const configTheme = appSettings.appearance.theme;
     if (configTheme && configTheme !== themeName && themes[configTheme]) {
       setThemeName(configTheme);
     }
   }, [appSettings.appearance.theme, themeName]);
+
+  // Sync terminal theme from backend
+  useEffect(() => {
+    const configTerminalTheme = appSettings.appearance.terminal_theme;
+    const normalized = configTerminalTheme || null;
+    if (normalized !== terminalThemeName) {
+      setTerminalThemeName(normalized);
+    }
+  }, [appSettings.appearance.terminal_theme, terminalThemeName]);
 
   const setTheme = useCallback(
     (id: string) => {
@@ -68,8 +90,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [appSettings.appearance, updateAppSettings],
   );
 
+  const setTerminalTheme = useCallback(
+    (id: string | null) => {
+      const validId = id && themes[id] ? id : null;
+      setTerminalThemeName(validId);
+      updateAppSettings({
+        appearance: { ...appSettings.appearance, terminal_theme: validId },
+      });
+    },
+    [appSettings.appearance, updateAppSettings],
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme: current, themeName, setTheme, themeNames: themeList }}>
+    <ThemeContext.Provider
+      value={{
+        theme: current,
+        themeName,
+        setTheme,
+        terminalTheme: resolvedTerminalTheme,
+        terminalThemeName,
+        setTerminalTheme,
+        themeNames: themeList,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

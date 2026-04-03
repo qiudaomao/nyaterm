@@ -15,12 +15,14 @@ import { SettingNumberInput, SettingRow, SettingSwitch } from "./SettingFormItem
 export function TerminalTab() {
   const { t } = useTranslation();
   const { appSettings, updateAppSettings, updateUi } = useApp();
-  const { theme } = useTheme();
+  const { terminalTheme } = useTheme();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Derive dark/light from actual theme background luminance.
-  // ThemeContext uses CSS vars and never sets .dark on the document.
-  const isDark = useMemo(() => hexLuminance(theme.colors.bg) < 0.5, [theme.colors.bg]);
+  // Derive dark/light from the terminal theme background luminance.
+  const isDark = useMemo(
+    () => hexLuminance(terminalTheme.colors.terminal.background) < 0.5,
+    [terminalTheme.colors.terminal.background],
+  );
 
   const builtinRules = useMemo(() => getBuiltinRules(isDark), [isDark]);
   const userRules = appSettings.terminal.keyword_highlights ?? [];

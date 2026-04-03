@@ -170,6 +170,7 @@ export interface AppearanceSettings {
 export interface ProxySettings {
   enabled: boolean;
   protocol: string;
+  terminal_theme: string | null;
   host: string;
   port: number;
 }
