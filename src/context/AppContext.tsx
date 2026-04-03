@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import {
   createContext,
   type ReactNode,
@@ -7,7 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { listen } from "@tauri-apps/api/event";
+import type {
+  AppSettings,
+  Group,
+  SavedConnection,
+  SessionType,
+  Tab,
+  UiConfig,
+} from "@/types/global";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
@@ -74,6 +82,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     cursor_style: "block",
     cursor_blink: true,
     ui_font_size: 16,
+    terminal_theme: null,
   },
   proxy: {
     enabled: false,
@@ -82,7 +91,6 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     port: 1080,
   },
   search: {
-    terminal_theme: null,
     custom_engines: [
       { name: "Google", url_template: "https://google.com/search?q=%s" },
       { name: "Bing", url_template: "https://bing.com/search?q=%s" },
@@ -113,6 +121,12 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     keyword_highlights_enabled: true,
     keyword_highlights_across_wrapped_lines: false,
     keyword_highlights: [],
+    action_links_enabled: true,
+    action_links_matchers: {
+      ipv4: true,
+      archive: true,
+      host_port: true,
+    },
   },
   interaction: {
     copy_on_select: false,
@@ -149,7 +163,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
 export function AppProvider({ children }: { children: ReactNode }) {
   // Tabs State
   const [tabs, setTabs] = useState<Tab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeTabIdState, setActiveTabIdState] = useState<string | null>(null);
+  const activeTabIdRef = useRef<string | null>(null);
 
   // App Settings State (includes UI config)
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -172,6 +187,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Loading State
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  const setActiveTabId = useCallback((id: string | null) => {
+    activeTabIdRef.current = id;
+    setActiveTabIdState(id);
+  }, []);
 
   // 1. Load App Settings
   useEffect(() => {
@@ -245,14 +265,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const unlisten = listen("connections-changed", () => {
       refreshConnections();
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, [refreshConnections]);
 
   // 4. Tab Logic
   const addTab = useCallback(
     (sessionId: string, name: string, type: SessionType, connectionId?: string) => {
       const tabId = `tab-${Date.now()}`;
-      const newTab: Tab = { id: tabId, sessionId, name, type, connectionId };
+      const newTab: Tab = {
+        id: tabId,
+        sessionId,
+        name,
+        type,
+        connectionId,
+      };
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(tabId);
 
@@ -260,23 +288,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setShowNewSession(false);
       setEditingConnection(undefined);
     },
-    [],
+    [setActiveTabId],
   );
 
   const addPendingTab = useCallback(
     (name: string, type: SessionType, connectionId?: string): string => {
       const tabId = `tab-${Date.now()}`;
-      const newTab: Tab = { id: tabId, sessionId: tabId, name, type, connectionId, connecting: true };
+      const newTab: Tab = {
+        id: tabId,
+        sessionId: tabId,
+        name,
+        type,
+        connectionId,
+        connecting: true,
+      };
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(tabId);
       return tabId;
     },
-    [],
+    [setActiveTabId],
   );
 
   const updateTabSession = useCallback((tabId: string, sessionId: string) => {
     setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, sessionId, connecting: false } : tab)),
+      prev.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              sessionId,
+              connecting: false,
+            }
+          : tab,
+      ),
     );
   }, []);
 
@@ -284,7 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (tabId: string) => {
       setTabs((prev) => {
         const newTabs = prev.filter((t) => t.id !== tabId);
-        if (activeTabId === tabId) {
+        if (activeTabIdRef.current === tabId) {
           if (newTabs.length > 0) {
             setActiveTabId(newTabs[newTabs.length - 1].id);
           } else {
@@ -294,7 +337,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return newTabs;
       });
     },
-    [activeTabId],
+    [setActiveTabId],
   );
 
   // 5. Startup Restore Logic
@@ -344,7 +387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         tabs,
-        activeTabId,
+        activeTabId: activeTabIdState,
         setActiveTabId,
         addTab,
         addPendingTab,
