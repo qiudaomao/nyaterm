@@ -37,13 +37,17 @@ const BUILTIN_PATTERNS = {
   success: ["success(?:ful(?:ly)?)?", "ok", "done", "pass(?:ed)?", "complet(?:e|ed)"].map(requireTokenBoundary),
   info:    ["info(?:rmation)?", "notice"].map(requireTokenBoundary),
   debug:   ["debug", "trace", "verbose"].map(requireTokenBoundary),
+  option: [
+    "(?<![\\w-])--[a-zA-Z][\\w-]*(?![\\w-])",
+    "(?<![\\w-])-[a-zA-Z](?:[a-zA-Z0-9])*(?![\\w-])"
+  ],
   datetime: [
     "\\b\\d{4}[-/]\\d{2}[-/]\\d{2}(?:T(?:[01]\\d|2[0-3])[-:][0-5]\\d[-:][0-5]\\d(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:?\\d{2})?)?\\b",
     "\\b(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?(?:\\.\\d{1,6})?\\b"
   ],
   number: [
     "(?<![\\w-])[-+]?0x[0-9a-f]+(?![\\w-])",
-    "(?<![\\w.-])[-+]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:e[-+]?\\d+)?(?:\\s*%)?(?![\\w.-])"
+    "(?<![\\w.-])[-+]?(?:\\.\\d+|\\d+\\.\\d*|\\d+[eE][-+]?\\d+|\\d{2,})(?:[eE][-+]?\\d+)?(?:\\s*%)?(?![\\w.-])"
   ],
   constant: [
     "true",
@@ -56,10 +60,11 @@ const BUILTIN_PATTERNS = {
     "Infinity",
     "nullptr",
     "EOF",
+    "stop(?:ped)?",
   ].map(requireTokenBoundary),
   address: [
     "\\b(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\b",
-    "\\b(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}\\b|\\b(?:[a-fA-F0-9]{1,4}:){1,7}:[a-fA-F0-9]{1,4}\\b|\\b:(?::[a-fA-F0-9]{1,4}){1,7}\\b",
+    "(?<![0-9A-Fa-f:])(?:(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|(?:[0-9A-Fa-f]{1,3}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|:(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:))(?![0-9A-Fa-f:])",
     "\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b"
   ],
   url: [
@@ -67,13 +72,12 @@ const BUILTIN_PATTERNS = {
   ],
   uuid: [
     "\\b[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\\b",
-    "\\b[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{13}\\b",
   ],
   string: [
     "\"(?:[^\"\\\\]|\\\\.)*\"|\'(?:[^\'\\\\]|\\\\.)*\'"
   ],
   operator: [
-    "[\\[\\]{}()\\-=+$&*]+"
+    "[\\[\\]{}()=+&*]+"
   ],
   version: [
     "\\bv\\d+(?:\\.\\d+){1,2}(?:-[a-z0-9.-]+)?\\b",
@@ -89,7 +93,7 @@ const BUILTIN_PATTERNS = {
     "\\b\\d+(?:\\.\\d+)?\\s*(?:[kmgtep]i?b|b|bytes?|[kmgtep]bps)\\b"
   ],
   duration: [
-    "\\b[-+]?\\d+(?:\\.\\d+)?\\s*(?:[nµum]?s|sec|m|mins?|minutes|h|hrs?|d|days|weeks|months|years)\\b"
+    "\\b[-+]?\\d+(?:\\.\\d+)?\\s*(?:[nµum]?s|sec|m|mins?|minutes|h|hrs?|hours|d|days|weeks|months|years)\\b"
   ],
 } as const;
 
@@ -104,6 +108,7 @@ const DARK_RULE_COLORS = {
   success: "#3fb950",
   info: "#79c0ff",
   debug: "#d2a8ff",
+  option: "#ff9e64",
   datetime: "#f1fa8c",
   number: "#bd93f9",
   constant: "#ffb86c",
@@ -124,6 +129,7 @@ const LIGHT_RULE_COLORS = {
   success: "#116329",
   info: "#0969da",
   debug: "#8250df",
+  option: "#b04a00",
   datetime: "#a58900",
   number: "#6f42c1",
   constant: "#cb4b16",
@@ -148,12 +154,13 @@ export function getBuiltinRules(isDark: boolean): ResolvedHighlightRule[] {
   const c = isDark ? DARK_RULE_COLORS : LIGHT_RULE_COLORS;
   return [
     // Higher priority rules (complex structures, exact formats)
-    { id: "builtin-version", name: "Version", patterns: [...BUILTIN_PATTERNS.version], color: c.version, enabled: true },
-    { id: "builtin-size", name: "Size", patterns: [...BUILTIN_PATTERNS.size], color: c.size, enabled: true },
     { id: "builtin-url", name: "URL", patterns: [...BUILTIN_PATTERNS.url], color: c.url, enabled: true },
-    { id: "builtin-string", name: "String", patterns: [...BUILTIN_PATTERNS.string], color: c.string, enabled: true },
-    { id: "builtin-uuid", name: "UUID", patterns: [...BUILTIN_PATTERNS.uuid], color: c.uuid, enabled: true },
+    { id: "builtin-version", name: "Version", patterns: [...BUILTIN_PATTERNS.version], color: c.version, enabled: true },
     { id: "builtin-address", name: "Address", patterns: [...BUILTIN_PATTERNS.address], color: c.address, enabled: true },
+    { id: "builtin-size", name: "Size", patterns: [...BUILTIN_PATTERNS.size], color: c.size, enabled: true },
+    { id: "builtin-string", name: "String", patterns: [...BUILTIN_PATTERNS.string], color: c.string, enabled: true },
+    { id: "builtin-option", name: "Option", patterns: [...BUILTIN_PATTERNS.option], color: c.option, enabled: true },
+    { id: "builtin-uuid", name: "UUID", patterns: [...BUILTIN_PATTERNS.uuid], color: c.uuid, enabled: true },
     { id: "builtin-datetime", name: "DateTime", patterns: [...BUILTIN_PATTERNS.datetime], color: c.datetime, enabled: true },
     // Logical state and generic matching
     { id: "builtin-error", name: "Error", patterns: [...BUILTIN_PATTERNS.error], color: c.error, enabled: true },

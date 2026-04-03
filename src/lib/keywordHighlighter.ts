@@ -71,7 +71,11 @@ export class KeywordHighlighter implements IDisposable {
       // Refresh when new output arrives
       this.term.onWriteParsed(() => this.triggerRefresh()),
       // Refresh on terminal resize (column/row count changes)
-      this.term.onResize(() => this.triggerRefresh()),
+      this.term.onResize(() => {
+        this.clearAllDecorations();
+        this.lastViewportY = -1;
+        this.triggerRefresh();
+      }),
       // onRender fires after every render cycle (cursor blink, scroll, data flush).
       // Viewport Y check avoids redundant work on cursor-blink-only redraws, and
       // makes a separate onScroll listener unnecessary.
@@ -159,20 +163,35 @@ export class KeywordHighlighter implements IDisposable {
     scratchCell: IBufferCell,
   ): number[] {
     const map: number[] = [];
+    let col = 0;
     let cellEndCol = 0;
 
-    for (let col = 0; col < maxCols && map.length < stringLength; col++) {
+    // Mirror translateToString's traversal exactly: advance by `width || 1` so that
+    // wide-char continuation cells (width=0 placeholder after a 2-wide glyph) are
+    // naturally skipped, while NUL cells (also width=0, but emitted as a space by
+    // translateToString) still contribute one entry.  The old `col++` loop with an
+    // explicit `width === 0 → continue` guard incorrectly skipped both kinds and
+    // produced a map shorter than lineText when NUL cells appeared before wide chars.
+    while (col < maxCols && map.length < stringLength) {
       const cell = line.getCell(col, scratchCell);
       if (!cell) break;
 
       const chars = cell.getChars();
       const width = cell.getWidth();
-      if (width === 0) continue; // continuation cell of a wide char
+      // translateToString advances by `width || 1`; replicate the same stride so our
+      // map index always stays in sync with the returned string.
+      const stride = width || 1;
 
-      for (let i = 0; i < chars.length; i++) {
+      if (chars.length === 0) {
+        // NUL cell: getChars() returns '' but translateToString emits WHITESPACE_CELL_CHAR.
         map.push(col);
+      } else {
+        for (let i = 0; i < chars.length; i++) {
+          map.push(col);
+        }
       }
-      cellEndCol = col + width;
+      cellEndCol = col + stride;
+      col += stride;
     }
 
     map.push(cellEndCol); // sentinel: end position
