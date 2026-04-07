@@ -14,7 +14,10 @@ pub fn get_app_settings(app: tauri::AppHandle) -> AppResult<config::AppSettings>
 }
 
 #[tauri::command]
-pub fn save_app_settings(app: tauri::AppHandle, mut settings: config::AppSettings) -> AppResult<()> {
+pub fn save_app_settings(
+    app: tauri::AppHandle,
+    mut settings: config::AppSettings,
+) -> AppResult<()> {
     // Encrypt lock_password if it's new plaintext (not the sentinel from get_app_settings).
     match settings.security.lock_password.as_deref() {
         Some("__SET__") => {
