@@ -161,7 +161,7 @@ function TunnelRow({
 export default function NetworkPanel() {
   const { t } = useTranslation();
   const { savedConnections, savedGroups } = useApp();
-  const [activeTab, setActiveTab] = useState<NetworkTab>("proxy");
+  const [activeTab, setActiveTab] = useState<NetworkTab>("tunnel");
 
   const [proxies, setProxies] = useState<ProxyConfig[]>([]);
   const [proxyDialog, setProxyDialog] = useState<ProxyConfig | "new" | null>(null);
@@ -314,7 +314,7 @@ export default function NetworkPanel() {
         title={t("panel.network")}
         actions={
           <span className="text-[0.6875rem]" style={{ color: "var(--df-text-dimmed)" }}>
-            {activeTab === "proxy" ? proxies.length : tunnels.length}
+            {activeTab === "tunnel" ? tunnels.length : proxies.length}
           </span>
         }
       />
@@ -326,55 +326,13 @@ export default function NetworkPanel() {
           className="w-full"
         >
           <TabsList className="grid h-8 w-full grid-cols-2">
-            <TabsTrigger value="proxy" className="text-xs">
-              {t("network.proxy")}
-            </TabsTrigger>
             <TabsTrigger value="tunnel" className="text-xs">
               {t("network.tunnels")}
             </TabsTrigger>
+            <TabsTrigger value="proxy" className="text-xs">
+              {t("network.proxy")}
+            </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="proxy" className="mt-3">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="font-medium text-sm">{t("network.proxyConfig")}</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-primary text-xs"
-                    onClick={() => setProxyDialog("new")}
-                  >
-                    <MdAdd className="text-base mr-1" />
-                    {t("network.newProxy")}
-                  </Button>
-                </div>
-
-                <div className="border rounded-md overflow-hidden">
-                  {proxies.length === 0 ? (
-                    <EmptyState
-                      icon={MdRouter}
-                      title={t("network.noProxyConfigs")}
-                      description={t("network.proxyEmptyHint")}
-                    />
-                  ) : (
-                    proxies.map((proxy, index) => (
-                      <div
-                        key={proxy.id}
-                        className={cn(index < proxies.length - 1 ? "border-b" : undefined)}
-                      >
-                        <ProxyRow
-                          proxy={proxy}
-                          onEdit={setProxyDialog}
-                          onDelete={handleDeleteProxy}
-                        />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </TabsContent>
 
           <TabsContent value="tunnel" className="mt-3">
             <div className="space-y-6">
@@ -427,6 +385,48 @@ export default function NetworkPanel() {
                           onEdit={setTunnelDialog}
                           onDelete={handleDeleteTunnel}
                           onToggle={handleToggleTunnel}
+                        />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="proxy" className="mt-3">
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="font-medium text-sm">{t("network.proxyConfig")}</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-primary text-xs"
+                    onClick={() => setProxyDialog("new")}
+                  >
+                    <MdAdd className="text-base mr-1" />
+                    {t("network.newProxy")}
+                  </Button>
+                </div>
+
+                <div className="border rounded-md overflow-hidden">
+                  {proxies.length === 0 ? (
+                    <EmptyState
+                      icon={MdRouter}
+                      title={t("network.noProxyConfigs")}
+                      description={t("network.proxyEmptyHint")}
+                    />
+                  ) : (
+                    proxies.map((proxy, index) => (
+                      <div
+                        key={proxy.id}
+                        className={cn(index < proxies.length - 1 ? "border-b" : undefined)}
+                      >
+                        <ProxyRow
+                          proxy={proxy}
+                          onEdit={setProxyDialog}
+                          onDelete={handleDeleteProxy}
                         />
                       </div>
                     ))
