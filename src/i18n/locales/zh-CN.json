@@ -224,6 +224,7 @@
     "workingDir": "工作目录",
     "workingDirPlaceholder": "例如：C:\\Projects 或 ~/workspace",
     "quickConnectLocal": "快速连接 (不保存)",
+    "serial": "串口",
     "serialPort": "串口名",
     "serialPortPlaceholder": "例如 COM1 或 /dev/ttyS0",
     "baudRate": "波特率",

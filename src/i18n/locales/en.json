@@ -224,6 +224,7 @@
     "workingDir": "Working Directory",
     "workingDirPlaceholder": "e.g. C:\\Projects or ~/workspace",
     "quickConnectLocal": "Quick Connect (Unsaved)",
+    "serial": "Serial",
     "serialPort": "Serial Port",
     "serialPortPlaceholder": "COM1 or /dev/ttyS0",
     "baudRate": "Baud Rate",

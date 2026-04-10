@@ -59,7 +59,9 @@ export function SshForm({
       if (keyId && !keys.some((key) => key.id === keyId)) {
         setKeyId("");
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [keyId, setKeyId]);
 
   const loadPasswords = useCallback(async () => {
@@ -69,7 +71,9 @@ export function SshForm({
       if (passwordId && !passwords.some((p) => p.id === passwordId)) {
         setPasswordId("");
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [passwordId, setPasswordId]);
 
   useEffect(() => {
@@ -109,8 +113,8 @@ export function SshForm({
 
   return (
     <div className="space-y-4 w-full">
-      <div className="flex gap-3">
-        <div className="flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="min-w-0 flex-1">
           <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.host")}</Label>
           <Input
             className="mt-1 text-xs h-8"
@@ -119,7 +123,7 @@ export function SshForm({
             onChange={(e) => setHost(e.target.value)}
           />
         </div>
-        <div className="w-32">
+        <div className="w-full sm:w-32">
           <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.port")}</Label>
           <NumberInput
             className="mt-1 [&_button]:h-8 [&_button]:w-8 [&_input]:h-8 [&_input]:text-xs"

@@ -12,11 +12,7 @@ import { SerialForm } from "@/components/sessions/SerialForm";
 import { SshForm } from "@/components/sessions/SshForm";
 import { TelnetForm } from "@/components/sessions/TelnetForm";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -205,7 +201,7 @@ export default function NewSessionPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
       <ChildWindowHeader
         title={t(editId ? "dialog.editConnection" : "dialog.newConnection")}
         onClose={handleClose}
@@ -215,30 +211,27 @@ export default function NewSessionPage() {
       <Tabs
         value={currentTab}
         onValueChange={setCurrentTab}
-        className="flex-1 flex flex-col overflow-hidden"
+        className="flex-1 min-h-0 flex flex-col overflow-hidden"
       >
-        <div className="px-5 pt-3 shrink-0">
-          <TabsList
-            variant="line"
-            className="w-full justify-start border-b border-border/40 gap-6 rounded-none h-auto p-0"
-          >
-            <TabsTrigger value="ssh" className="px-1 py-2 text-xs rounded-none bg-transparent">
+        <div className="shrink-0 px-4 pt-3 sm:px-5">
+          <TabsList className="grid h-8 w-full grid-cols-4 pointer-events-auto">
+            <TabsTrigger value="ssh" className="text-xs">
               SSH
             </TabsTrigger>
-            <TabsTrigger value="local" className="px-1 py-2 text-xs rounded-none bg-transparent">
+            <TabsTrigger value="local" className="text-xs">
               {t("dialog.localTerminal")}
             </TabsTrigger>
-            <TabsTrigger value="telnet" className="px-1 py-2 text-xs rounded-none bg-transparent">
+            <TabsTrigger value="telnet" className="text-xs">
               Telnet
             </TabsTrigger>
-            <TabsTrigger value="serial" className="px-1 py-2 text-xs rounded-none bg-transparent">
-              Serial
+            <TabsTrigger value="serial" className="text-xs">
+              {t("dialog.serial")}
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <div className="flex-1 overflow-y-auto w-full p-5 space-y-4">
-          <div className="flex gap-3 items-end">
+        <div className="flex-1 min-h-0 w-full space-y-4 overflow-y-auto p-4 sm:p-5">
+          <div className="flex flex-wrap items-end gap-3">
             {/* Name + Group */}
             <div className="relative shrink-0" ref={iconPickerRef}>
               <Label className="text-[0.6875rem] text-muted-foreground block mb-1">
@@ -266,7 +259,7 @@ export default function NewSessionPage() {
                 )}
               </Button>
               {showIconPicker && (
-                <div className="absolute top-full left-0 mt-1 z-20 border rounded-md shadow-xl bg-popover p-2 min-w-max w-56">
+                <div className="absolute top-full left-0 z-20 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-popover p-2 shadow-xl">
                   <div className="grid grid-cols-7 gap-0.5">
                     <button
                       className={`w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-accent ${!iconKey ? "bg-primary/15 ring-1 ring-primary/40" : ""}`}
@@ -298,7 +291,7 @@ export default function NewSessionPage() {
                 </div>
               )}
             </div>
-            <div className="flex-1">
+            <div className="min-w-[12rem] flex-1">
               <Label className="text-[0.6875rem] text-muted-foreground">
                 {t("dialog.connectionName")}
               </Label>
@@ -309,7 +302,7 @@ export default function NewSessionPage() {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="w-44 relative" ref={groupRef}>
+            <div className="relative min-w-[12rem] flex-1 sm:max-w-[18rem]" ref={groupRef}>
               <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.group")}</Label>
               <Button
                 type="button"
@@ -436,7 +429,7 @@ export default function NewSessionPage() {
               username={username}
               setUsername={setUsername}
               authType={authType}
-              setAuthType={setAuthType as any}
+              setAuthType={(value) => setAuthType(value)}
               passwordId={passwordId}
               setPasswordId={setPasswordId}
               keyId={keyId}
@@ -472,7 +465,7 @@ export default function NewSessionPage() {
             />
           </TabsContent>
 
-          <div className="space-y-4 mt-6">
+          <div className="mt-6 space-y-4">
             {/* Description */}
             <div>
               <Label className="text-[0.6875rem] text-muted-foreground">
@@ -495,7 +488,7 @@ export default function NewSessionPage() {
                     <MdExpandMore className="text-base text-muted-foreground transition-transform duration-200" />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-2 space-y-3">
-                    <div className="w-72 max-w-full">
+                    <div className="w-full max-w-full sm:w-72">
                       <Label className="text-[0.6875rem] text-muted-foreground">
                         {t("dialog.proxySelect")}
                       </Label>
@@ -537,13 +530,18 @@ export default function NewSessionPage() {
       </Tabs>
 
       {/* Footer */}
-      <div className="px-5 py-3 border-t flex justify-end gap-2 shrink-0">
-        <Button variant="ghost" size="sm" className="text-xs" onClick={handleClose}>
+      <div className="flex shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs sm:w-auto"
+          onClick={handleClose}
+        >
           {t("dialog.cancel")}
         </Button>
         <Button
           size="sm"
-          className="text-xs"
+          className="w-full text-xs sm:w-auto"
           onClick={handleSave}
           disabled={connecting || ((currentTab === "ssh" || currentTab === "telnet") && !host)}
         >
