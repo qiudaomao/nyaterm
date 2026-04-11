@@ -55,6 +55,7 @@ import {
   findTerminalWindowLeafById,
   findTerminalWindowLeafByTabId,
   insertTabAfterInLeaf,
+  insertTabIntoLeaf,
   reconcileTerminalWindows,
   removeTabFromTerminalWindows,
   reorderTabsInLeaf,
@@ -71,6 +72,7 @@ import {
 import {
   bounceTopModalWindow,
   openNewSession,
+  openNewSessionWithTarget,
   openSettings,
   syncMainWindowModalState,
 } from "./lib/windowManager";
@@ -120,6 +122,7 @@ function App() {
     updateUi,
     updateAppSettings,
     appSettings,
+    closeTabs,
     savedConnections,
     isLocked,
     setIsLocked,
@@ -175,11 +178,34 @@ function App() {
     );
 
     unsubs.push(
-      listen<{ sessionId: string; name: string; type: "SSH" | "Local" | "Telnet" | "Serial" }>(
+      listen<{
+        sessionId: string;
+        name: string;
+        type: "SSH" | "Local" | "Telnet" | "Serial";
+        targetLeafId?: string;
+        anchorTabId?: string | null;
+      }>(
         "session-created",
         (event) => {
-          const { sessionId, name: sessionName, type } = event.payload;
-          addTab(sessionId, sessionName, type);
+          const { sessionId, name: sessionName, type, targetLeafId, anchorTabId } = event.payload;
+          const tabId = addTab(
+            sessionId,
+            sessionName,
+            type,
+            undefined,
+            undefined,
+            anchorTabId ? { afterTabId: anchorTabId } : undefined,
+          );
+          if (targetLeafId) {
+            setTerminalWindows((current) =>
+              current
+                ? insertTabIntoLeaf(current, targetLeafId, tabId, {
+                    afterTabId: anchorTabId,
+                    activeTabId: tabId,
+                  })
+                : current,
+            );
+          }
         },
       ),
     );
@@ -191,8 +217,10 @@ function App() {
     );
 
     unsubs.push(
-      listen<{ connectionId: string }>("session-connect-after-edit", async (event) => {
-        const { connectionId } = event.payload;
+      listen<{ connectionId: string; targetLeafId?: string; anchorTabId?: string | null }>(
+        "session-connect-after-edit",
+        async (event) => {
+          const { connectionId, targetLeafId, anchorTabId } = event.payload;
         try {
           const conns = await invoke<SavedConnection[]>("get_saved_connections");
           const conn = conns.find((c) => c.id === connectionId);
@@ -204,7 +232,23 @@ function App() {
             serial: "Serial",
           };
           const sessionType = typeMap[conn?.type ?? "ssh"] ?? "SSH";
-          const tabId = addPendingTab(connName, sessionType, connectionId);
+          const tabId = addPendingTab(
+            connName,
+            sessionType,
+            connectionId,
+            undefined,
+            anchorTabId ? { afterTabId: anchorTabId } : undefined,
+          );
+          if (targetLeafId) {
+            setTerminalWindows((current) =>
+              current
+                ? insertTabIntoLeaf(current, targetLeafId, tabId, {
+                    afterTabId: anchorTabId,
+                    activeTabId: tabId,
+                  })
+                : current,
+            );
+          }
           try {
             let sessionId: string;
             switch (conn?.type) {
@@ -223,12 +267,14 @@ function App() {
             }
             updateTabSession(tabId, sessionId);
           } catch {
+            setTerminalWindows((current) => removeTabFromTerminalWindows(current, tabId));
             closeTab(tabId);
           }
         } catch {
           /* ignore */
         }
-      }),
+        },
+      ),
     );
 
     return () => {
@@ -282,6 +328,7 @@ function App() {
   const activePane = activeTab ? getActivePane(activeTab) : null;
   const [terminalWindows, setTerminalWindows] = useState<TerminalWindowNode | null>(null);
   const previousActiveTabIdRef = useRef<string | null>(null);
+  const tabsById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs]);
 
   const handleNewSession = (_parentGroupId?: string) => {
     openNewSession();
@@ -308,18 +355,17 @@ function App() {
 
   const handleAddTabFromLeaf = useCallback(
     (leafId: string) => {
-      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, activeTabId ?? "") : null;
-      if (leaf?.id !== leafId) {
-        const targetLeaf = terminalWindows
-          ? findTerminalWindowLeafById(terminalWindows, leafId)
-          : null;
-        if (targetLeaf?.activeTabId) {
-          handleSelectLeafTab(leafId, targetLeaf.activeTabId);
-        }
+      const targetLeaf = terminalWindows ? findTerminalWindowLeafById(terminalWindows, leafId) : null;
+      if (targetLeaf?.activeTabId) {
+        handleSelectLeafTab(leafId, targetLeaf.activeTabId);
       }
-      handleNewSession();
+      openNewSessionWithTarget(undefined, undefined, {
+        targetLeafId: leafId,
+        anchorTabId:
+          targetLeaf?.activeTabId ?? targetLeaf?.tabIds[targetLeaf.tabIds.length - 1] ?? null,
+      });
     },
-    [activeTabId, handleSelectLeafTab, terminalWindows],
+    [handleSelectLeafTab, terminalWindows],
   );
 
   const handleReorderTabsInLeaf = useCallback((_: string, fromTabId: string, toIndex: number) => {
@@ -333,6 +379,21 @@ function App() {
       current ? updateTerminalWindowSplitRatio(current, splitId, ratio) : current,
     );
   }, []);
+
+  const handleActivatePane = useCallback(
+    (tabId: string, paneId: string) => {
+      setActiveTabId(tabId);
+      setActivePane(tabId, paneId);
+    },
+    [setActivePane, setActiveTabId],
+  );
+
+  const handleUpdatePaneSplitRatio = useCallback(
+    (tabId: string, splitId: string, ratio: number) => {
+      updateSplitRatio(tabId, splitId, ratio);
+    },
+    [updateSplitRatio],
+  );
 
   const createSessionForPane = useCallback(
     async (pane: Pick<SessionPane, "type" | "connectionId">) => {
@@ -399,13 +460,14 @@ function App() {
   const handleCloseWorkspaceTab = useCallback(
     async (tab: Tab) => {
       const allClosed = await closeWorkspaceTabSessions(tab);
-      closeTab(tab.id);
-      await persistWorkspaceNow(t("tabCtx.closeFailed"));
       if (!allClosed) {
         toast.error(t("tabCtx.closeFailed"));
+        return;
       }
+      closeTabs([tab.id]);
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, t],
+    [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t],
   );
 
   const handleSessionClick = useCallback(
@@ -706,14 +768,19 @@ function App() {
     if (!window.confirm(t("tabCtx.closeAllConfirm"))) return;
 
     const results = await Promise.all(tabs.map((tab) => closeWorkspaceTabSessions(tab)));
-    for (const tab of tabs) {
-      closeTab(tab.id);
+    const successfulTabIds = tabs
+      .filter((_, index) => results[index])
+      .map((tab) => tab.id);
+
+    if (successfulTabIds.length > 0) {
+      closeTabs(successfulTabIds);
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
     }
-    await persistWorkspaceNow(t("tabCtx.closeFailed"));
-    if (results.some((result) => !result)) {
+
+    if (successfulTabIds.length !== tabs.length) {
       toast.error(t("tabCtx.closeFailed"));
     }
-  }, [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs]);
+  }, [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs]);
 
   const handleCloseInactiveTabs = useCallback(
     async (keepTabId: string) => {
@@ -721,16 +788,34 @@ function App() {
       const targetTabs = leaf?.tabIds ?? tabs.map((tab) => tab.id);
       const tabsToClose = tabs.filter((tab) => targetTabs.includes(tab.id) && tab.id !== keepTabId);
       const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
-      for (const tab of tabsToClose) {
-        closeTab(tab.id);
+
+      const successfulTabIds = tabsToClose
+        .filter((_, index) => results[index])
+        .map((tab) => tab.id);
+
+      if (successfulTabIds.length > 0) {
+        closeTabs(successfulTabIds, { nextActiveTabId: keepTabId });
+        await persistWorkspaceNow(t("tabCtx.closeFailed"));
       }
-      setActiveTabId(keepTabId);
-      await persistWorkspaceNow(t("tabCtx.closeFailed"));
-      if (results.some((result) => !result)) {
+
+      if (!successfulTabIds.length && activeTabId !== keepTabId) {
+        setActiveTabId(keepTabId);
+      }
+
+      if (successfulTabIds.length !== tabsToClose.length) {
         toast.error(t("tabCtx.closeFailed"));
       }
     },
-    [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, setActiveTabId, t, tabs, terminalWindows],
+    [
+      activeTabId,
+      closeTabs,
+      closeWorkspaceTabSessions,
+      persistWorkspaceNow,
+      setActiveTabId,
+      t,
+      tabs,
+      terminalWindows,
+    ],
   );
 
   const handleCloseRightTabs = useCallback(
@@ -743,16 +828,21 @@ function App() {
       const rightTabIds = tabOrder.slice(idx + 1);
       const tabsToClose = tabs.filter((tab) => rightTabIds.includes(tab.id));
       const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
-      for (let i = tabsToClose.length - 1; i >= 0; i -= 1) {
-        const tab = tabsToClose[i];
-        closeTab(tab.id);
+
+      const successfulTabIds = tabsToClose
+        .filter((_, index) => results[index])
+        .map((tab) => tab.id);
+
+      if (successfulTabIds.length > 0) {
+        closeTabs(successfulTabIds);
+        await persistWorkspaceNow(t("tabCtx.closeFailed"));
       }
-      await persistWorkspaceNow(t("tabCtx.closeFailed"));
-      if (results.some((result) => !result)) {
+
+      if (successfulTabIds.length !== tabsToClose.length) {
         toast.error(t("tabCtx.closeFailed"));
       }
     },
-    [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs, terminalWindows],
+    [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs, terminalWindows],
   );
 
   const handleSessionInfo = useCallback((tab: Tab) => {
@@ -1226,7 +1316,7 @@ function App() {
               ) : terminalWindows ? (
                 <TabWindowsWorkspace
                   layout={terminalWindows}
-                  tabsById={new Map(tabs.map((tab) => [tab.id, tab]))}
+                  tabsById={tabsById}
                   onSelectTab={handleSelectLeafTab}
                   onAddTab={handleAddTabFromLeaf}
                   onTabClose={handleCloseWorkspaceTab}
@@ -1239,13 +1329,8 @@ function App() {
                   onCloseRight={handleCloseRightTabs}
                   onSessionInfo={handleSessionInfo}
                   onReorderTabs={handleReorderTabsInLeaf}
-                  onActivatePane={(tabId, paneId) => {
-                    setActiveTabId(tabId);
-                    setActivePane(tabId, paneId);
-                  }}
-                  onUpdatePaneSplitRatio={(tabId, splitId, ratio) =>
-                    updateSplitRatio(tabId, splitId, ratio)
-                  }
+                  onActivatePane={handleActivatePane}
+                  onUpdatePaneSplitRatio={handleUpdatePaneSplitRatio}
                   onUpdateWindowSplitRatio={handleUpdateWindowSplitRatio}
                   onReconnected={handleReconnected}
                 />

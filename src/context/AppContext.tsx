@@ -80,6 +80,10 @@ interface AppContextType {
     updates: Partial<Pick<Tab, "customName" | "tabColor">>,
     options?: { immediatePersist?: boolean },
   ) => Promise<void>;
+  closeTabs: (
+    tabIds: string[],
+    options?: { immediatePersist?: boolean; nextActiveTabId?: string | null },
+  ) => void;
   closeTab: (tabId: string) => void;
   persistTabsNow: () => Promise<void>;
 
@@ -551,20 +555,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [commitTabs],
   );
 
-  const closeTab = useCallback(
-    (tabId: string) => {
-      const currentTabs = tabsRef.current;
-      const index = currentTabs.findIndex((tab) => tab.id === tabId);
-      if (index === -1) return;
+  const closeTabs = useCallback(
+    (
+      tabIds: string[],
+      options?: { immediatePersist?: boolean; nextActiveTabId?: string | null },
+    ) => {
+      if (tabIds.length === 0) return;
 
-      const nextTabs = currentTabs.filter((tab) => tab.id !== tabId);
-      if (activeTabIdRef.current === tabId) {
-        const fallback = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0] ?? null;
-        setActiveTabId(fallback?.id ?? null);
+      const idsToClose = new Set(tabIds);
+      const currentTabs = tabsRef.current;
+      const nextTabs = currentTabs.filter((tab) => !idsToClose.has(tab.id));
+      const currentActiveTabId = activeTabIdRef.current;
+
+      let nextActiveTabId =
+        options?.nextActiveTabId !== undefined ? options.nextActiveTabId : currentActiveTabId;
+
+      if (
+        nextActiveTabId &&
+        !nextTabs.some((tab) => tab.id === nextActiveTabId)
+      ) {
+        nextActiveTabId = null;
       }
-      void commitTabs(nextTabs);
+
+      if (!nextActiveTabId && currentActiveTabId && idsToClose.has(currentActiveTabId)) {
+        const activeIndex = currentTabs.findIndex((tab) => tab.id === currentActiveTabId);
+        const fallbackTab = nextTabs[Math.max(0, activeIndex - 1)] ?? nextTabs[0] ?? null;
+        nextActiveTabId = fallbackTab?.id ?? null;
+      }
+
+      if (!nextActiveTabId && nextTabs.length > 0) {
+        nextActiveTabId = nextTabs[0].id;
+      }
+
+      if (nextActiveTabId !== currentActiveTabId) {
+        setActiveTabId(nextActiveTabId);
+      }
+
+      void commitTabs(nextTabs, { immediatePersist: options?.immediatePersist });
     },
     [commitTabs, setActiveTabId],
+  );
+
+  const closeTab = useCallback(
+    (tabId: string) => {
+      closeTabs([tabId]);
+    },
+    [closeTabs],
   );
 
   const reorderTabs = useCallback(
@@ -682,6 +718,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         closePane,
         reorderTabs,
         updateTab,
+        closeTabs,
         closeTab,
         persistTabsNow,
         appSettings,
