@@ -69,7 +69,6 @@ export const AppContext = createContext<AppContextType | null>(null);
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
     startup_restore: true,
-    default_local_shell: navigator.userAgent.includes("Win") ? "powershell.exe" : "bash",
     minimize_to_tray: false,
     boss_key: null,
     confirm_on_close: true,
@@ -366,18 +365,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         appSettings.ui.open_tabs.length > 0
       ) {
         appSettings.ui.open_tabs.forEach((tab) => {
-          if (tab.session_type === "SSH" && tab.connection_id) {
-            invoke<string>("create_ssh_session", { connectionId: tab.connection_id })
-              .then((sessionId) => {
-                addTab(sessionId, tab.title, "SSH", tab.connection_id);
-              })
+          const cid = tab.connection_id;
+          if (tab.session_type === "SSH" && cid) {
+            invoke<string>("create_ssh_session", { connectionId: cid })
+              .then((sessionId) => addTab(sessionId, tab.title, "SSH", cid))
               .catch((e) => logger.error(`Restore SSH failed for ${tab.title}`, e));
           } else if (tab.session_type === "Local" || tab.session_type === "local") {
-            invoke<string>("create_local_session")
-              .then((sessionId) => {
-                addTab(sessionId, tab.title, "Local");
-              })
+            invoke<string>("create_local_session", { connectionId: cid || null })
+              .then((sessionId) => addTab(sessionId, tab.title, "Local", cid))
               .catch((e) => logger.error(`Restore Local failed`, e));
+          } else if (tab.session_type === "Telnet" && cid) {
+            invoke<string>("create_telnet_session", { connectionId: cid })
+              .then((sessionId) => addTab(sessionId, tab.title, "Telnet", cid))
+              .catch((e) => logger.error(`Restore Telnet failed for ${tab.title}`, e));
+          } else if (tab.session_type === "Serial" && cid) {
+            invoke<string>("create_serial_session", { connectionId: cid })
+              .then((sessionId) => addTab(sessionId, tab.title, "Serial", cid))
+              .catch((e) => logger.error(`Restore Serial failed for ${tab.title}`, e));
           }
         });
       }

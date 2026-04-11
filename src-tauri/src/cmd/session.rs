@@ -1,7 +1,7 @@
 use crate::config;
-use crate::error::{AppError, AppResult};
 use crate::core::ssh::{self, PendingAuthManager};
 use crate::core::{self, RecordingManager, SessionCommand, SessionInfo, SessionManager};
+use crate::error::{AppError, AppResult};
 use crate::utils::fuzzy::{fuzzy_search_items, FuzzyResult};
 use std::sync::Arc;
 use tauri::Manager;
@@ -21,8 +21,111 @@ pub async fn create_ssh_session(
 pub async fn create_local_session(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<SessionManager>>,
+    connection_id: Option<String>,
 ) -> AppResult<String> {
-    core::create_local_session(app, state.inner().clone()).await
+    let config = if let Some(ref cid) = connection_id {
+        let conn = config::load_connection_by_id(&app, cid)?;
+        match conn.config {
+            config::ConnectionType::LocalTerminal {
+                shell_path,
+                working_dir,
+            } => Some(core::LocalSessionConfig {
+                shell_path,
+                working_dir,
+                name: conn.name,
+            }),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    core::create_local_session(app, state.inner().clone(), config).await
+}
+
+#[tauri::command]
+pub async fn create_telnet_session(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<SessionManager>>,
+    connection_id: Option<String>,
+    host: Option<String>,
+    port: Option<u16>,
+    name: Option<String>,
+) -> AppResult<String> {
+    let (h, p, n) = if let Some(ref cid) = connection_id {
+        let conn = config::load_connection_by_id(&app, cid)?;
+        match conn.config {
+            config::ConnectionType::Telnet {
+                host: ref ch,
+                port: cp,
+            } => (ch.clone(), cp, conn.name.clone()),
+            _ => {
+                return Err(AppError::Config(
+                    "Connection is not a Telnet connection".to_string(),
+                ))
+            }
+        }
+    } else {
+        (
+            host.ok_or_else(|| AppError::Config("host is required".to_string()))?,
+            port.unwrap_or(23),
+            name.unwrap_or_else(|| "Telnet".to_string()),
+        )
+    };
+    core::create_telnet_session(app, state.inner().clone(), h, p, connection_id, n).await
+}
+
+#[tauri::command]
+pub async fn create_serial_session(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<SessionManager>>,
+    connection_id: Option<String>,
+    port_name: Option<String>,
+    baud_rate: Option<u32>,
+    data_bits: Option<u8>,
+    parity: Option<String>,
+    stop_bits: Option<String>,
+    name: Option<String>,
+) -> AppResult<String> {
+    let cfg = if let Some(ref cid) = connection_id {
+        let conn = config::load_connection_by_id(&app, cid)?;
+        match conn.config {
+            config::ConnectionType::Serial {
+                port_name,
+                baud_rate,
+                data_bits,
+                parity,
+                stop_bits,
+            } => core::SerialConfig {
+                port_name,
+                baud_rate,
+                data_bits,
+                parity,
+                stop_bits,
+                name: conn.name,
+            },
+            _ => {
+                return Err(AppError::Config(
+                    "Connection is not a Serial connection".to_string(),
+                ))
+            }
+        }
+    } else {
+        core::SerialConfig {
+            port_name: port_name
+                .ok_or_else(|| AppError::Config("port_name is required".to_string()))?,
+            baud_rate: baud_rate.unwrap_or(115_200),
+            data_bits: data_bits.unwrap_or(8),
+            parity: parity.unwrap_or_else(|| "none".to_string()),
+            stop_bits: stop_bits.unwrap_or_else(|| "1".to_string()),
+            name: name.unwrap_or_else(|| "Serial".to_string()),
+        }
+    };
+    core::create_serial_session(app, state.inner().clone(), cfg, connection_id).await
+}
+
+#[tauri::command]
+pub fn list_serial_ports() -> AppResult<Vec<String>> {
+    core::list_serial_ports()
 }
 
 #[tauri::command]

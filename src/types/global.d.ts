@@ -1,5 +1,5 @@
 /** Type of terminal session: SSH remote or local shell. */
-export type SessionType = "SSH" | "Local";
+export type SessionType = "SSH" | "Local" | "Telnet" | "Serial";
 
 /** Connection type discriminator matching Rust ConnectionType. */
 export type ConnectionTypeTag = "ssh" | "local_terminal" | "telnet" | "serial";
@@ -267,7 +267,6 @@ export interface FuzzyResult {
 
 export interface GeneralSettings {
   startup_restore: boolean;
-  default_local_shell: string;
   minimize_to_tray: boolean;
   boss_key: string | null;
   confirm_on_close: boolean;

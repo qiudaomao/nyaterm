@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { MdAdd, MdClose, MdDns, MdTerminal } from "react-icons/md";
+import { MdAdd, MdClose, MdDns } from "react-icons/md";
 import type { Tab } from "@/types/global";
 import { useApp } from "../../context/AppContext";
 import { CONNECTION_ICONS } from "../icons";
@@ -54,19 +54,13 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose, onAddTab }: TabBar
         </svg>
       );
     }
-    if (tab.type === "SSH" && tab.connectionId) {
-      const conn = savedConnections.find((c) => c.id === tab.connectionId);
-      const iconDef = conn?.icon ? CONNECTION_ICONS[conn.icon] : null;
-      if (iconDef) {
-        const IconComp = iconDef.icon;
-        return <IconComp className="text-sm shrink-0" style={{ color: iconDef.color }} />;
-      }
+    const conn = savedConnections.find((c) => c.id === tab.connectionId);
+    const iconDef = conn?.icon ? CONNECTION_ICONS[conn.icon] : null;
+    if (iconDef) {
+      const IconComp = iconDef.icon;
+      return <IconComp className="text-sm shrink-0" style={{ color: iconDef.color }} />;
     }
-    return tab.type === "SSH" ? (
-      <MdDns className="text-sm shrink-0" />
-    ) : (
-      <MdTerminal className="text-sm shrink-0" />
-    );
+    return <MdDns className="text-sm shrink-0" />;
   };
 
   return (

@@ -170,12 +170,35 @@ export default function SavedConnections({
   const handleConnect = async (conn: SavedConnection) => {
     if (connectingIdRef.current === conn.id) return;
     connectingIdRef.current = conn.id;
-    const tabId = addPendingTab(conn.name, "SSH", conn.id);
+
+    const typeMap: Record<string, import("@/types/global").SessionType> = {
+      ssh: "SSH",
+      local_terminal: "Local",
+      telnet: "Telnet",
+      serial: "Serial",
+    };
+    const sessionType = typeMap[conn.type] || "SSH";
+    const tabId = addPendingTab(conn.name, sessionType, conn.id);
+
     try {
-      const sessionId = await invoke<string>("create_ssh_session", { connectionId: conn.id });
+      let sessionId: string;
+      switch (conn.type) {
+        case "local_terminal":
+          sessionId = await invoke<string>("create_local_session", { connectionId: conn.id });
+          break;
+        case "telnet":
+          sessionId = await invoke<string>("create_telnet_session", { connectionId: conn.id });
+          break;
+        case "serial":
+          sessionId = await invoke<string>("create_serial_session", { connectionId: conn.id });
+          break;
+        default:
+          sessionId = await invoke<string>("create_ssh_session", { connectionId: conn.id });
+          break;
+      }
       updateTabSession(tabId, sessionId);
     } catch (e) {
-      logger.error(`SSH connection failed for "${conn.name}"`, e);
+      logger.error(`Connection failed for "${conn.name}"`, e);
       toast.error(t("savedConnections.connectionFailed", { error: e }));
       closeTab(tabId);
       onEditConnection(conn, true);

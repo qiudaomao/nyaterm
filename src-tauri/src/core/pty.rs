@@ -7,8 +7,8 @@ use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
 use super::update_cwd_if_changed;
+use crate::core::ssh::osc::OscStripper;
 use crate::error::AppResult;
-use crate::core::ssh::osc::{self, OscStripper, ShellKind};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -20,38 +20,17 @@ struct OutputBuffer {
     buffer: Vec<String>,
 }
 
-fn get_default_shell(app: Option<&AppHandle>) -> (CommandBuilder, String) {
-    let mut shell_cmd = String::new();
+/// Per-connection local terminal config.
+pub struct LocalSessionConfig {
+    pub shell_path: String,
+    pub working_dir: Option<String>,
+    pub name: String,
+}
 
-    if let Some(app) = app {
-        if let Ok(settings) = crate::config::load_app_settings(app) {
-            let user_shell = settings.general.default_local_shell;
-            if !user_shell.trim().is_empty() {
-                shell_cmd = user_shell;
-            }
-        }
-    }
-
-    if shell_cmd.is_empty() {
-        #[cfg(target_os = "windows")]
-        {
-            shell_cmd = "powershell.exe".to_string();
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            shell_cmd = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-        }
-    }
-
+fn build_shell_command(shell_cmd: &str) -> (CommandBuilder, String) {
     let parts: Vec<&str> = shell_cmd.split_whitespace().collect();
     if parts.is_empty() {
-        #[cfg(target_os = "windows")]
-        return (
-            CommandBuilder::new("powershell.exe"),
-            "powershell.exe".to_string(),
-        );
-        #[cfg(not(target_os = "windows"))]
-        return (CommandBuilder::new("/bin/bash"), "bash".to_string());
+        platform_default_shell()
     } else {
         let mut builder = CommandBuilder::new(parts[0]);
         if parts.len() > 1 {
@@ -61,18 +40,75 @@ fn get_default_shell(app: Option<&AppHandle>) -> (CommandBuilder, String) {
     }
 }
 
+fn platform_default_shell() -> (CommandBuilder, String) {
+    #[cfg(target_os = "windows")]
+    {
+        (
+            CommandBuilder::new("powershell.exe"),
+            "powershell.exe".to_string(),
+        )
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        (CommandBuilder::new(&shell), shell)
+    }
+}
+
+fn write_to_pty(writer: &mut dyn Write, data: &[u8]) -> std::io::Result<()> {
+    writer.write_all(data)?;
+    writer.flush()
+}
+
+fn queue_or_emit_output(
+    app: &AppHandle,
+    output_event: &str,
+    output_buf: &Arc<Mutex<OutputBuffer>>,
+    text: String,
+    recording_mgr: Option<&Arc<RecordingManager>>,
+    session_id: &str,
+) {
+    if text.is_empty() {
+        return;
+    }
+
+    if let Some(rec) = recording_mgr {
+        rec.write_output(session_id, &text);
+    }
+
+    let emit_now = {
+        let mut ob = output_buf.lock().unwrap();
+        if ob.attached {
+            true
+        } else {
+            ob.buffer.push(text.clone());
+            false
+        }
+    };
+
+    if emit_now {
+        let _ = app.emit(output_event, &text);
+    }
+}
+
 /// Spawns a local shell in a PTY and registers the session with the manager.
+/// If `config` is provided, uses the shell path and working dir from it.
 pub async fn create_local_session(
     app: AppHandle,
     manager: Arc<SessionManager>,
+    config: Option<LocalSessionConfig>,
 ) -> AppResult<String> {
     tracing::info!("Creating local PTY session");
     let session_id = uuid::Uuid::new_v4().to_string();
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<SessionCommand>();
 
+    let session_name = config
+        .as_ref()
+        .map_or("Local Terminal".to_string(), |c| c.name.clone());
+
     let session_info = SessionInfo {
         id: session_id.clone(),
-        name: "Local Terminal".to_string(),
+        name: session_name,
         session_type: SessionType::Local,
         connected: true,
         injection_active: false,
@@ -93,7 +129,7 @@ pub async fn create_local_session(
     let rt_handle = tokio::runtime::Handle::current();
 
     std::thread::spawn(move || {
-        pty_session_thread(app, sid, mgr, cmd_rx, rt_handle, cwd);
+        pty_session_thread(app, sid, mgr, cmd_rx, rt_handle, cwd, config);
     });
 
     Ok(session_id)
@@ -106,6 +142,7 @@ fn pty_session_thread(
     mut cmd_rx: mpsc::UnboundedReceiver<SessionCommand>,
     rt_handle: tokio::runtime::Handle,
     cwd: SharedCwd,
+    config: Option<LocalSessionConfig>,
 ) {
     let pty_system = native_pty_system();
     let pair = match pty_system.openpty(PtySize {
@@ -125,7 +162,19 @@ fn pty_session_thread(
         }
     };
 
-    let (cmd, shell_exe) = get_default_shell(Some(&app));
+    let (mut cmd, _) = match &config {
+        Some(cfg) if !cfg.shell_path.trim().is_empty() => build_shell_command(&cfg.shell_path),
+        _ => platform_default_shell(),
+    };
+
+    if let Some(ref cfg) = config {
+        if let Some(ref dir) = cfg.working_dir {
+            if !dir.is_empty() {
+                cmd.cwd(dir);
+            }
+        }
+    }
+
     let mut _child = match pair.slave.spawn_command(cmd) {
         Ok(c) => c,
         Err(e) => {
@@ -146,15 +195,6 @@ fn pty_session_thread(
             return;
         }
     };
-
-    let shell_kind = ShellKind::from_name(&shell_exe);
-    let ready_marker = osc::build_ready_marker(&session_id);
-    let mut injecting = false;
-
-    if let Some(script) = osc::injection_script(shell_kind, &ready_marker) {
-        let _ = writer.write_all(script.as_bytes());
-        injecting = true;
-    }
 
     let mut reader = match pair.master.try_clone_reader() {
         Ok(r) => r,
@@ -183,22 +223,13 @@ fn pty_session_thread(
     let sid_for_rec_reader = session_id.clone();
     std::thread::spawn(move || {
         let mut raw_buf = [0u8; 4096];
-        let mut stripper = OscStripper::new(&ready_marker);
-        let mut still_injecting = injecting;
+        let mut stripper = OscStripper::new("");
         loop {
             match reader.read(&mut raw_buf) {
                 Ok(0) => break,
                 Ok(n) => {
                     let text = String::from_utf8_lossy(&raw_buf[..n]).to_string();
                     let result = stripper.push(&text);
-
-                    if result.ready && still_injecting {
-                        still_injecting = false;
-                    }
-
-                    if still_injecting {
-                        continue;
-                    }
 
                     for path in &result.cwd_paths {
                         let cwd_ev = cwd_event.clone();
@@ -210,28 +241,23 @@ fn pty_session_thread(
                         }
                     }
 
-                    if result.visible.is_empty() {
-                        continue;
-                    }
-
-                    if let Some(ref rec) = recording_mgr_reader {
-                        rec.write_output(&sid_for_rec_reader, &result.visible);
-                    }
-
-                    let emit_now = {
-                        let mut ob = buf_reader.lock().unwrap();
-                        if ob.attached {
-                            true
-                        } else {
-                            ob.buffer.push(result.visible.clone());
-                            false
-                        }
-                    };
-                    if emit_now {
-                        let _ = app_read.emit(&output_event, &result.visible);
-                    }
+                    queue_or_emit_output(
+                        &app_read,
+                        &output_event,
+                        &buf_reader,
+                        result.visible,
+                        recording_mgr_reader.as_ref(),
+                        &sid_for_rec_reader,
+                    );
                 }
-                Err(_) => break,
+                Err(error) => {
+                    tracing::debug!(
+                        session_id = %sid_read,
+                        error = %error,
+                        "Local PTY reader exited"
+                    );
+                    break;
+                }
             }
         }
         let _ = app_read.emit(&format!("session-closed-{}", sid_read), ());
@@ -257,8 +283,13 @@ fn pty_session_thread(
                 if let Some(ref rec) = recording_mgr {
                     rec.write_input(&session_id, &data);
                 }
-                let _ = writer.write_all(&data);
-                let _ = writer.flush();
+                if let Err(error) = write_to_pty(&mut *writer, &data) {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        error = %error,
+                        "Failed to write to local PTY"
+                    );
+                }
             }
             SessionCommand::Resize { cols, rows } => {
                 let _ = master.resize(PtySize {

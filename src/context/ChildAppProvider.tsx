@@ -10,7 +10,6 @@ import { AppContext } from "./AppContext";
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
     startup_restore: true,
-    default_local_shell: navigator.userAgent.includes("Win") ? "powershell.exe" : "bash",
     minimize_to_tray: false,
     boss_key: null,
     confirm_on_close: true,

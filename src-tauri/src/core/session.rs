@@ -2,8 +2,8 @@
 //!
 //! Tracks SSH/local sessions, routes commands, and persists history for fuzzy search.
 
-use crate::error::{AppError, AppResult};
 use super::history::CommandHistoryStore;
+use crate::error::{AppError, AppResult};
 use crate::utils::fuzzy::FuzzyResult;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -53,11 +53,13 @@ fn is_windows_drive_root(path: &str) -> bool {
         || matches!(bytes, [b'/', drive, b':', b'/'] if drive.is_ascii_alphabetic())
 }
 
-/// Distinguishes SSH vs local PTY sessions for UI and routing.
+/// Distinguishes session types for UI and routing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SessionType {
     SSH,
     Local,
+    Telnet,
+    Serial,
 }
 
 /// Metadata for a session exposed to the frontend.
@@ -67,8 +69,8 @@ pub struct SessionInfo {
     pub name: String,
     pub session_type: SessionType,
     pub connected: bool,
-    /// True when OSC 7 shell integration was successfully injected.
-    /// False for non-standard shells (e.g. JumpServer) where CWD tracking is unavailable.
+    /// True when backend terminal-path tracking is available for this session.
+    /// Currently this is enabled for sessions that can report directory changes to the backend.
     #[serde(default)]
     pub injection_active: bool,
 }
@@ -94,7 +96,7 @@ pub struct SessionHandle {
     pub ssh_config: Option<Arc<dyn Any + Send + Sync>>,
     /// SSH-specific: authenticated `client::Handle` for channel multiplexing (SFTP, exec).
     pub ssh_handle: Option<Arc<dyn Any + Send + Sync>>,
-    /// Current working directory updated via OSC 7 (shell integration).
+    /// Current working directory cached from directory updates emitted by the session.
     pub cwd: SharedCwd,
 }
 

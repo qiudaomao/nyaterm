@@ -141,7 +141,7 @@ function App() {
     );
 
     unsubs.push(
-      listen<{ sessionId: string; name: string; type: "SSH" | "Local" }>(
+      listen<{ sessionId: string; name: string; type: "SSH" | "Local" | "Telnet" | "Serial" }>(
         "session-created",
         (event) => {
           const { sessionId, name: sessionName, type } = event.payload;
@@ -163,9 +163,30 @@ function App() {
           const conns = await invoke<SavedConnection[]>("get_saved_connections");
           const conn = conns.find((c) => c.id === connectionId);
           const connName = conn?.name ?? connectionId;
-          const tabId = addPendingTab(connName, "SSH", connectionId);
+          const typeMap: Record<string, "SSH" | "Local" | "Telnet" | "Serial"> = {
+            ssh: "SSH",
+            local_terminal: "Local",
+            telnet: "Telnet",
+            serial: "Serial",
+          };
+          const sessionType = typeMap[conn?.type ?? "ssh"] ?? "SSH";
+          const tabId = addPendingTab(connName, sessionType, connectionId);
           try {
-            const sessionId = await invoke<string>("create_ssh_session", { connectionId });
+            let sessionId: string;
+            switch (conn?.type) {
+              case "local_terminal":
+                sessionId = await invoke<string>("create_local_session", { connectionId });
+                break;
+              case "telnet":
+                sessionId = await invoke<string>("create_telnet_session", { connectionId });
+                break;
+              case "serial":
+                sessionId = await invoke<string>("create_serial_session", { connectionId });
+                break;
+              default:
+                sessionId = await invoke<string>("create_ssh_session", { connectionId });
+                break;
+            }
             updateTabSession(tabId, sessionId);
           } catch {
             closeTab(tabId);

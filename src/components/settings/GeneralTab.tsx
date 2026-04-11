@@ -3,7 +3,6 @@ import { SelectItem } from "@/components/ui/select";
 import { useApp } from "@/context/AppContext";
 import { AVAILABLE_LANGUAGES } from "@/i18n";
 import {
-  SettingInput,
   SettingRow,
   SettingSection,
   SettingSelect,
@@ -33,17 +32,6 @@ export function GeneralTab() {
           ))}
         </SettingSelect>
 
-        <SettingInput
-          label={t("settings.defaultLocalShell")}
-          desc={t("settings.defaultLocalShellDesc")}
-          value={appSettings.general.default_local_shell}
-          controlClassName="max-w-2xl"
-          onChange={(e) =>
-            updateAppSettings({
-              general: { ...appSettings.general, default_local_shell: e.target.value },
-            })
-          }
-        />
       </SettingSection>
 
       <SettingSection contentClassName="space-y-4">
