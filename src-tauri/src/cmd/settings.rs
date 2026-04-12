@@ -16,10 +16,8 @@ pub fn get_system_fonts() -> Vec<String> {
 #[tauri::command]
 pub fn get_app_settings(app: tauri::AppHandle) -> AppResult<config::AppSettings> {
     let mut settings = config::load_app_settings(&app)?;
-    // Never expose the actual password (ciphertext) to the frontend.
-    // Replace with a sentinel so the frontend knows a password is set.
-    if settings.security.lock_password.is_some() {
-        settings.security.lock_password = Some("__SET__".to_string());
+    if settings.security.master_password.is_some() {
+        settings.security.master_password = Some("__SET__".to_string());
     }
     Ok(settings)
 }
@@ -29,31 +27,46 @@ pub fn save_app_settings(
     app: tauri::AppHandle,
     mut settings: config::AppSettings,
 ) -> AppResult<()> {
-    // Encrypt lock_password if it's new plaintext (not the sentinel from get_app_settings).
-    match settings.security.lock_password.as_deref() {
+    let existing = config::load_app_settings(&app)?;
+
+    match settings.security.master_password.as_deref() {
         Some("__SET__") => {
-            // Frontend didn't change the password — preserve existing ciphertext.
-            let existing = config::load_app_settings(&app)?;
-            settings.security.lock_password = existing.security.lock_password;
+            settings.security.master_password = existing.security.master_password;
         }
         Some("") | None => {
-            settings.security.lock_password = None;
+            if existing.security.master_password.is_some() {
+                let old_plain = crypto::decrypt_settings_secret(
+                    existing.security.master_password.as_deref().unwrap(),
+                )?;
+                crypto::rewrap_master_key(Some(&old_plain), None)?;
+                crypto::set_master_password(None);
+            }
+            settings.security.master_password = None;
         }
         Some(plain) => {
-            settings.security.lock_password = Some(crypto::encrypt(plain)?);
+            let old_plain = existing
+                .security
+                .master_password
+                .as_deref()
+                .and_then(|ct| crypto::decrypt_settings_secret(ct).ok());
+
+            crypto::rewrap_master_key(old_plain.as_deref(), Some(plain))?;
+            crypto::set_master_password(Some(plain.to_string()));
+
+            settings.security.master_password = Some(crypto::encrypt_settings_secret(plain)?);
         }
     }
     config::save_app_settings(&app, &settings)
 }
 
 #[tauri::command]
-pub fn verify_lock_password(app: tauri::AppHandle, password: String) -> AppResult<bool> {
+pub fn verify_master_password(app: tauri::AppHandle, password: String) -> AppResult<bool> {
     let settings = config::load_app_settings(&app)?;
-    match settings.security.lock_password {
+    match settings.security.master_password {
         Some(ref ct) => {
-            let stored = crypto::decrypt(ct)?;
+            let stored = crypto::decrypt_settings_secret(ct)?;
             Ok(stored == password)
         }
-        None => Ok(true), // No password set — always pass
+        None => Ok(true),
     }
 }

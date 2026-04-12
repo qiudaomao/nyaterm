@@ -6,13 +6,13 @@ pub struct SecuritySettings {
     #[serde(default = "default_true")]
     pub use_os_keyring: bool,
     #[serde(default = "default_false")]
-    pub require_master_password: bool,
-    #[serde(default = "default_false")]
     pub enable_screen_lock: bool,
     #[serde(default)]
     pub idle_lock_minutes: u32,
+    /// Master password used to derive the wrapping key for `master.key`.
+    /// Also serves as the lock-screen password when set.
     #[serde(default)]
-    pub lock_password: Option<String>,
+    pub master_password: Option<String>,
     #[serde(default = "default_host_key_policy")]
     pub host_key_policy: String,
 }
@@ -25,10 +25,9 @@ impl Default for SecuritySettings {
     fn default() -> Self {
         Self {
             use_os_keyring: true,
-            require_master_password: false,
             enable_screen_lock: false,
             idle_lock_minutes: 0,
-            lock_password: None,
+            master_password: None,
             host_key_policy: default_host_key_policy(),
         }
     }

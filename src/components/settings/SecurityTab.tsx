@@ -16,6 +16,31 @@ export function SecurityTab() {
 
   return (
     <div className="space-y-5">
+      <SettingSection title={t("settings.masterPasswordSection")}>
+        <SettingInput
+          label={t("settings.masterPassword")}
+          desc={t("settings.masterPasswordDesc")}
+          type="password"
+          controlClassName="max-w-lg"
+          placeholder={
+            appSettings.security.master_password === "__SET__"
+              ? "••••••••"
+              : t("settings.masterPasswordPlaceholder")
+          }
+          value={
+            appSettings.security.master_password === "__SET__"
+              ? ""
+              : appSettings.security.master_password || ""
+          }
+          onChange={(e) => {
+            const val = e.target.value;
+            updateAppSettings({
+              security: { ...appSettings.security, master_password: val || undefined },
+            });
+          }}
+        />
+      </SettingSection>
+
       <SettingSection title={t("settings.sessionSecurity")} contentClassName="space-y-5">
         <SettingRow
           label={t("settings.enableScreenLock")}
@@ -32,52 +57,25 @@ export function SecurityTab() {
         </SettingRow>
 
         {appSettings.security.enable_screen_lock && (
-          <>
-            <SettingRow
-              label={t("settings.idleLockMinutes")}
-              desc={t("settings.idleLockMinutesDesc")}
-            >
-              <div className="flex w-full max-w-xs items-center gap-3 sm:w-auto">
-                <NumberInput
-                  min={0}
-                  max={1440}
-                  className="w-full sm:w-32"
-                  value={appSettings.security.idle_lock_minutes}
-                  onChange={(v) =>
-                    updateAppSettings({
-                      security: { ...appSettings.security, idle_lock_minutes: v || 0 },
-                    })
-                  }
-                />
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  {t("common.minutes")}
-                </span>
-              </div>
-            </SettingRow>
-
-            <SettingInput
-              label={t("settings.lockPassword")}
-              desc={t("settings.lockPasswordDesc")}
-              type="password"
-              controlClassName="max-w-lg"
-              placeholder={
-                appSettings.security.lock_password === "__SET__"
-                  ? "••••••••"
-                  : t("settings.lockPasswordPlaceholder")
-              }
-              value={
-                appSettings.security.lock_password === "__SET__"
-                  ? ""
-                  : appSettings.security.lock_password || ""
-              }
-              onChange={(e) => {
-                const val = e.target.value;
-                updateAppSettings({
-                  security: { ...appSettings.security, lock_password: val || undefined },
-                });
-              }}
-            />
-          </>
+          <SettingRow
+            label={t("settings.idleLockMinutes")}
+            desc={t("settings.idleLockMinutesDesc")}
+          >
+            <div className="flex w-full max-w-xs items-center gap-3 sm:w-auto">
+              <NumberInput
+                min={0}
+                max={1440}
+                className="w-full sm:w-32"
+                value={appSettings.security.idle_lock_minutes}
+                onChange={(v) =>
+                  updateAppSettings({
+                    security: { ...appSettings.security, idle_lock_minutes: v || 0 },
+                  })
+                }
+              />
+              <span className="shrink-0 text-sm text-muted-foreground">{t("common.minutes")}</span>
+            </div>
+          </SettingRow>
         )}
       </SettingSection>
 

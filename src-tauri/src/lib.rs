@@ -82,7 +82,7 @@ pub fn run() {
             cmd::connection::delete_password,
             cmd::settings::get_app_settings,
             cmd::settings::save_app_settings,
-            cmd::settings::verify_lock_password,
+            cmd::settings::verify_master_password,
             cmd::watcher::start_file_watch,
             cmd::watcher::stop_file_watch,
             cmd::translate::translate_text,

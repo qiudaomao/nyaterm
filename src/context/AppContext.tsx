@@ -164,7 +164,6 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   security: {
     use_os_keyring: true,
-    require_master_password: false,
     enable_screen_lock: false,
     idle_lock_minutes: 0,
     host_key_policy: "prompt",

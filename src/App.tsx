@@ -1467,7 +1467,7 @@ function App() {
         {/* Lock Screen Overlay */}
         {isLocked && (
           <LockScreen
-            hasPassword={!!appSettings.security.lock_password}
+            hasPassword={!!appSettings.security.master_password}
             onUnlock={() => setIsLocked(false)}
           />
         )}

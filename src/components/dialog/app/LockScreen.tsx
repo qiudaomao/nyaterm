@@ -34,7 +34,7 @@ export default function LockScreen({ hasPassword, onUnlock }: LockScreenProps) {
     }
     setVerifying(true);
     try {
-      const ok = await invoke<boolean>("verify_lock_password", { password: input });
+      const ok = await invoke<boolean>("verify_master_password", { password: input });
       if (ok) {
         setInput("");
         setError(false);
@@ -82,14 +82,10 @@ export default function LockScreen({ hasPassword, onUnlock }: LockScreenProps) {
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-semibold text-white/90 mt-1">
-          {t("lockScreen.title")}
-        </h2>
+        <h2 className="text-xl font-semibold text-white/90 mt-1">{t("lockScreen.title")}</h2>
 
         {/* Message */}
-        <p className="text-sm text-white/50 text-center max-w-xs">
-          {t("lockScreen.message")}
-        </p>
+        <p className="text-sm text-white/50 text-center max-w-xs">{t("lockScreen.message")}</p>
 
         {/* Password input */}
         {hasPassword && (
@@ -108,11 +104,7 @@ export default function LockScreen({ hasPassword, onUnlock }: LockScreenProps) {
               autoComplete="off"
               disabled={verifying}
             />
-            {error && (
-              <p className="text-xs text-red-400">
-                {t("lockScreen.wrongPassword")}
-              </p>
-            )}
+            {error && <p className="text-xs text-red-400">{t("lockScreen.wrongPassword")}</p>}
           </div>
         )}
 
