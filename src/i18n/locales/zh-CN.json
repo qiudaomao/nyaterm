@@ -702,8 +702,12 @@
       "zoomOut": "缩小"
     },
     "showInSearchMenu": "在搜索菜单显示",
+    "showLineNumbers": "显示行号",
+    "showLineNumbersDesc": "在终端侧边栏显示每行的行号。",
     "showRemoteStats": "显示远程资源信息",
     "showRemoteStatsDesc": "在资源监控面板显示当前 SSH 主机的资源使用情况。",
+    "showTimestamps": "显示时间戳",
+    "showTimestampsDesc": "在终端侧边栏显示每行输出的时间。",
     "startupBehavior": "启动行为",
     "startupRestore": "启动时恢复先前的会话标签",
     "startupRestoreDesc": "自动重新打开在应用程序上次关闭时处于活动状态的终端会话。",

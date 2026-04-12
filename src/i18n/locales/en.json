@@ -702,8 +702,12 @@
       "zoomOut": "Zoom Out"
     },
     "showInSearchMenu": "Show in search menu",
+    "showLineNumbers": "Show Line Numbers",
+    "showLineNumbersDesc": "Display line numbers in the terminal gutter.",
     "showRemoteStats": "Show Remote Resource Stats",
     "showRemoteStatsDesc": "Display resource usage of the active SSH host in the Resource Monitor panel.",
+    "showTimestamps": "Show Timestamps",
+    "showTimestampsDesc": "Display the time each line was output in the terminal gutter.",
     "startupBehavior": "Startup Behavior",
     "startupRestore": "Restore previous session tabs on startup",
     "startupRestoreDesc": "Automatically reopen the terminal sessions that were active when the application was last closed.",
