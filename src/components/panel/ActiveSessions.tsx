@@ -83,20 +83,9 @@ function ActiveSessions({
       <PanelHeader
         title={t("panel.activeSessions")}
         actions={
-          <div className="flex items-center gap-2">
-            <span className="text-[0.6875rem]" style={{ color: "var(--df-text-dimmed)" }}>
-              {query ? `${filteredSessions.length}/${sessions.length}` : sessions.length}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
-              onClick={() => void fetchSessions()}
-              aria-label={t("activeSessions.refresh")}
-            >
-              <MdRefresh className="h-4 w-4" />
-            </Button>
-          </div>
+          <span className="text-[0.6875rem]" style={{ color: "var(--df-text-dimmed)" }}>
+            {query ? `${filteredSessions.length}/${sessions.length}` : sessions.length}
+          </span>
         }
       />
 
