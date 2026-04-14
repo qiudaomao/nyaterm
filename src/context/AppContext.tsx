@@ -68,6 +68,12 @@ interface AppContextType {
   updatePaneSession: (tabId: string, paneId: string, sessionId: string) => void;
   /** Mark a specific pane as failed while keeping the layout intact. */
   markPaneConnectionFailed: (tabId: string, paneId: string, error: string) => void;
+  /** Put a specific pane back into connecting state, optionally refreshing its metadata first. */
+  markPaneConnecting: (
+    tabId: string,
+    paneId: string,
+    updates?: Partial<Pick<SessionPane, "name" | "type" | "connectionId">>,
+  ) => void;
   setActivePane: (tabId: string, paneId: string) => void;
   updateSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
   splitPane: (
@@ -514,6 +520,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [commitTabs],
   );
 
+  const markPaneConnecting = useCallback(
+    (
+      tabId: string,
+      paneId: string,
+      updates?: Partial<Pick<SessionPane, "name" | "type" | "connectionId">>,
+    ) => {
+      const nextTabs = tabsRef.current.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              root: updateSessionPane(tab.root, paneId, {
+                ...updates,
+                connecting: true,
+                connectError: undefined,
+              }),
+            }
+          : tab,
+      );
+      void commitTabs(nextTabs);
+    },
+    [commitTabs],
+  );
+
   const setActivePane = useCallback(
     (tabId: string, paneId: string) => {
       const nextTabs = tabsRef.current.map((tab) =>
@@ -775,6 +804,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         markTabConnectionFailed,
         updatePaneSession,
         markPaneConnectionFailed,
+        markPaneConnecting,
         setActivePane,
         updateSplitRatio,
         splitPane,

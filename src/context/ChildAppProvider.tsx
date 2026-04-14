@@ -183,6 +183,7 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
         markTabConnectionFailed: noop,
         updatePaneSession: noop,
         markPaneConnectionFailed: noop,
+        markPaneConnecting: noop,
         setActivePane: noop,
         updateSplitRatio: noop,
         splitPane: () => null,

@@ -43,7 +43,7 @@ import { useApp } from "./context/AppContext";
 import { TransferProvider } from "./context/TransferContext";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useIdleLock } from "./hooks/useIdleLock";
-import { getErrorMessage } from "./lib/errors";
+import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "./lib/errors";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
 import {
@@ -67,6 +67,7 @@ import { checkForUpdate, type UpdateInfo } from "./lib/updater";
 import {
   bounceTopModalWindow,
   isModalChildLabel,
+  type NewSessionTarget,
   openNewSession,
   openNewSessionWithTarget,
   openSettings,
@@ -75,6 +76,7 @@ import {
 import {
   collectSessionPanes,
   findPaneBySessionId,
+  findSessionPaneById,
   findTabBySessionId,
   getActivePane,
   getTabDisplayName,
@@ -157,6 +159,7 @@ function App() {
     markTabConnectionFailed,
     updatePaneSession,
     markPaneConnectionFailed,
+    markPaneConnecting,
     closePane,
     updateSplitRatio,
     persistTabsNow,
@@ -278,22 +281,48 @@ function App() {
     );
 
     unsubs.push(
-      listen<{ connectionId: string; targetLeafId?: string; anchorTabId?: string | null }>(
-        "session-connect-after-edit",
-        async (event) => {
-          const { connectionId, targetLeafId, anchorTabId } = event.payload;
-          try {
-            const conns = await invoke<SavedConnection[]>("get_saved_connections");
-            const conn = conns.find((c) => c.id === connectionId);
-            const connName = conn?.name ?? connectionId;
-            const typeMap: Record<string, "SSH" | "Local" | "Telnet" | "Serial"> = {
-              ssh: "SSH",
-              local_terminal: "Local",
-              telnet: "Telnet",
-              serial: "Serial",
-            };
-            const sessionType = typeMap[conn?.type ?? "ssh"] ?? "SSH";
-            const tabId = addPendingTab(
+      listen<{
+        connectionId: string;
+        targetLeafId?: string;
+        anchorTabId?: string | null;
+        sourceTabId?: string;
+        sourcePaneId?: string;
+      }>("session-connect-after-edit", async (event) => {
+        const { connectionId, targetLeafId, anchorTabId, sourceTabId, sourcePaneId } =
+          event.payload;
+        try {
+          const conns = await invoke<SavedConnection[]>("get_saved_connections");
+          const conn = conns.find((c) => c.id === connectionId);
+          const connName = conn?.name ?? connectionId;
+          const typeMap: Record<string, "SSH" | "Local" | "Telnet" | "Serial"> = {
+            ssh: "SSH",
+            local_terminal: "Local",
+            telnet: "Telnet",
+            serial: "Serial",
+          };
+          const sessionType = typeMap[conn?.type ?? "ssh"] ?? "SSH";
+          const sourceTab = sourceTabId
+            ? (tabsRef.current.find((item) => item.id === sourceTabId) ?? null)
+            : null;
+          const sourcePane =
+            sourceTab &&
+            ((sourcePaneId ? findSessionPaneById(sourceTab.root, sourcePaneId) : null) ??
+              getActivePane(sourceTab));
+          let tabId: string;
+          let paneId: string | undefined;
+
+          if (sourceTab && sourcePane) {
+            tabId = sourceTab.id;
+            paneId = sourcePane.id;
+            setActiveTabId(tabId);
+            setActivePane(tabId, paneId);
+            markPaneConnecting(tabId, paneId, {
+              name: connName,
+              type: sessionType,
+              connectionId,
+            });
+          } else {
+            tabId = addPendingTab(
               connName,
               sessionType,
               connectionId,
@@ -310,31 +339,47 @@ function App() {
                   : current,
               );
             }
-            try {
-              let sessionId: string;
-              switch (conn?.type) {
-                case "local_terminal":
-                  sessionId = await invoke<string>("create_local_session", { connectionId });
-                  break;
-                case "telnet":
-                  sessionId = await invoke<string>("create_telnet_session", { connectionId });
-                  break;
-                case "serial":
-                  sessionId = await invoke<string>("create_serial_session", { connectionId });
-                  break;
-                default:
-                  sessionId = await invoke<string>("create_ssh_session", { connectionId });
-                  break;
-              }
-              updateTabSession(tabId, sessionId);
-            } catch (error) {
-              markTabConnectionFailed(tabId, getErrorMessage(error));
-            }
-          } catch {
-            /* ignore */
           }
-        },
-      ),
+
+          try {
+            let sessionId: string;
+            switch (conn?.type) {
+              case "local_terminal":
+                sessionId = await invoke<string>("create_local_session", { connectionId });
+                break;
+              case "telnet":
+                sessionId = await invoke<string>("create_telnet_session", { connectionId });
+                break;
+              case "serial":
+                sessionId = await invoke<string>("create_serial_session", { connectionId });
+                break;
+              default:
+                sessionId = await invoke<string>("create_ssh_session", { connectionId });
+                break;
+            }
+            if (paneId) {
+              updatePaneSession(tabId, paneId, sessionId);
+            } else {
+              updateTabSession(tabId, sessionId);
+            }
+          } catch (error) {
+            const errorMessage = getErrorMessage(error);
+            if (paneId) {
+              markPaneConnectionFailed(tabId, paneId, errorMessage);
+            } else {
+              markTabConnectionFailed(tabId, errorMessage);
+            }
+            if (shouldPromptConnectionEditOnFailure(conn, errorMessage)) {
+              openNewSession(connectionId, true, {
+                sourceTabId: tabId,
+                sourcePaneId: paneId,
+              });
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }),
     );
 
     return () => {
@@ -342,7 +387,18 @@ function App() {
         p.then((unsub) => unsub());
       });
     };
-  }, [addTab, addPendingTab, markTabConnectionFailed, updateTabSession, updateAppSettings]);
+  }, [
+    addTab,
+    addPendingTab,
+    markPaneConnecting,
+    markPaneConnectionFailed,
+    markTabConnectionFailed,
+    setActivePane,
+    setActiveTabId,
+    updatePaneSession,
+    updateTabSession,
+    updateAppSettings,
+  ]);
 
   // Track modal child window open/close for overlay and focus enforcement.
   useEffect(() => {
@@ -390,15 +446,38 @@ function App() {
   const activePane = activeTab ? getActivePane(activeTab) : null;
   const [terminalWindows, setTerminalWindows] = useState<TerminalWindowNode | null>(null);
   const previousActiveTabIdRef = useRef<string | null>(null);
+  const tabsRef = useRef(tabs);
   const tabsById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs]);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   const handleNewSession = (_parentGroupId?: string) => {
     openNewSession();
   };
 
-  const handleEditConnection = useCallback((conn: SavedConnection, autoConnect?: boolean) => {
-    openNewSession(conn.id, autoConnect);
-  }, []);
+  const handleEditConnection = useCallback(
+    (conn: SavedConnection, autoConnect?: boolean, target?: NewSessionTarget) => {
+      openNewSession(conn.id, autoConnect, target);
+    },
+    [],
+  );
+
+  const maybePromptConnectionEdit = useCallback(
+    (
+      connectionId: string | undefined,
+      errorMessage: string,
+      target?: Pick<NewSessionTarget, "sourceTabId" | "sourcePaneId">,
+    ) => {
+      if (!connectionId) return;
+      const connection = savedConnections.find((item) => item.id === connectionId);
+      if (shouldPromptConnectionEditOnFailure(connection, errorMessage)) {
+        openNewSession(connectionId, true, target);
+      }
+    },
+    [savedConnections],
+  );
 
   useEffect(() => {
     setTerminalWindows((current) =>
@@ -762,8 +841,10 @@ function App() {
           const sessionId = await createSessionForPane(pane);
           updateTabSession(tabId, sessionId);
         } catch (error) {
+          const errorMessage = getErrorMessage(error);
           logger.error("Failed to duplicate session", error);
-          markTabConnectionFailed(tabId, getErrorMessage(error));
+          markTabConnectionFailed(tabId, errorMessage);
+          maybePromptConnectionEdit(pane.connectionId, errorMessage, { sourceTabId: tabId });
           toast.error(t("tabCtx.duplicateFailed"));
         }
       } catch (error) {
@@ -771,7 +852,14 @@ function App() {
         toast.error(t("tabCtx.duplicateFailed"));
       }
     },
-    [addPendingTab, createSessionForPane, markTabConnectionFailed, t, updateTabSession],
+    [
+      addPendingTab,
+      createSessionForPane,
+      markTabConnectionFailed,
+      maybePromptConnectionEdit,
+      t,
+      updateTabSession,
+    ],
   );
 
   const handleReconnectSession = useCallback(
@@ -791,11 +879,22 @@ function App() {
         updatePaneSession(tab.id, pane.id, newSessionId);
         toast.success(t("tabCtx.reconnectSuccess"));
       } catch (error) {
+        const errorMessage = getErrorMessage(error);
         logger.error("Failed to reconnect session", error);
+        maybePromptConnectionEdit(pane.connectionId, errorMessage, {
+          sourceTabId: tab.id,
+          sourcePaneId: pane.id,
+        });
         toast.error(t("tabCtx.reconnectFailed"));
       }
     },
-    [closePaneBackendSession, createSessionForPane, t, updatePaneSession],
+    [
+      closePaneBackendSession,
+      createSessionForPane,
+      maybePromptConnectionEdit,
+      t,
+      updatePaneSession,
+    ],
   );
 
   const handleReconnectSessionById = useCallback(
@@ -816,11 +915,23 @@ function App() {
         updatePaneSession(tab.id, pane.id, newSessionId);
         toast.success(t("tabCtx.reconnectSuccess"));
       } catch (error) {
+        const errorMessage = getErrorMessage(error);
         logger.error("Failed to reconnect session from active sessions panel", error);
+        maybePromptConnectionEdit(pane.connectionId, errorMessage, {
+          sourceTabId: tab.id,
+          sourcePaneId: pane.id,
+        });
         toast.error(t("tabCtx.reconnectFailed"));
       }
     },
-    [closePaneBackendSession, createSessionForPane, t, tabs, updatePaneSession],
+    [
+      closePaneBackendSession,
+      createSessionForPane,
+      maybePromptConnectionEdit,
+      t,
+      tabs,
+      updatePaneSession,
+    ],
   );
 
   const handleSplitSession = useCallback(
@@ -861,10 +972,16 @@ function App() {
         }
         window.dispatchEvent(new CustomEvent("dragonfly:refresh-terminals"));
       } catch (error) {
+        const errorMessage = getErrorMessage(error);
         logger.error("Failed to create split session", error);
         if (newTabId) {
-          markTabConnectionFailed(newTabId, getErrorMessage(error));
+          markTabConnectionFailed(newTabId, errorMessage);
         }
+        maybePromptConnectionEdit(
+          pane.connectionId,
+          errorMessage,
+          newTabId ? { sourceTabId: newTabId } : undefined,
+        );
         toast.error(t("tabCtx.splitFailed"));
       }
     },
@@ -872,6 +989,7 @@ function App() {
       addPendingTab,
       createSessionForPane,
       markTabConnectionFailed,
+      maybePromptConnectionEdit,
       setActiveTabId,
       t,
       terminalWindows,
@@ -896,14 +1014,20 @@ function App() {
         const newSessionId = await createSessionForPane(pane);
         updatePaneSession(tabId, paneId, newSessionId);
       } catch (error) {
+        const errorMessage = getErrorMessage(error);
         logger.error("Failed to reconnect pane", error);
-        markPaneConnectionFailed(tabId, paneId, getErrorMessage(error));
+        markPaneConnectionFailed(tabId, paneId, errorMessage);
+        maybePromptConnectionEdit(pane.connectionId, errorMessage, {
+          sourceTabId: tabId,
+          sourcePaneId: paneId,
+        });
       }
     },
     [
       closePaneBackendSession,
       createSessionForPane,
       markPaneConnectionFailed,
+      maybePromptConnectionEdit,
       tabs,
       updatePaneSession,
     ],

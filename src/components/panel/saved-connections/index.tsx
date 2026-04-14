@@ -28,9 +28,10 @@ import {
 } from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context/AppContext";
-import { getErrorMessage } from "@/lib/errors";
+import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { logger } from "@/lib/logger";
+import type { NewSessionTarget } from "@/lib/windowManager";
 import type { Group, SavedConnection } from "@/types/global";
 import ConnectionItem from "./ConnectionItem";
 import type { SavedConnectionsContextValue } from "./context";
@@ -45,7 +46,11 @@ import GroupNodeItem from "./GroupNodeItem";
 
 interface SavedConnectionsProps {
   onNewConnection: (parentGroupId?: string) => void;
-  onEditConnection: (connection: SavedConnection, autoConnect?: boolean) => void;
+  onEditConnection: (
+    connection: SavedConnection,
+    autoConnect?: boolean,
+    target?: NewSessionTarget,
+  ) => void;
 }
 
 type HeaderActionButtonProps = ComponentProps<typeof Button> & {
@@ -221,6 +226,9 @@ export default function SavedConnections({
       logger.error(`Connection failed for "${conn.name}"`, e);
       toast.error(t("savedConnections.connectionFailed", { error: errorMessage }));
       markTabConnectionFailed(tabId, errorMessage);
+      if (shouldPromptConnectionEditOnFailure(conn, errorMessage)) {
+        onEditConnection(conn, true, { sourceTabId: tabId });
+      }
     } finally {
       connectingIdRef.current = null;
     }

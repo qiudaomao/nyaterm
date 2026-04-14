@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import { createContext, useContext } from "react";
+import type { NewSessionTarget } from "@/lib/windowManager";
 import type { Group, SavedConnection } from "@/types/global";
 
 // ── Component-local types ─────────────────────────────────────────────────
@@ -34,7 +35,11 @@ export interface SavedConnectionsContextValue {
   toggleGroup: (id: string) => void;
   handleConnect: (conn: SavedConnection) => void;
   handleCopyConnection: (conn: SavedConnection) => void;
-  onEditConnection: (conn: SavedConnection) => void;
+  onEditConnection: (
+    conn: SavedConnection,
+    autoConnect?: boolean,
+    target?: NewSessionTarget,
+  ) => void;
 
   // Dialog triggers
   onNewConnection: (parentGroupId?: string) => void;

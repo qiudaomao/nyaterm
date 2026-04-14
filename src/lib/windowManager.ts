@@ -126,14 +126,21 @@ export function openSettings(tab?: string) {
   });
 }
 
-export function openNewSession(editId?: string, autoConnect?: boolean) {
-  return openNewSessionWithTarget(editId, autoConnect);
+export interface NewSessionTarget {
+  targetLeafId?: string;
+  anchorTabId?: string | null;
+  sourceTabId?: string;
+  sourcePaneId?: string;
+}
+
+export function openNewSession(editId?: string, autoConnect?: boolean, target?: NewSessionTarget) {
+  return openNewSessionWithTarget(editId, autoConnect, target);
 }
 
 export function openNewSessionWithTarget(
   editId?: string,
   autoConnect?: boolean,
-  target?: { targetLeafId?: string; anchorTabId?: string | null },
+  target?: NewSessionTarget,
 ) {
   let url = editId
     ? `index.html?window=new-session&edit=${encodeURIComponent(editId)}`
@@ -144,6 +151,12 @@ export function openNewSessionWithTarget(
   }
   if (target?.anchorTabId) {
     url += `&anchorTabId=${encodeURIComponent(target.anchorTabId)}`;
+  }
+  if (target?.sourceTabId) {
+    url += `&sourceTabId=${encodeURIComponent(target.sourceTabId)}`;
+  }
+  if (target?.sourcePaneId) {
+    url += `&sourcePaneId=${encodeURIComponent(target.sourcePaneId)}`;
   }
   return openChildWindow({
     label: "new-session",
