@@ -13,7 +13,6 @@ import {
   MdComputer,
   MdContentCopy,
   MdContentPaste,
-  MdFileUpload,
   MdFilterNone,
   MdInfo,
   MdMenu,
@@ -29,18 +28,20 @@ import {
   MdZoomIn,
   MdZoomOut,
 } from "react-icons/md";
-import packageJson from "../../../package.json";
-import { useApp } from "../../context/AppContext";
-import { useTheme } from "../../context/ThemeContext";
-import { MOD } from "../../hooks/useGlobalShortcuts";
-import { AVAILABLE_LANGUAGES } from "../../i18n";
+import { BiImport, BiExport } from "react-icons/bi";
+import packageJson from "@/../package.json";
+import { useApp } from "@/context/AppContext";
+import { useTheme } from "@/context/ThemeContext";
+import { useConfigTransfer } from "@/hooks/useConfigTransfer";
+import { MOD } from "@/hooks/useGlobalShortcuts";
+import { AVAILABLE_LANGUAGES } from "@/i18n";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
   decreaseTerminalFontSize,
   increaseTerminalFontSize,
-} from "../../lib/terminalFontSize";
-import { getActivePane, getTabDisplayName } from "../../lib/workspaceTabs";
-import type { SavedConnection, Tab } from "../../types/global";
+} from "@/lib/terminalFontSize";
+import { getActivePane, getTabDisplayName } from "@/lib/workspaceTabs";
+import type { SavedConnection, Tab } from "@/types/global";
 import DragonflyLogo from "../DragonflyLogo";
 import ImportDialog from "../dialog/connections/ImportDialog";
 import { SYSTEM_ICONS } from "../icons";
@@ -88,7 +89,8 @@ const iconMap: Record<string, React.ElementType> = {
   menu: MdMenu,
   view_sidebar: MdViewSidebar,
   settings: MdSettings,
-  file_upload: MdFileUpload,
+  file_export: BiExport,
+  file_import: BiImport,
 };
 
 function DynamicIcon({ name, className }: { name: string; className?: string }) {
@@ -140,6 +142,7 @@ export default function Header({
   const [isMaximized, setIsMaximized] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const { t, i18n } = useTranslation();
+  const { handleExport, passwordAlert } = useConfigTransfer();
 
   const activePane = activeTab ? getActivePane(activeTab) : null;
   const activeConnection = activePane?.connectionId
@@ -211,12 +214,17 @@ export default function Header({
         icon: "add",
         shortcut: `${MOD}+Shift+N`,
       },
-      {
-        label: t("savedConnections.importSessions"),
-        action: () => setShowImportDialog(true),
-        icon: "file_upload",
-      },
       { label: "separator", separator: true },
+      {
+        label: t("settings.importConfig"),
+        action: () => setShowImportDialog(true),
+        icon: "file_import",
+      },
+      {
+        label: t("settings.exportConfig"),
+        action: handleExport,
+        icon: "file_export",
+      },
     ],
     view: [
       {
@@ -487,6 +495,7 @@ export default function Header({
         </button>
       </div>
       <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
+      {passwordAlert}
 
       <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
         <AlertDialogContent>

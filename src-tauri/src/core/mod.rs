@@ -3,6 +3,7 @@
 //! Groups runtime session management, SSH services, translations, importers,
 //! and common error types under one backend-oriented namespace.
 
+pub mod backup;
 pub mod history;
 pub mod importer;
 mod output;

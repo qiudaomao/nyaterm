@@ -94,6 +94,8 @@ pub fn run() {
             cmd::watcher::stop_file_watch,
             cmd::translate::translate_text,
             cmd::importer::import_sessions,
+            cmd::backup::export_config,
+            cmd::backup::import_config,
             cmd::stats::get_remote_stats,
             cmd::stats::get_terminal_cwd,
             cmd::tunnel::get_tunnels,

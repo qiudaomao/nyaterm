@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useConfigTransfer } from "@/hooks/useConfigTransfer";
 import { useApp } from "../../../context/AppContext";
 import { invoke } from "../../../lib/invoke";
 import { logger } from "../../../lib/logger";
@@ -23,20 +24,57 @@ interface ImportSource {
   icon: string;
   extensions: string[];
   hint?: string;
+  type: "backup" | "sessions";
 }
 
 const IMPORT_SOURCES: ImportSource[] = [
-  { id: "xshell", name: "Xshell", icon: "/Xshell.svg", extensions: ["xts"] },
-  { id: "mobaxterm", name: "MobaXterm", icon: "/MobaXterm.svg", extensions: ["mxtsessions"] },
-  { id: "windterm", name: "WindTerm", icon: "/WindTerm.svg", extensions: ["sessions"], hint: "" },
+  {
+    id: "dragonfly",
+    name: "Dragonfly",
+    icon: "/dragonfly.svg",
+    extensions: ["dgfy"],
+    hint: ".dgfy",
+    type: "backup",
+  },
+  {
+    id: "xshell",
+    name: "Xshell",
+    icon: "/Xshell.svg",
+    extensions: ["xts"],
+    hint: ".xts",
+    type: "sessions"
+  },
+  {
+    id: "mobaxterm",
+    name: "MobaXterm",
+    icon: "/MobaXterm.svg",
+    extensions: ["mxtsessions"],
+    hint: ".mxtsessions",
+    type: "sessions",
+  },
+  {
+    id: "windterm",
+    name: "WindTerm",
+    icon: "/WindTerm.svg",
+    extensions: ["sessions"],
+    hint: ".sessions",
+    type: "sessions",
+  },
 ];
 
 export default function ImportDialog({ open, onClose }: ImportDialogProps) {
   const { t } = useTranslation();
   const { refreshConnections } = useApp();
+  const { handleImport, passwordAlert } = useConfigTransfer();
 
   const handleSelect = async (source: ImportSource) => {
     onClose();
+
+    if (source.type === "backup") {
+      await handleImport();
+      return;
+    }
+
     const selected = await openFileDialog({
       multiple: false,
       filters: [{ name: source.name, extensions: source.extensions }],
@@ -57,38 +95,41 @@ export default function ImportDialog({ open, onClose }: ImportDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[360px] sm:max-w-[360px] p-6">
-        <DialogHeader>
-          <DialogTitle className="text-sm">{t("savedConnections.importFrom")}</DialogTitle>
-          <DialogDescription className="text-xs">
-            {t("savedConnections.importSelectSource")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-3 gap-3 pt-2">
-          {IMPORT_SOURCES.map((source) => (
-            <button
-              key={source.id}
-              className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors hover:border-[var(--df-primary)] hover:bg-[color-mix(in_srgb,var(--df-primary)_8%,transparent)] cursor-pointer"
-              style={{ borderColor: "var(--df-border)" }}
-              onClick={() => handleSelect(source)}
-            >
-              <img src={source.icon} alt={source.name} className="w-10 h-10" draggable={false} />
-              <span className="text-xs font-medium" style={{ color: "var(--df-text)" }}>
-                {source.name}
-              </span>
-              {source.hint && (
-                <span
-                  className="text-[0.6rem] leading-tight text-center break-all"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                >
-                  {source.hint}
+    <>
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="w-[360px] sm:max-w-[360px] p-6">
+          <DialogHeader>
+            <DialogTitle className="text-sm">{t("settings.importConfig")}</DialogTitle>
+            <DialogDescription className="text-xs">
+              {t("savedConnections.importSelectSource")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            {IMPORT_SOURCES.map((source) => (
+              <button
+                key={source.id}
+                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors hover:border-[var(--df-primary)] hover:bg-[color-mix(in_srgb,var(--df-primary)_8%,transparent)] cursor-pointer"
+                style={{ borderColor: "var(--df-border)" }}
+                onClick={() => handleSelect(source)}
+              >
+                <img src={source.icon} alt={source.name} className="w-10 h-10" draggable={false} />
+                <span className="text-xs font-medium" style={{ color: "var(--df-text)" }}>
+                  {source.name}
                 </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
+                {source.hint && (
+                  <span
+                    className="text-[0.6rem] leading-tight text-center break-all"
+                    style={{ color: "var(--df-text-dimmed)" }}
+                  >
+                    {source.hint}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {passwordAlert}
+    </>
   );
 }
