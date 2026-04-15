@@ -917,7 +917,7 @@ export default function SavedConnections({
                   <MdMoreVert className="text-[1.125rem]" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs w-48">
+              <DropdownMenuContent align="end" className="text-xs w-40">
                 <DropdownMenuItem
                   onClick={handleExport}
                   className="cursor-pointer gap-2 py-1.5 focus:bg-[var(--df-bg-hover)]"
