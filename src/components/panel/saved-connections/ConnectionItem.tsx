@@ -60,7 +60,7 @@ export default function ConnectionItem({ conn, indented, depth = 0 }: Connection
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          className="relative"
+          className="relative min-w-full w-max"
           draggable={isDragEnabled}
           onDragStart={isDragEnabled ? (e) => handleDragStart(e, "connection", conn.id) : undefined}
           onDragOver={
@@ -79,7 +79,7 @@ export default function ConnectionItem({ conn, indented, depth = 0 }: Connection
             />
           )}
           <div
-            className={`group/item relative flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer transition-colors df-hover ${isTarget && dragTarget.position === "inside" ? "ring-1 ring-primary/60" : ""}`}
+            className={`group/item relative flex min-w-full w-max items-center gap-2 py-1.5 px-2 rounded cursor-pointer transition-colors df-hover ${isTarget && dragTarget.position === "inside" ? "ring-1 ring-primary/60" : ""}`}
             style={{
               ...(indented ? { paddingLeft: `${8 + depth * 16 + 16}px` } : undefined),
               backgroundColor: isSelected
@@ -95,7 +95,7 @@ export default function ConnectionItem({ conn, indented, depth = 0 }: Connection
               style={iconStyle}
             />
             <span
-              className="flex-1 min-w-0 truncate text-xs font-medium pr-16"
+              className="shrink-0 whitespace-nowrap pr-16 text-xs font-medium"
               style={{ color: isSelected ? "var(--df-primary)" : "var(--df-text)" }}
             >
               {conn.name}

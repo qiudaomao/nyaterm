@@ -969,7 +969,7 @@ export default function SavedConnections({
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
-              className={`flex-1 overflow-y-auto p-1.5 text-xs space-y-0.5 terminal-scroll ${dragTarget?.type === "background" ? "ring-inset ring-2 ring-primary/20" : ""}`}
+              className={`flex-1 overflow-x-auto overflow-y-auto p-1.5 text-xs space-y-0.5 terminal-scroll ${dragTarget?.type === "background" ? "ring-inset ring-2 ring-primary/20" : ""}`}
               onMouseDown={(event) => {
                 if (event.button !== 0 || event.target !== event.currentTarget) return;
                 setSelectedConnectionIds(new Set());
