@@ -4,10 +4,13 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import { openPath } from "@tauri-apps/plugin-opener";
 import {
   type ComponentProps,
+  memo,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -99,7 +102,10 @@ interface ExternalFileDropEventPayload {
 const EXTERNAL_FILE_DROP_MESSAGE_KIND = "external-file-drop";
 
 type WebView2Bridge = {
-  postMessageWithAdditionalObjects: (message: unknown, additionalObjects: ArrayLike<unknown>) => void;
+  postMessageWithAdditionalObjects: (
+    message: unknown,
+    additionalObjects: ArrayLike<unknown>,
+  ) => void;
 };
 
 type DataTransferItemWithFileSystemHandle = DataTransferItem & {
@@ -186,13 +192,11 @@ async function collectExternalDropAdditionalObjects(dataTransfer: DataTransfer |
         const handle = await itemWithHandle.getAsFileSystemHandle();
         if (handle) {
           additionalObjects.push(handle);
-          continue;
         }
       } catch {
         // Fall back to File objects if the runtime cannot expose FileSystemHandle.
       }
     }
-
   }
 
   return additionalObjects;
@@ -219,6 +223,10 @@ function ToolbarDivider() {
     />
   );
 }
+
+const MemoizedFileExplorer = memo(FileExplorer);
+
+export default MemoizedFileExplorer;
 
 type ToolbarIconButtonProps = ComponentProps<typeof Button> & {
   label: string;
@@ -251,6 +259,8 @@ type LoadDirectoryOptions = {
 
 // Keep per-session explorer state alive when the panel is unmounted and shown again.
 const fileExplorerSessionCacheStore = new Map<string, FileExplorerSessionCache>();
+const FILE_LIST_ITEM_HEIGHT = 30;
+const FILE_LIST_OVERSCAN = 8;
 
 function buildSessionCacheSnapshot(
   files: FileEntry[],
@@ -282,7 +292,7 @@ function buildSessionCacheSnapshot(
 }
 
 /** Remote file browser for active SSH session. Lists dirs/files, supports navigation. */
-export default function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps) {
+function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps) {
   const { t } = useTranslation();
   const { appSettings } = useApp();
   const canBrowseFiles = !!activeSessionId && activeSessionType === "SSH";
@@ -329,6 +339,8 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
   const prevSessionIdRef = useRef<string | null>(null);
   const pendingManualRefreshUploadsRef = useRef<Set<string>>(new Set());
   const [isExternalDropActive, setIsExternalDropActive] = useState(false);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listViewportHeight, setListViewportHeight] = useState(0);
 
   filesRef.current = files;
   currentPathRef.current = currentPath;
@@ -337,6 +349,64 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
   const resetExternalDropHover = useCallback(() => {
     setIsExternalDropActive(false);
   }, []);
+  const listScrollResetKey = `${activeSessionId ?? ""}:${currentPath}`;
+
+  useEffect(() => {
+    const container = listContainerRef.current;
+    if (!container) {
+      setListScrollTop(0);
+      setListViewportHeight(0);
+      return;
+    }
+
+    let scrollFrame = 0;
+    const updateMetrics = () => {
+      setListScrollTop(container.scrollTop);
+      setListViewportHeight(container.clientHeight);
+    };
+    const handleScroll = () => {
+      if (scrollFrame !== 0) {
+        return;
+      }
+
+      scrollFrame = window.requestAnimationFrame(() => {
+        scrollFrame = 0;
+        setListScrollTop(container.scrollTop);
+      });
+    };
+
+    updateMetrics();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            updateMetrics();
+          });
+    resizeObserver?.observe(container);
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      resizeObserver?.disconnect();
+      if (scrollFrame !== 0) {
+        window.cancelAnimationFrame(scrollFrame);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!listScrollResetKey && !listContainerRef.current) {
+      setListScrollTop(0);
+      return;
+    }
+
+    const container = listContainerRef.current;
+    if (container) {
+      container.scrollTop = 0;
+    }
+    setListScrollTop(0);
+  }, [listScrollResetKey]);
 
   const resolveUploadTarget = useCallback(() => {
     if (!activeSessionId) return null;
@@ -481,20 +551,22 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
           pushDirectoryHistory(normalizedPath);
         }
 
-        setFiles(entries);
-        setCurrentPath(normalizedPath);
-        setSelectedFiles((prev) => {
-          if (pathChanged) {
-            lastSelectedRef.current = null;
-            return new Set();
-          }
+        startTransition(() => {
+          setFiles(entries);
+          setCurrentPath(normalizedPath);
+          setSelectedFiles((prev) => {
+            if (pathChanged) {
+              lastSelectedRef.current = null;
+              return new Set();
+            }
 
-          const entryNames = new Set(entries.map((entry) => entry.name));
-          const next = new Set([...prev].filter((name) => entryNames.has(name)));
-          if (lastSelectedRef.current && !entryNames.has(lastSelectedRef.current)) {
-            lastSelectedRef.current = null;
-          }
-          return next;
+            const entryNames = new Set(entries.map((entry) => entry.name));
+            const next = new Set([...prev].filter((name) => entryNames.has(name)));
+            if (lastSelectedRef.current && !entryNames.has(lastSelectedRef.current)) {
+              lastSelectedRef.current = null;
+            }
+            return next;
+          });
         });
 
         const cached = sessionCacheRef.current.get(activeSessionId);
@@ -814,10 +886,12 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
           logger.error({
             domain: "ui.error",
             event: "file_explorer.external_drop_filelist_bridge_failed",
-            message: "Failed to bridge external file drop FileList through WebView2 additional objects",
+            message:
+              "Failed to bridge external file drop FileList through WebView2 additional objects",
             ids: { session_id: activeSessionId },
             data: {
-              remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+              remote_dir:
+                normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
               file_count: dataTransfer.files.length,
             },
             error,
@@ -837,7 +911,8 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
               message: "External file drop did not expose any transferable WebView2 objects",
               ids: { session_id: activeSessionId },
               data: {
-                remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+                remote_dir:
+                  normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
                 item_count: dataTransfer?.items.length ?? 0,
                 file_count: dataTransfer?.files.length ?? 0,
               },
@@ -857,7 +932,8 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
             message: "Failed to bridge external file drop through WebView2 additional objects",
             ids: { session_id: activeSessionId },
             data: {
-              remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+              remote_dir:
+                normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
             },
             error,
           });
@@ -884,7 +960,7 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
       window.removeEventListener("drop", handleWindowDrop);
       window.removeEventListener("blur", handleWindowBlur);
     };
-  }, [activeSessionId, canBrowseFiles, resetExternalDropHover]);
+  }, [activeSessionId, canBrowseFiles, resetExternalDropHover, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1467,6 +1543,37 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
     return currentPath;
   })();
 
+  const visibleEntries = useMemo(() => {
+    if (files.length === 0) {
+      return files;
+    }
+
+    const viewportHeight = listViewportHeight > 0 ? listViewportHeight : FILE_LIST_ITEM_HEIGHT * 12;
+    const visibleCount = Math.max(1, Math.ceil(viewportHeight / FILE_LIST_ITEM_HEIGHT));
+    const startIndex = Math.max(
+      0,
+      Math.floor(listScrollTop / FILE_LIST_ITEM_HEIGHT) - FILE_LIST_OVERSCAN,
+    );
+    const endIndex = Math.min(files.length, startIndex + visibleCount + FILE_LIST_OVERSCAN * 2);
+
+    return files.slice(startIndex, endIndex);
+  }, [files, listScrollTop, listViewportHeight]);
+
+  const virtualListPadding = useMemo(() => {
+    if (visibleEntries.length === 0) {
+      return { top: 0, bottom: 0 };
+    }
+
+    const startIndex = files.indexOf(visibleEntries[0]);
+    const top = startIndex * FILE_LIST_ITEM_HEIGHT;
+    const bottom = Math.max(
+      0,
+      (files.length - startIndex - visibleEntries.length) * FILE_LIST_ITEM_HEIGHT,
+    );
+
+    return { top, bottom };
+  }, [files, visibleEntries]);
+
   return (
     <aside
       className="h-full flex flex-col overflow-hidden"
@@ -1669,8 +1776,13 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
                 {t("fileExplorer.emptyDirectory")}
               </div>
             ) : (
-              <ul className="space-y-0.5">
-                {files.map((entry) => (
+              <ul
+                style={{
+                  paddingTop: virtualListPadding.top,
+                  paddingBottom: virtualListPadding.bottom,
+                }}
+              >
+                {visibleEntries.map((entry) => (
                   <FileListItem
                     key={entry.name}
                     entry={entry}

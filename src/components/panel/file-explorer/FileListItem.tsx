@@ -79,7 +79,7 @@ export function FileListItem({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <li
-          className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors select-none"
+          className="flex h-[30px] items-center gap-2 rounded px-2 py-1 transition-colors cursor-pointer select-none"
           style={{
             backgroundColor: isSelected
               ? "color-mix(in srgb, var(--df-primary) 10%, transparent)"
