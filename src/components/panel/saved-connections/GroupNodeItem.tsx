@@ -37,6 +37,7 @@ export default function GroupNodeItem({ node, depth }: GroupNodeItemProps) {
     setDeleteFolderTarget,
     handleDragStart,
     handleDragEnd,
+    handleDragEnterItem,
     handleDragOverItem,
     handleDragLeaveItem,
     handleDropItem,
@@ -72,6 +73,9 @@ export default function GroupNodeItem({ node, depth }: GroupNodeItemProps) {
             className={`flex items-center gap-1.5 py-1.5 px-2 rounded cursor-pointer transition-colors select-none df-hover ${isInside ? "ring-1 ring-primary/60 bg-primary/10" : ""}`}
             style={{ paddingLeft: indentPx }}
             onClick={() => toggleGroup(node.group.id)}
+            onDragEnter={
+              isDragEnabled ? (e) => handleDragEnterItem(e, node.group.id, "group") : undefined
+            }
             onDragOver={
               isDragEnabled ? (e) => handleDragOverItem(e, node.group.id, "group") : undefined
             }

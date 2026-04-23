@@ -68,6 +68,8 @@ type HeaderActionButtonProps = ComponentProps<typeof Button> & {
   tooltip: string;
 };
 
+const SAVED_CONNECTIONS_DRAG_MIME = "application/x-dragonfly-saved-connections";
+
 function HeaderActionButton({ tooltip, children, ...props }: HeaderActionButtonProps) {
   return (
     <Tooltip>
@@ -543,6 +545,66 @@ export default function SavedConnections({
     _setDragTarget(val);
   };
 
+  const resolveDragSource = (dataTransfer: DataTransfer | null) => {
+    if (dragSourceRef.current) {
+      return dragSourceRef.current;
+    }
+
+    const customPayload = dataTransfer?.getData(SAVED_CONNECTIONS_DRAG_MIME);
+    if (customPayload) {
+      try {
+        const parsed = JSON.parse(customPayload) as { type: string; id: string };
+        if ((parsed.type === "connection" || parsed.type === "group") && parsed.id) {
+          const source = {
+            type: parsed.type,
+            id: parsed.id,
+          } as const;
+          dragSourceRef.current = source;
+          return source;
+        }
+      } catch {
+        // Ignore malformed drag payloads from prior versions.
+      }
+    }
+
+    const textPayload = dataTransfer?.getData("text/plain");
+    if (!textPayload) {
+      return null;
+    }
+
+    const separatorIndex = textPayload.indexOf(":");
+    if (separatorIndex <= 0) {
+      return null;
+    }
+
+    const type = textPayload.slice(0, separatorIndex);
+    const id = textPayload.slice(separatorIndex + 1);
+    if ((type === "connection" || type === "group") && id) {
+      const source = { type, id } as const;
+      dragSourceRef.current = source;
+      return source;
+    }
+
+    return null;
+  };
+
+  const canDropOnItem = (
+    source: { type: "connection" | "group"; id: string },
+    targetId: string,
+    targetType: "connection" | "group",
+  ) => {
+    if (source.type === targetType && source.id === targetId) {
+      return false;
+    }
+    if (source.type === "group" && targetType === "group" && isDescendant(targetId, source.id)) {
+      return false;
+    }
+    if (source.type === "group" && targetType === "connection") {
+      return false;
+    }
+    return true;
+  };
+
   const isDescendant = (groupId: string, ancestorId: string): boolean => {
     let cur: string | undefined = groupId;
     while (cur) {
@@ -570,6 +632,9 @@ export default function SavedConnections({
 
   const handleDragStart = (e: React.DragEvent, type: "connection" | "group", id: string) => {
     e.stopPropagation();
+    // WebKit-based runtimes may ignore HTML5 drops unless the drag carries real data.
+    e.dataTransfer.setData(SAVED_CONNECTIONS_DRAG_MIME, JSON.stringify({ type, id }));
+    e.dataTransfer.setData("text/plain", `${type}:${id}`);
     e.dataTransfer.effectAllowed = "move";
     dragSourceRef.current = { type, id };
   };
@@ -579,20 +644,12 @@ export default function SavedConnections({
     dragSourceRef.current = null;
   };
 
-  const handleDragOverItem = (e: React.DragEvent, id: string, type: "connection" | "group") => {
+  const updateItemDragTarget = (e: React.DragEvent, id: string, type: "connection" | "group") => {
     e.preventDefault();
     e.stopPropagation();
-    const source = dragSourceRef.current;
+    const source = resolveDragSource(e.dataTransfer);
     if (!source) return;
-    if (source.type === type && source.id === id) {
-      e.dataTransfer.dropEffect = "none";
-      return;
-    }
-    if (source.type === "group" && type === "group" && isDescendant(id, source.id)) {
-      e.dataTransfer.dropEffect = "none";
-      return;
-    }
-    if (source.type === "group" && type === "connection") {
+    if (!canDropOnItem(source, id, type)) {
       e.dataTransfer.dropEffect = "none";
       return;
     }
@@ -601,6 +658,14 @@ export default function SavedConnections({
     const prev = dragTargetRef.current;
     if (prev?.id === id && prev.type === type && prev.position === position) return;
     setDragTarget({ id, type, position });
+  };
+
+  const handleDragEnterItem = (e: React.DragEvent, id: string, type: "connection" | "group") => {
+    updateItemDragTarget(e, id, type);
+  };
+
+  const handleDragOverItem = (e: React.DragEvent, id: string, type: "connection" | "group") => {
+    updateItemDragTarget(e, id, type);
   };
 
   const handleDragLeaveItem = (e: React.DragEvent, id: string, type: "connection" | "group") => {
@@ -617,16 +682,15 @@ export default function SavedConnections({
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    const source = dragSourceRef.current;
-    const target = dragTargetRef.current;
+    const source = resolveDragSource(e.dataTransfer);
     setDragTarget(null);
     dragSourceRef.current = null;
-    if (!source || !target || target.id !== id || target.type !== tgtType) return;
+    if (!source || !canDropOnItem(source, id, tgtType)) return;
 
     const connections = connectionsRef.current;
     const groups = groupsRef.current;
     const { id: srcId, type: srcType } = source;
-    const { position } = target;
+    const position = computeDropPosition(e, tgtType, srcType);
 
     try {
       if (position === "inside" && tgtType === "group") {
@@ -735,7 +799,7 @@ export default function SavedConnections({
 
   const handleDragOverBg = (e: React.DragEvent) => {
     e.preventDefault();
-    const source = dragSourceRef.current;
+    const source = resolveDragSource(e.dataTransfer);
     if (!source) return;
     const isAtRoot =
       source.type === "connection"
@@ -753,11 +817,10 @@ export default function SavedConnections({
 
   const handleDropBg = async (e: React.DragEvent) => {
     e.preventDefault();
-    const source = dragSourceRef.current;
-    const target = dragTargetRef.current;
+    const source = resolveDragSource(e.dataTransfer);
     setDragTarget(null);
     dragSourceRef.current = null;
-    if (!source || target?.type !== "background") return;
+    if (!source) return;
     try {
       if (source.type === "connection") {
         const conn = connectionsRef.current.find((c) => c.id === source.id);
@@ -837,6 +900,7 @@ export default function SavedConnections({
     requestOpenGroupConnections,
     handleDragStart,
     handleDragEnd,
+    handleDragEnterItem,
     handleDragOverItem,
     handleDragLeaveItem,
     handleDropItem,

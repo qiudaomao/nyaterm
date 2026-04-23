@@ -1,5 +1,6 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { downloadDir, join, tempDir } from "@tauri-apps/api/path";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import {
@@ -694,6 +695,50 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     });
   }, []);
 
+  const processExternalDropPaths = useCallback(
+    async (target: { sessionId: string; remoteDir: string }, dropPaths: string[]) => {
+      try {
+        const resolvedLocalEntries = await resolveLocalDropPaths(dropPaths);
+        if (resolvedLocalEntries.length === 0) {
+          logger.warn({
+            domain: "ui.error",
+            event: "file_explorer.external_drop_paths_unresolved",
+            message: "Native external drop did not resolve to usable local paths",
+            ids: { session_id: target.sessionId },
+            data: {
+              remote_dir: target.remoteDir,
+              path_count: dropPaths.length,
+            },
+          });
+          toast.error(t("fileExplorer.externalDropPathsRequired"));
+          return;
+        }
+
+        await uploadLocalEntriesToTarget(
+          target,
+          resolvedLocalEntries.map((entry) => ({
+            path: entry.path,
+            isDir: entry.isDir,
+          })),
+        );
+      } catch (error) {
+        logger.error({
+          domain: "ui.error",
+          event: "file_explorer.external_drop_failed",
+          message: "Failed to process native external drop paths",
+          ids: { session_id: target.sessionId },
+          data: {
+            remote_dir: target.remoteDir,
+            path_count: dropPaths.length,
+          },
+          error,
+        });
+        toast.error(String(error));
+      }
+    },
+    [resolveLocalDropPaths, t, uploadLocalEntriesToTarget],
+  );
+
   useEffect(() => {
     resetExternalDropHover();
     const cache = sessionCacheRef.current;
@@ -807,6 +852,11 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   }, [activeSessionId, canBrowseFiles, currentPath, refreshCurrentDirectory]);
 
   useEffect(() => {
+    const bridge = getExternalFileDropBridge();
+    if (!bridge?.postMessageWithAdditionalObjects) {
+      return;
+    }
+
     const updateExternalDropState = (event: DragEvent) => {
       if (!isExternalFileDragEvent(event)) {
         return;
@@ -857,21 +907,6 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       resetExternalDropHover();
 
       if (!canBrowseFiles || !activeSessionId || !isOverDropTarget) {
-        return;
-      }
-
-      const bridge = getExternalFileDropBridge();
-      if (!bridge?.postMessageWithAdditionalObjects) {
-        logger.warn({
-          domain: "ui.error",
-          event: "file_explorer.external_drop_bridge_unavailable",
-          message: "WebView2 additional-objects bridge is unavailable for external file drop",
-          ids: activeSessionId ? { session_id: activeSessionId } : undefined,
-          data: {
-            remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
-          },
-        });
-        toast.error(t("fileExplorer.externalDropPathsRequired"));
         return;
       }
 
@@ -963,6 +998,11 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   }, [activeSessionId, canBrowseFiles, resetExternalDropHover, t]);
 
   useEffect(() => {
+    const bridge = getExternalFileDropBridge();
+    if (!bridge?.postMessageWithAdditionalObjects) {
+      return;
+    }
+
     let cancelled = false;
 
     const unlistenPromise = listen<ExternalFileDropEventPayload>("external-file-drop", (event) => {
@@ -991,46 +1031,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       }
       const dropPaths = event.payload.paths;
 
-      void (async () => {
-        try {
-          const resolvedLocalEntries = await resolveLocalDropPaths(dropPaths);
-          if (resolvedLocalEntries.length === 0) {
-            logger.warn({
-              domain: "ui.error",
-              event: "file_explorer.external_drop_paths_unresolved",
-              message: "Native external drop did not resolve to usable local paths",
-              ids: { session_id: target.sessionId },
-              data: {
-                remote_dir: target.remoteDir,
-                path_count: dropPaths.length,
-              },
-            });
-            toast.error(t("fileExplorer.externalDropPathsRequired"));
-            return;
-          }
-
-          await uploadLocalEntriesToTarget(
-            target,
-            resolvedLocalEntries.map((entry) => ({
-              path: entry.path,
-              isDir: entry.isDir,
-            })),
-          );
-        } catch (error) {
-          logger.error({
-            domain: "ui.error",
-            event: "file_explorer.external_drop_failed",
-            message: "Failed to process native external drop paths",
-            ids: { session_id: target.sessionId },
-            data: {
-              remote_dir: target.remoteDir,
-              path_count: dropPaths.length,
-            },
-            error,
-          });
-          toast.error(String(error));
-        }
-      })();
+      void processExternalDropPaths(target, dropPaths);
     });
 
     return () => {
@@ -1041,11 +1042,73 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   }, [
     activeSessionId,
     canBrowseFiles,
-    resolveLocalDropPaths,
+    processExternalDropPaths,
     resetExternalDropHover,
     resolveUploadTarget,
-    t,
-    uploadLocalEntriesToTarget,
+  ]);
+
+  useEffect(() => {
+    const bridge = getExternalFileDropBridge();
+    if (bridge?.postMessageWithAdditionalObjects) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const handleWindowBlur = () => {
+      resetExternalDropHover();
+    };
+
+    window.addEventListener("blur", handleWindowBlur);
+
+    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+      if (cancelled) {
+        return;
+      }
+
+      const payload = event.payload;
+      if (payload.type === "leave") {
+        resetExternalDropHover();
+        return;
+      }
+
+      const isOverDropTarget = isDropPositionInsideElement(
+        payload.position,
+        listContainerRef.current,
+      );
+      const isActive = canBrowseFiles && !!activeSessionId && isOverDropTarget;
+
+      if (payload.type === "enter" || payload.type === "over") {
+        setIsExternalDropActive(isActive);
+        return;
+      }
+
+      resetExternalDropHover();
+
+      if (!isActive) {
+        return;
+      }
+
+      const target = resolveUploadTarget();
+      if (!target) {
+        return;
+      }
+
+      void processExternalDropPaths(target, payload.paths);
+    });
+
+    return () => {
+      cancelled = true;
+      resetExternalDropHover();
+      window.removeEventListener("blur", handleWindowBlur);
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [
+    activeSessionId,
+    canBrowseFiles,
+    processExternalDropPaths,
+    resetExternalDropHover,
+    resolveUploadTarget,
   ]);
 
   const getRangeSelection = useCallback(

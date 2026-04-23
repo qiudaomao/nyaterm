@@ -60,6 +60,7 @@ export interface SavedConnectionsContextValue {
   // Drag handlers
   handleDragStart: (e: React.DragEvent, type: "connection" | "group", id: string) => void;
   handleDragEnd: () => void;
+  handleDragEnterItem: (e: React.DragEvent, id: string, type: "connection" | "group") => void;
   handleDragOverItem: (e: React.DragEvent, id: string, type: "connection" | "group") => void;
   handleDragLeaveItem: (e: React.DragEvent, id: string, type: "connection" | "group") => void;
   handleDropItem: (

@@ -34,6 +34,7 @@ export default function ConnectionItem({ conn, indented, depth = 0 }: Connection
     setRenameValue,
     handleDragStart,
     handleDragEnd,
+    handleDragEnterItem,
     handleDragOverItem,
     handleDragLeaveItem,
     handleDropItem,
@@ -63,6 +64,9 @@ export default function ConnectionItem({ conn, indented, depth = 0 }: Connection
           className="relative min-w-full w-max"
           draggable={isDragEnabled}
           onDragStart={isDragEnabled ? (e) => handleDragStart(e, "connection", conn.id) : undefined}
+          onDragEnter={
+            isDragEnabled ? (e) => handleDragEnterItem(e, conn.id, "connection") : undefined
+          }
           onDragOver={
             isDragEnabled ? (e) => handleDragOverItem(e, conn.id, "connection") : undefined
           }
