@@ -262,6 +262,18 @@ type LoadDirectoryOptions = {
 const fileExplorerSessionCacheStore = new Map<string, FileExplorerSessionCache>();
 const FILE_LIST_ITEM_HEIGHT = 30;
 const FILE_LIST_OVERSCAN = 8;
+const PARENT_DIRECTORY_ENTRY_NAME = "..";
+const PARENT_DIRECTORY_ENTRY: FileEntry = {
+  name: PARENT_DIRECTORY_ENTRY_NAME,
+  is_dir: true,
+  is_symlink: false,
+  size: 0,
+  permissions: "",
+};
+
+function isParentDirectoryEntry(entry: FileEntry) {
+  return entry.name === PARENT_DIRECTORY_ENTRY_NAME;
+}
 
 function buildSessionCacheSnapshot(
   files: FileEntry[],
@@ -1141,17 +1153,26 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       if (event.button !== 0) return;
 
       listContainerRef.current?.focus();
+      if (isParentDirectoryEntry(entry)) {
+        dragSelectionRef.current = null;
+        lastSelectedRef.current = null;
+        setSelectedFiles(new Set([PARENT_DIRECTORY_ENTRY_NAME]));
+        return;
+      }
+
       const additive = event.ctrlKey || event.metaKey;
       setSelectedFiles((prev) => {
         const hasRangeAnchor = event.shiftKey && !!lastSelectedRef.current;
         const anchor = hasRangeAnchor ? (lastSelectedRef.current ?? entry.name) : entry.name;
         const baseSelection = additive ? new Set(prev) : new Set<string>();
+        baseSelection.delete(PARENT_DIRECTORY_ENTRY_NAME);
         let next: Set<string>;
 
         if (hasRangeAnchor) {
           next = getRangeSelection(anchor, entry.name, baseSelection, additive);
         } else if (additive) {
           next = new Set(prev);
+          next.delete(PARENT_DIRECTORY_ENTRY_NAME);
           if (next.has(entry.name)) {
             next.delete(entry.name);
           } else {
@@ -1175,6 +1196,10 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
 
   const handleSelectionDrag = useCallback(
     (entry: FileEntry, event: ReactMouseEvent) => {
+      if (isParentDirectoryEntry(entry)) {
+        return;
+      }
+
       const dragSelection = dragSelectionRef.current;
       if (!dragSelection || (event.buttons & 1) !== 1) {
         return;
@@ -1195,6 +1220,13 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
 
   const handleContextMenuSelection = useCallback((entry: FileEntry, _event: ReactMouseEvent) => {
     listContainerRef.current?.focus();
+    if (isParentDirectoryEntry(entry)) {
+      dragSelectionRef.current = null;
+      lastSelectedRef.current = null;
+      setSelectedFiles(new Set([PARENT_DIRECTORY_ENTRY_NAME]));
+      return;
+    }
+
     setSelectedFiles((prev) => {
       if (prev.has(entry.name)) {
         return prev;
@@ -1223,6 +1255,11 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   );
 
   const handleItemClick = (entry: FileEntry) => {
+    if (isParentDirectoryEntry(entry)) {
+      handleGoUp();
+      return;
+    }
+
     if (entry.is_dir) {
       const newPath = currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`;
       loadDirectory(newPath);
@@ -1276,10 +1313,14 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     emit(`focus-terminal-${activeSessionId}`).catch(() => {});
   };
 
+  const selectedRealFiles = useMemo(
+    () => files.filter((file) => selectedFiles.has(file.name)),
+    [files, selectedFiles],
+  );
+
   const handleDeleteSelected = () => {
-    if (selectedFiles.size === 0) return;
-    const selected = files.filter((f) => selectedFiles.has(f.name));
-    openDeleteDialog(selected);
+    if (selectedRealFiles.length === 0) return;
+    openDeleteDialog(selectedRealFiles);
   };
 
   const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1314,7 +1355,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       event.ctrlKey ||
       event.metaKey ||
       event.shiftKey ||
-      selectedFiles.size === 0 ||
+      selectedRealFiles.length === 0 ||
       deleteDialogData
     ) {
       return;
@@ -1413,6 +1454,10 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   };
 
   const getContextMenuEntries = (entry: FileEntry) => {
+    if (isParentDirectoryEntry(entry)) {
+      return [];
+    }
+
     if (selectedFiles.size > 1 && selectedFiles.has(entry.name)) {
       return files.filter((file) => selectedFiles.has(file.name));
     }
@@ -1497,9 +1542,8 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   };
 
   const handleDownloadSelected = async () => {
-    if (selectedFiles.size === 0) return;
-    const selected = files.filter((f) => selectedFiles.has(f.name));
-    await downloadEntries(selected);
+    if (selectedRealFiles.length === 0) return;
+    await downloadEntries(selectedRealFiles);
   };
 
   const handleDownload = async (entry: FileEntry) => {
@@ -1606,9 +1650,17 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     return currentPath;
   })();
 
-  const visibleEntries = useMemo(() => {
-    if (files.length === 0) {
+  const displayEntries = useMemo(() => {
+    if (!currentPath || currentPath === "/") {
       return files;
+    }
+
+    return [PARENT_DIRECTORY_ENTRY, ...files];
+  }, [currentPath, files]);
+
+  const visibleEntries = useMemo(() => {
+    if (displayEntries.length === 0) {
+      return displayEntries;
     }
 
     const viewportHeight = listViewportHeight > 0 ? listViewportHeight : FILE_LIST_ITEM_HEIGHT * 12;
@@ -1617,25 +1669,28 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       0,
       Math.floor(listScrollTop / FILE_LIST_ITEM_HEIGHT) - FILE_LIST_OVERSCAN,
     );
-    const endIndex = Math.min(files.length, startIndex + visibleCount + FILE_LIST_OVERSCAN * 2);
+    const endIndex = Math.min(
+      displayEntries.length,
+      startIndex + visibleCount + FILE_LIST_OVERSCAN * 2,
+    );
 
-    return files.slice(startIndex, endIndex);
-  }, [files, listScrollTop, listViewportHeight]);
+    return displayEntries.slice(startIndex, endIndex);
+  }, [displayEntries, listScrollTop, listViewportHeight]);
 
   const virtualListPadding = useMemo(() => {
     if (visibleEntries.length === 0) {
       return { top: 0, bottom: 0 };
     }
 
-    const startIndex = files.indexOf(visibleEntries[0]);
+    const startIndex = displayEntries.indexOf(visibleEntries[0]);
     const top = startIndex * FILE_LIST_ITEM_HEIGHT;
     const bottom = Math.max(
       0,
-      (files.length - startIndex - visibleEntries.length) * FILE_LIST_ITEM_HEIGHT,
+      (displayEntries.length - startIndex - visibleEntries.length) * FILE_LIST_ITEM_HEIGHT,
     );
 
     return { top, bottom };
-  }, [files, visibleEntries]);
+  }, [displayEntries, visibleEntries]);
 
   return (
     <aside
@@ -1706,7 +1761,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
             size="icon"
             className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
             onClick={handleDownloadSelected}
-            disabled={selectedFiles.size === 0}
+            disabled={selectedRealFiles.length === 0}
           >
             <MdDownload className="h-4 w-4" />
           </ToolbarIconButton>
@@ -1716,7 +1771,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
             size="icon"
             className="h-7 w-7 rounded-md text-muted-foreground hover:text-destructive"
             onClick={handleDeleteSelected}
-            disabled={selectedFiles.size === 0}
+            disabled={selectedRealFiles.length === 0}
           >
             <MdDelete className="h-4 w-4" />
           </ToolbarIconButton>
@@ -1834,7 +1889,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
               </div>
             ) : error ? (
               <div className="text-center text-red-400 py-4 text-xs">{error}</div>
-            ) : files.length === 0 ? (
+            ) : displayEntries.length === 0 ? (
               <div className="text-center py-4 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
                 {t("fileExplorer.emptyDirectory")}
               </div>
@@ -1850,6 +1905,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
                     key={entry.name}
                     entry={entry}
                     isSelected={selectedFiles.has(entry.name)}
+                    isParentDirectoryEntry={isParentDirectoryEntry(entry)}
                     activeSessionId={activeSessionId}
                     onSelectionStart={handleSelectionStart}
                     onSelectionDrag={handleSelectionDrag}

@@ -34,6 +34,7 @@ import {
 interface FileListItemProps {
   entry: FileEntry;
   isSelected: boolean;
+  isParentDirectoryEntry?: boolean;
   activeSessionId: string | null;
   onSelectionStart: (entry: FileEntry, event: React.MouseEvent) => void;
   onSelectionDrag: (entry: FileEntry, event: React.MouseEvent) => void;
@@ -55,6 +56,7 @@ interface FileListItemProps {
 export function FileListItem({
   entry,
   isSelected,
+  isParentDirectoryEntry = false,
   activeSessionId,
   onSelectionStart,
   onSelectionDrag,
@@ -74,6 +76,9 @@ export function FileListItem({
 }: FileListItemProps) {
   const { t } = useTranslation();
   const entryIcon = getFileIcon(entry);
+  const itemTitle = isParentDirectoryEntry
+    ? t("fileExplorer.goUp")
+    : `${entry.permissions} ${formatSize(entry.size)}`;
 
   return (
     <ContextMenu>
@@ -102,7 +107,7 @@ export function FileListItem({
             }
           }}
           onContextMenu={(e) => onContextMenuSelect(entry, e)}
-          title={`${entry.permissions} ${formatSize(entry.size)}`}
+          title={itemTitle}
         >
           <entryIcon.icon
             className="text-base"
@@ -117,85 +122,101 @@ export function FileListItem({
         </li>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[200px]">
-        <ContextMenuItem onClick={() => onItemClick(entry)}>
-          <MdFileOpen className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmOpen")}
-        </ContextMenuItem>
-        {!entry.is_dir && (
-          <ContextMenuItem onClick={() => onOpenDefault(entry)}>
-            <MdOpenInNew className="text-[0.875rem] text-muted-foreground mr-2" />
-            {t("fileExplorer.cmOpenDefault")}
-          </ContextMenuItem>
+        {isParentDirectoryEntry ? (
+          <>
+            <ContextMenuItem onClick={() => onItemClick(entry)}>
+              <MdFileOpen className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.goUp")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={onRefresh}>
+              <MdRefresh className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmRefresh")}
+            </ContextMenuItem>
+          </>
+        ) : (
+          <>
+            <ContextMenuItem onClick={() => onItemClick(entry)}>
+              <MdFileOpen className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmOpen")}
+            </ContextMenuItem>
+            {!entry.is_dir && (
+              <ContextMenuItem onClick={() => onOpenDefault(entry)}>
+                <MdOpenInNew className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("fileExplorer.cmOpenDefault")}
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={onRefresh}>
+              <MdRefresh className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmRefresh")}
+            </ContextMenuItem>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <MdUpload className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("fileExplorer.cmUpload")}
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-48">
+                <ContextMenuItem onClick={onUpload}>
+                  <MdUpload className="text-[0.875rem] text-muted-foreground mr-2" />
+                  {t("fileExplorer.upload")}
+                </ContextMenuItem>
+                <ContextMenuItem onClick={onUploadFolder}>
+                  <MdDriveFolderUpload className="text-[0.875rem] text-muted-foreground mr-2" />
+                  {t("fileExplorer.uploadFolder")}
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+            <ContextMenuItem onClick={() => onDownload(entry)}>
+              <MdDownload className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmDownload")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => activeSessionId && onRename(entry)}>
+              <MdEdit className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmRename")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => activeSessionId && onMove(entry)}>
+              <MdDriveFileMove className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmMove")}
+            </ContextMenuItem>
+            <ContextMenuItem variant="destructive" onClick={() => onDelete(entry)}>
+              <MdDelete className="text-[0.875rem] mr-2" />
+              {t("fileExplorer.cmDelete")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => onCopyPath(entry, "full")}>
+              <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmCopyPath")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCopyPath(entry, "name")}>
+              <MdCopyAll className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmCopyName")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCopyPath(entry, "dir")}>
+              <MdFolderCopy className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmCopyDirPath")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => onSendToTerminal(entry, "full")}>
+              <MdKeyboardReturn className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmTerminalPath")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onSendToTerminal(entry, "name")}>
+              <MdKeyboardArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmTerminalName")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onSendToTerminal(entry, "dir")}>
+              <MdKeyboardDoubleArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmTerminalDirPath")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => activeSessionId && onProperties(entry)}>
+              <MdInfo className="text-[0.875rem] text-muted-foreground mr-2" />
+              {t("fileExplorer.cmProperties")}
+            </ContextMenuItem>
+          </>
         )}
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={onRefresh}>
-          <MdRefresh className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmRefresh")}
-        </ContextMenuItem>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <MdUpload className="text-[0.875rem] text-muted-foreground mr-2" />
-            {t("fileExplorer.cmUpload")}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-48">
-            <ContextMenuItem onClick={onUpload}>
-              <MdUpload className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("fileExplorer.upload")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={onUploadFolder}>
-              <MdDriveFolderUpload className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("fileExplorer.uploadFolder")}
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuItem onClick={() => onDownload(entry)}>
-          <MdDownload className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmDownload")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => activeSessionId && onRename(entry)}>
-          <MdEdit className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmRename")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => activeSessionId && onMove(entry)}>
-          <MdDriveFileMove className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmMove")}
-        </ContextMenuItem>
-        <ContextMenuItem variant="destructive" onClick={() => onDelete(entry)}>
-          <MdDelete className="text-[0.875rem] mr-2" />
-          {t("fileExplorer.cmDelete")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => onCopyPath(entry, "full")}>
-          <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmCopyPath")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onCopyPath(entry, "name")}>
-          <MdCopyAll className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmCopyName")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onCopyPath(entry, "dir")}>
-          <MdFolderCopy className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmCopyDirPath")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => onSendToTerminal(entry, "full")}>
-          <MdKeyboardReturn className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmTerminalPath")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onSendToTerminal(entry, "name")}>
-          <MdKeyboardArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmTerminalName")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onSendToTerminal(entry, "dir")}>
-          <MdKeyboardDoubleArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmTerminalDirPath")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => activeSessionId && onProperties(entry)}>
-          <MdInfo className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("fileExplorer.cmProperties")}
-        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
