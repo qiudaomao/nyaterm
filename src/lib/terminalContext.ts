@@ -6,6 +6,7 @@ export interface TerminalContextProvider {
   getSelectedText: () => string;
   getInputBuffer: () => string;
   insertCommand: (command: string) => Promise<void>;
+  executeCommand?: (command: string) => Promise<void>;
   focus: () => void;
 }
 
