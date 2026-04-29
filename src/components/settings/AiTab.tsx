@@ -549,31 +549,20 @@ export function AiRulesTab() {
   const { appSettings, updateAppSettings } = useApp();
   const ai = appSettings.ai;
   const update = (patch: Partial<AISettings>) => updateAppSettings({ ai: { ...ai, ...patch } });
-  const [sizeUnit, setSizeUnit] = useState<"KB" | "MB">("MB");
-  const divisor = sizeUnit === "MB" ? 1024 * 1024 : 1024;
+  const MB = 1024 * 1024;
 
   return (
     <div className="space-y-5">
       <SettingSection title={t("ai.rules")}>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-          <SettingNumberInput
-            label={t("ai.maxAiFileSize")}
-            desc={t("ai.maxAiFileSizeDesc")}
-            min={1}
-            max={sizeUnit === "MB" ? 256 : 262144}
-            step={1}
-            value={Math.max(1, Math.round(ai.max_ai_file_size_bytes / divisor))}
-            onChange={(value) => update({ max_ai_file_size_bytes: value * divisor })}
-          />
-          <SettingSelect
-            label={t("ai.fileSizeUnit")}
-            value={sizeUnit}
-            onValueChange={(value) => setSizeUnit(value as "KB" | "MB")}
-          >
-            <SelectItem value="KB">KB</SelectItem>
-            <SelectItem value="MB">MB</SelectItem>
-          </SettingSelect>
-        </div>
+        <SettingNumberInput
+          label={`${t("ai.maxAiFileSize")} (MB)`}
+          desc={t("ai.maxAiFileSizeDesc")}
+          min={1}
+          max={256}
+          step={1}
+          value={Math.max(1, Math.round(ai.max_ai_file_size_bytes / MB))}
+          onChange={(value) => update({ max_ai_file_size_bytes: value * MB })}
+        />
       </SettingSection>
       <ActionListEditor
         title={t("ai.terminalActions")}
