@@ -2290,7 +2290,13 @@ fn truncate_preview(s: &str, max_len: usize) -> String {
     if trimmed.len() <= max_len {
         trimmed.to_string()
     } else {
-        format!("{}…", &trimmed[..max_len])
+        let boundary = trimmed
+            .char_indices()
+            .map(|(i, _)| i)
+            .take_while(|&i| i <= max_len)
+            .last()
+            .unwrap_or(0);
+        format!("{}…", &trimmed[..boundary])
     }
 }
 
