@@ -595,6 +595,21 @@ export default function XTerminal({
           registerSubmission: null,
         });
       },
+      executeCommand: async (command) => {
+        const trackedState = inputStateRef.current;
+        const input = trackedState.lineRewriteRequired
+          ? `\u0005\u0015${command}`
+          : `${"\x7f".repeat(trackedState.value.length)}${command}`;
+        await sendSessionInput(sessionId, input, {
+          preview: { kind: "replace-and-execute", value: command },
+          registerSubmission: null,
+        });
+        inputStateRef.current = applyTerminalInputData(inputStateRef.current, "\r");
+        await sendSessionInput(sessionId, "\r", {
+          preview: null,
+          registerSubmission: command,
+        });
+      },
       focus: () => terminal.focus(),
     });
 

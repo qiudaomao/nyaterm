@@ -45,7 +45,7 @@ export default function TerminalContextMenu({
   onFind,
 }: TerminalContextMenuProps) {
   const { t } = useTranslation();
-  const { interaction, translation, search } = useTerminalAppSettings();
+  const { interaction, translation, search, ai } = useTerminalAppSettings();
 
   const [ctxSelection, setCtxSelection] = useState({ text: "", hasSelection: false });
   const [translateState, setTranslateState] = useState({ open: false, text: "", provider: "" });
@@ -77,6 +77,9 @@ export default function TerminalContextMenu({
       configured: !!(translation.youdao_app_id && translation.youdao_app_key),
     },
   ].filter((p) => p.free || p.configured);
+  const terminalAiActions = ai.enabled
+    ? ai.terminal_ai_actions.filter((action) => action.enabled && action.name.trim())
+    : [];
 
   // Right-click context menu: capture selection state
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -209,6 +212,34 @@ export default function TerminalContextMenu({
                     })}
                 </ContextMenuSubContent>
               </ContextMenuSub>
+              {terminalAiActions.length > 0 && (
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                    <MdAutoAwesome className="text-[0.875rem] text-muted-foreground mr-2" />
+                    AI
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    {terminalAiActions.map((action) => (
+                      <ContextMenuItem
+                        key={action.id}
+                        onClick={() =>
+                          openAIAssistant({
+                            action: "custom_terminal_action",
+                            userInput: action.prompt,
+                            selectedText: ctxSelection.text,
+                            metadata: {
+                              actionId: action.id,
+                              actionName: action.name,
+                            },
+                          })
+                        }
+                      >
+                        {action.name}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+              )}
               {translationProviders.length > 0 && (
                 <ContextMenuSub>
                   <ContextMenuSubTrigger>
@@ -229,29 +260,6 @@ export default function TerminalContextMenu({
                   </ContextMenuSubContent>
                 </ContextMenuSub>
               )}
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                onClick={() =>
-                  openAIAssistant({
-                    action: "explain_selected",
-                    selectedText: ctxSelection.text,
-                  })
-                }
-              >
-                <MdAutoAwesome className="text-[0.875rem] text-muted-foreground mr-2" />
-                {t("ai.explainSelected")}
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() =>
-                  openAIAssistant({
-                    action: "repair_from_selection",
-                    selectedText: ctxSelection.text,
-                  })
-                }
-              >
-                <MdAutoAwesome className="text-[0.875rem] text-muted-foreground mr-2" />
-                {t("ai.repairSelected")}
-              </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={doPaste}>
                 <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
