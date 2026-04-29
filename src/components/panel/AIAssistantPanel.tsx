@@ -1717,13 +1717,13 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={handleCopySelection}>
-            <MdContentCopy className="mr-2" />
-            {t("ai.copy")}
-          </ContextMenuItem>
           <ContextMenuItem onClick={handleQuoteSelection}>
             <LuQuote className="mr-2" />
             {t("ai.quote")}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={handleCopySelection}>
+            <MdContentCopy className="mr-2" />
+            {t("ai.copy")}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
