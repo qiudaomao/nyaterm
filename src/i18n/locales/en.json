@@ -80,7 +80,7 @@
     "fileActions": "File context menu AI actions",
 
     "fileUnsupported": "This file is not supported for AI analysis",
-    "formattingResponse": "Formatting reply",
+    "formattingResponse": "Formatting",
     "general": "General",
     "generate": "Generate",
     "generateCommand": "AI Generate Command",
@@ -148,6 +148,7 @@
     "targetSession": "Target",
     "terminalActions": "Terminal context menu AI actions",
     "thinking": "Thinking",
+    "thoughtComplete": "Thought",
     "timeoutMs": "Request timeout (ms)",
     "title": "AI"
   },

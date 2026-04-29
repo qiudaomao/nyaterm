@@ -80,7 +80,7 @@
     "fileActions": "文件右键 AI 功能",
 
     "fileUnsupported": "该文件暂不支持 AI 分析",
-    "formattingResponse": "整理回复",
+    "formattingResponse": "整理中",
     "general": "常规",
     "generate": "生成",
     "generateCommand": "AI 生成命令",
@@ -148,6 +148,7 @@
     "targetSession": "目标",
     "terminalActions": "终端右键 AI 功能",
     "thinking": "思考中",
+    "thoughtComplete": "已思考",
     "timeoutMs": "请求超时时间 ms",
     "title": "AI"
   },
