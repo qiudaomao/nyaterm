@@ -154,17 +154,6 @@ export function SshForm({
   const selectedProxyName = proxies.find((proxy) => proxy.id === proxyId)?.name;
   const selectedJumpHost = jumpHostOptions.find((option) => option.connection.id === jumpHostId);
   const selectedOtpLabel = otpEntries.find((entry) => entry.id === otpId);
-  const advancedSummary = [
-    proxyId ? (selectedProxyName ?? t("dialog.proxySelect")) : t("dialog.noProxy"),
-    jumpHostId
-      ? (selectedJumpHost?.connection.name ?? t("dialog.selectProxyJump"))
-      : t("dialog.noProxyJump"),
-    otpId
-      ? selectedOtpLabel
-        ? `${selectedOtpLabel.issuer} (${selectedOtpLabel.username})`
-        : t("dialog.selectOtp")
-      : t("dialog.noOtp"),
-  ].join(" · ");
 
   return (
     <div className="space-y-4 w-full">
@@ -382,128 +371,143 @@ export function SshForm({
             className={`text-sm transition-transform duration-200 ${advancedOpen ? "rotate-90" : ""}`}
           />
           <span>{t("dialog.advancedConfig")}</span>
-          <span className="ml-auto truncate text-[0.625rem] text-muted-foreground/80">
-            {advancedSummary}
-          </span>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 space-y-3">
-          <div className="grid gap-3 xl:grid-cols-3">
-            <div className="rounded-lg border bg-accent/25 p-3">
-              <div className="space-y-0.5">
-                <div className="text-xs font-medium">{t("dialog.proxySelect")}</div>
-                <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-                  {proxyId
-                    ? `${selectedProxyName ?? t("dialog.proxySelect")}`
-                    : t("dialog.noProxy")}
-                </p>
-              </div>
-              <div className="mt-3">
-                <Label className="text-[0.6875rem] text-muted-foreground">
-                  {t("dialog.proxySelect")}
-                </Label>
-                <Select
-                  value={proxyId || "__none__"}
-                  onValueChange={(value) => setProxyId(value === "__none__" ? "" : value)}
-                >
-                  <SelectTrigger className="mt-1 h-8 bg-background/85 text-xs">
-                    <SelectValue placeholder={t("dialog.noProxy")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">{t("dialog.noProxy")}</SelectItem>
-                    {proxies.map((proxy) => (
-                      <SelectItem key={proxy.id} value={proxy.id}>
-                        {proxy.name} ({proxy.protocol.toUpperCase()} {proxy.host}:{proxy.port})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <Tabs defaultValue="proxy" className="w-full">
+            <TabsList className="grid h-8 w-full grid-cols-3 pointer-events-auto">
+              <TabsTrigger value="proxy" className="text-xs">
+                {t("dialog.proxySelect")}
+              </TabsTrigger>
+              <TabsTrigger value="jump-host" className="text-xs">
+                {t("dialog.proxyJump")}
+              </TabsTrigger>
+              <TabsTrigger value="two-factor" className="text-xs">
+                {t("dialog.twoFactorAuth")}
+              </TabsTrigger>
+            </TabsList>
 
-            <div className="rounded-lg border bg-accent/25 p-3">
-              <div className="space-y-0.5">
-                <div className="text-xs font-medium">{t("dialog.proxyJump")}</div>
-                <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-                  {jumpHostId
-                    ? (selectedJumpHost?.subtitle ??
-                      selectedJumpHost?.connection.name ??
-                      t("dialog.selectProxyJump"))
-                    : t("dialog.noProxyJump")}
-                </p>
-              </div>
-              <div className="mt-3">
-                <Label className="text-[0.6875rem] text-muted-foreground">
-                  {t("dialog.selectProxyJump")}
-                </Label>
-                <div className="mt-1">
-                  <ConnectionCombobox
-                    value={jumpHostId}
-                    options={jumpHostOptions}
-                    placeholder={t("dialog.noProxyJump")}
-                    searchPlaceholder={t("network.searchConnections")}
-                    emptyText={t("dialog.proxyJumpSshOnly")}
-                    missingSelectionLabel={t("network.connectionMissing")}
-                    clearLabel={t("dialog.noProxyJump")}
-                    onChange={setJumpHostId}
-                  />
+            <TabsContent value="proxy" className="mt-3 border-0 outline-none">
+              <div className="rounded-lg border bg-accent/25 p-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-medium">{t("dialog.proxySelect")}</div>
+                  <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
+                    {proxyId
+                      ? `${selectedProxyName ?? t("dialog.proxySelect")}`
+                      : t("dialog.noProxy")}
+                  </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border bg-accent/25 p-3">
-              <div className="space-y-0.5">
-                <div className="text-xs font-medium">{t("dialog.twoFactorAuth")}</div>
-                <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-                  {otpId && selectedOtpLabel
-                    ? `${selectedOtpLabel.issuer} (${selectedOtpLabel.username})`
-                    : t("dialog.noOtp")}
-                </p>
-              </div>
-              <div className="mt-3 space-y-3">
-                <div>
+                <div className="mt-3">
                   <Label className="text-[0.6875rem] text-muted-foreground">
-                    {t("dialog.selectOtp")}
+                    {t("dialog.proxySelect")}
                   </Label>
                   <Select
-                    value={otpId || "__none__"}
-                    onValueChange={(value) => {
-                      const id = value === "__none__" ? "" : value;
-                      setOtpId(id);
-                      if (!id) setAutoFillOtp(false);
-                    }}
+                    value={proxyId || "__none__"}
+                    onValueChange={(value) => setProxyId(value === "__none__" ? "" : value)}
                   >
                     <SelectTrigger className="mt-1 h-8 bg-background/85 text-xs">
-                      <SelectValue placeholder={t("dialog.noOtp")} />
+                      <SelectValue placeholder={t("dialog.noProxy")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">{t("dialog.noOtp")}</SelectItem>
-                      {otpEntries.map((entry) => (
-                        <SelectItem key={entry.id} value={entry.id}>
-                          {entry.issuer} ({entry.username})
+                      <SelectItem value="__none__">{t("dialog.noProxy")}</SelectItem>
+                      {proxies.map((proxy) => (
+                        <SelectItem key={proxy.id} value={proxy.id}>
+                          {proxy.name} ({proxy.protocol.toUpperCase()} {proxy.host}:{proxy.port})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </TabsContent>
 
-                <div className="rounded-md border border-dashed bg-background/70 px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-[0.6875rem] font-medium">{t("dialog.autoFillOtp")}</div>
-                      <div className="text-[0.625rem] text-muted-foreground">
-                        {otpId ? t("dialog.twoFactorAuth") : t("dialog.noOtp")}
-                      </div>
-                    </div>
-                    <Switch
-                      checked={otpId ? autoFillOtp : false}
-                      onCheckedChange={setAutoFillOtp}
-                      disabled={!otpId}
+            <TabsContent value="jump-host" className="mt-3 border-0 outline-none">
+              <div className="rounded-lg border bg-accent/25 p-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-medium">{t("dialog.proxyJump")}</div>
+                  <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
+                    {jumpHostId
+                      ? (selectedJumpHost?.subtitle ??
+                        selectedJumpHost?.connection.name ??
+                        t("dialog.selectProxyJump"))
+                      : t("dialog.noProxyJump")}
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <Label className="text-[0.6875rem] text-muted-foreground">
+                    {t("dialog.selectProxyJump")}
+                  </Label>
+                  <div className="mt-1">
+                    <ConnectionCombobox
+                      value={jumpHostId}
+                      options={jumpHostOptions}
+                      placeholder={t("dialog.noProxyJump")}
+                      searchPlaceholder={t("network.searchConnections")}
+                      emptyText={t("dialog.proxyJumpSshOnly")}
+                      missingSelectionLabel={t("network.connectionMissing")}
+                      clearLabel={t("dialog.noProxyJump")}
+                      onChange={setJumpHostId}
                     />
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </TabsContent>
+
+            <TabsContent value="two-factor" className="mt-3 border-0 outline-none">
+              <div className="rounded-lg border bg-accent/25 p-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-medium">{t("dialog.twoFactorAuth")}</div>
+                  <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
+                    {otpId && selectedOtpLabel
+                      ? `${selectedOtpLabel.issuer} (${selectedOtpLabel.username})`
+                      : t("dialog.noOtp")}
+                  </p>
+                </div>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <Label className="text-[0.6875rem] text-muted-foreground">
+                      {t("dialog.selectOtp")}
+                    </Label>
+                    <Select
+                      value={otpId || "__none__"}
+                      onValueChange={(value) => {
+                        const id = value === "__none__" ? "" : value;
+                        setOtpId(id);
+                        if (!id) setAutoFillOtp(false);
+                      }}
+                    >
+                      <SelectTrigger className="mt-1 h-8 bg-background/85 text-xs">
+                        <SelectValue placeholder={t("dialog.noOtp")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t("dialog.noOtp")}</SelectItem>
+                        {otpEntries.map((entry) => (
+                          <SelectItem key={entry.id} value={entry.id}>
+                            {entry.issuer} ({entry.username})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="rounded-md border border-dashed bg-background/70 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[0.6875rem] font-medium">{t("dialog.autoFillOtp")}</div>
+                        <div className="text-[0.625rem] text-muted-foreground">
+                          {otpId ? t("dialog.twoFactorAuth") : t("dialog.noOtp")}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={otpId ? autoFillOtp : false}
+                        onCheckedChange={setAutoFillOtp}
+                        disabled={!otpId}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CollapsibleContent>
       </Collapsible>
 
