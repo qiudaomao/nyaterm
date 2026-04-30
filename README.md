@@ -5,7 +5,7 @@
 
 ## Overview
 
-Dragonfly is a desktop client for SSH-centric operations and mixed terminal workflows. It combines a React + Tauri interface with a Rust backend so you can manage remote hosts, local shells, file transfers, authentication, network tooling, session import / export, diagnostics, and protected configuration sync / backup workflows from one workspace.
+Dragonfly is a desktop client for SSH-centric operations and mixed terminal workflows. It combines a React + Tauri interface with a Rust backend so you can manage remote hosts, local shells, file transfers, authentication, network tooling, AI-assisted terminal actions, session import / export, diagnostics, and protected configuration sync / backup workflows from one workspace.
 
 ## Highlights
 
@@ -13,7 +13,8 @@ Dragonfly is a desktop client for SSH-centric operations and mixed terminal work
 
 - SSH, Local Terminal, Telnet, and Serial session support
 - Multi-tab workspace with horizontal and vertical pane splits
-- Saved connections with folders, icons, duplication, reconnect, and import tools
+- Saved connections with folders, icons, duplication, reconnect, import, and encrypted config restore
+- Left / right activity bars for file explorer, network, security, sync & backup, AI assistant, command history, and resource monitoring
 - Child windows for settings, new-session, quick-command, and auto-upload flows
 - Tray support with optional minimize-to-tray behavior on window close
 
@@ -29,17 +30,24 @@ Dragonfly is a desktop client for SSH-centric operations and mixed terminal work
 
 ### Remote operations
 
-- Built-in SFTP file explorer with upload, download, rename, move, delete, symlink, and properties
+- Built-in SFTP file explorer with upload, download, rename, move, delete, symlink, create-file, and properties actions
 - Folder upload, multi-select actions, editable path bar, and manual / automatic sync with terminal cwd
-- Open remote files in a local editor and upload changes back through the watcher flow
+- Open remote files in a local editor and upload changes back through the watcher-driven auto-upload flow
 - Windows support for dragging local files or folders directly into the file explorer to upload
 - Quick Commands with categories, colors, icons, execution modes, pinning, and variable prompts
+
+### AI assistance
+
+- Side-panel AI assistant for command generation, terminal output explanation, error analysis, and selected-text workflows
+- Model / provider management for built-in providers and custom OpenAI-compatible endpoints
+- Structured command cards with risk levels, approval gates, and optional save-to-quick-command support
+- Reasoning-aware response rendering when providers expose a reasoning channel
 
 ### Security and networking
 
 - Password auth, private keys, host-key verification, and local encrypted credential storage
 - OTP management with TOTP/HOTP, QR import, and SSH auto-fill support
-- Screen lock, master password support, and known-hosts management
+- Screen lock, master password support, and redb-backed known-hosts / secret persistence
 - Proxy configs, SSH jump hosts, and local / remote / dynamic tunnels
 - Diagnostics settings, local log management, and diagnostics bundle export for troubleshooting
 
@@ -65,8 +73,10 @@ Dragonfly is a desktop client for SSH-centric operations and mixed terminal work
 The detailed user docs live in `docs-site/`.
 
 - Product overview: [docs-site/docs/intro.md](docs-site/docs/intro.md)
+- Installation: [docs-site/docs/getting-started/installation.md](docs-site/docs/getting-started/installation.md)
 - Quick start: [docs-site/docs/getting-started/quick-start.md](docs-site/docs/getting-started/quick-start.md)
-- Guides: [docs-site/docs/guide/](docs-site/docs/guide)
+- Session guide: [docs-site/docs/guide/session-types.md](docs-site/docs/guide/session-types.md)
+- Terminal guide: [docs-site/docs/guide/terminal.md](docs-site/docs/guide/terminal.md)
 - File transfer guide: [docs-site/docs/guide/file-transfer.md](docs-site/docs/guide/file-transfer.md)
 - Sync and backup guide: [docs-site/docs/guide/sync-and-backup.md](docs-site/docs/guide/sync-and-backup.md)
 - Development docs: [docs-site/docs/development/](docs-site/docs/development)
@@ -81,6 +91,7 @@ If you want to add screenshots later, these are the recommended stable asset pat
 - `docs-site/static/img/docs/readme/session-types.png` — new-session window showing SSH / Local / Telnet / Serial tabs
 - `docs-site/static/img/docs/readme/terminal-features.png` — gutter, action links, and highlight demo output
 - `docs-site/static/img/docs/readme/network-and-security.png` — proxy / tunnel / OTP related UI
+- `docs-site/static/img/docs/readme/ai-assistant.png` — AI assistant panel with command cards or explanation flow
 
 ## Tech stack
 

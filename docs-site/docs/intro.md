@@ -5,7 +5,7 @@ slug: /
 
 # 项目介绍
 
-**Dragonfly** 是一个围绕远程终端工作流设计的桌面客户端。它以 Tauri + React 构建前端界面，以 Rust 负责 SSH、SFTP、会话管理、隧道、认证、同步备份与配置持久化，让你在同一个工作区中处理远程服务器、本地 shell、串口设备和网络辅助能力。
+**Dragonfly** 是一个围绕远程终端工作流设计的桌面客户端。它以 Tauri + React 构建前端界面，以 Rust 负责 SSH、SFTP、会话管理、隧道、认证、AI 能力、同步备份与配置持久化，让你在同一个工作区中处理远程服务器、本地 shell、串口设备和网络辅助能力。
 
 ## 适合哪些场景
 
@@ -13,7 +13,7 @@ slug: /
 - 在本地终端、Telnet、串口设备之间切换排障
 - 边看终端输出边操作远程文件
 - 为常用运维命令、登录流程和跳板机链路做标准化配置
-- 需要 OTP、录制、资源监控、自动上传、跨设备配置同步或加密备份等增强能力
+- 需要 OTP、录制、资源监控、自动上传、AI 辅助、跨设备配置同步或加密备份等增强能力
 - 想从 Xshell、MobaXterm、WindTerm 或 Dragonfly 备份文件快速迁移现有配置
 
 ## 核心能力
@@ -31,7 +31,7 @@ Dragonfly 不只支持 SSH，还支持：
 
 - 多标签页管理多个会话
 - 标签页内支持**横向/纵向分屏**
-- 左右活动栏可放置文件浏览器、网络、Security/Auth、会话列表、命令历史、资源监控等面板
+- 左右活动栏可放置文件浏览器、网络、Security/Auth、云同步与备份、设置、AI 助手、会话列表、命令历史、资源监控等面板
 - 底部辅助区可承载快捷命令、串口发送、录制与锁屏入口
 - 设置、新建连接、快捷命令、自动上传提示均使用独立子窗口，减少主工作区干扰
 - 支持托盘最小化，让窗口关闭动作可以转为后台驻留
@@ -50,10 +50,18 @@ Dragonfly 不只支持 SSH，还支持：
 ### 远程文件与传输队列
 
 - SSH 会话下内置 SFTP 文件浏览器
-- 上传、下载、重命名、移动、删除、属性查看、新建符号链接
+- 上传、下载、重命名、移动、删除、属性查看、新建文件 / 文件夹 / 符号链接
 - 传输队列支持暂停、继续、取消、失败重试、断点续传、时间戳保留
 - 在本地编辑下载的远程文件后，可通过 watcher 流程快速上传回远端
-- 可为录制文件单独设置保存目录，便于整理排障素材
+- Windows 下支持把本地文件或文件夹直接拖进文件浏览器上传
+
+### AI 助手与自动化辅助
+
+- 右侧活动栏内置 **AI Assistant** 面板
+- 可从终端输出、选中文本、文件操作或手动输入发起 AI 请求
+- 支持命令生成、错误分析、输出解释、修复建议等典型场景
+- 可配置内置 provider 与自定义 **OpenAI Compatible** provider
+- 支持结构化命令卡片、风险等级控制、审批后执行和保存为快捷命令
 
 ### 安全、迁移与网络能力
 
@@ -63,7 +71,7 @@ Dragonfly 不只支持 SSH，还支持：
 - 锁屏与主密码能力
 - 支持导入 **Xshell / MobaXterm / WindTerm** 会话
 - 支持导入 / 导出 Dragonfly 自身的加密 `.dgfy` 配置备份
-- 可导出诊断包，便于问题排查与支持协作
+- 可打开日志目录并导出诊断包，便于问题排查与支持协作
 
 ### 云同步与加密备份
 
@@ -76,12 +84,14 @@ Dragonfly 不只支持 SSH，还支持：
 
 如果你是第一次使用，建议按下面顺序阅读：
 
-1. [快速开始](./getting-started/quick-start)
-2. [会话类型](./guide/session-types)
-3. [SSH 连接管理](./guide/ssh-connection)
-4. [工作区与布局](./guide/layout-and-workspace)
-5. [终端功能](./guide/terminal)
-6. [SFTP 文件传输](./guide/file-transfer)
-7. [代理、跳板机与隧道](./guide/tunnels-and-proxy)
-8. [OTP 与认证](./guide/otp-and-auth)
-9. [同步与备份](./guide/sync-and-backup)
+1. [安装指南](./getting-started/installation)
+2. [快速开始](./getting-started/quick-start)
+3. [会话类型](./guide/session-types)
+4. [SSH 连接管理](./guide/ssh-connection)
+5. [工作区与布局](./guide/layout-and-workspace)
+6. [终端功能](./guide/terminal)
+7. [SFTP 文件传输](./guide/file-transfer)
+8. [代理、跳板机与隧道](./guide/tunnels-and-proxy)
+9. [OTP 与认证](./guide/otp-and-auth)
+10. [安全功能](./guide/security)
+11. [同步与备份](./guide/sync-and-backup)

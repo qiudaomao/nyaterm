@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # 后端开发指南
 
-后端代码位于 `src-tauri/src/`，使用 Rust 编写，是 Dragonfly 的运行时核心：会话管理、SSH/SFTP、录制、翻译、隧道、认证、同步备份、导入导出与配置持久化都在这里落地。
+后端代码位于 `src-tauri/src/`，使用 Rust 编写，是 Dragonfly 的运行时核心：会话管理、SSH/SFTP、录制、翻译、AI、隧道、认证、同步备份、导入导出与配置持久化都在这里落地。
 
 ## 命令入口与模块组织
 
@@ -33,7 +33,8 @@ src-tauri/src/cmd/
 ├── stats.rs
 ├── translate.rs
 ├── tunnel.rs
-└── watcher.rs
+├── watcher.rs
+└── ai.rs
 ```
 
 如果你要新增一个 command，通常需要：
@@ -85,6 +86,7 @@ src-tauri/src/cmd/
 - `recording.rs` — 会话录制
 - `watcher.rs` — 本地文件监听与自动上传
 - `importer.rs` — 外部客户端会话导入
+- `ai.rs` — AI provider 调用、流式输出和命令卡片生成
 
 ## SSH 模块
 
@@ -136,6 +138,22 @@ src-tauri/src/cmd/
 - `core/watcher.rs`
 - 前端 `FileUploadPage.tsx`
 
+## AI runtime
+
+`src-tauri/src/core/ai.rs` 负责 AI 功能的后端核心逻辑，包括：
+
+- provider 请求与模型能力适配
+- 流式文本输出与推理内容捕获
+- 结构化 JSON 输出解析
+- 命令卡片生成、风险等级和执行审计
+- AI 历史与审计记录持久化
+
+如果你修改 AI provider 行为或响应解析，重点留意：
+
+- 推理内容与主文本可能来自不同通道
+- 某些模型会把主要答案放在 reasoning 中
+- 前端依赖结构化命令卡片和风险字段做执行审批
+
 ## Cloud sync / portable snapshot
 
 `src-tauri/src/core/cloud_sync.rs` 负责这条能力线的运行时行为，包括：
@@ -165,7 +183,7 @@ src-tauri/src/cmd/
 - 哪些数据只应该保留在本机
 - 备份快照和同步快照的范围差异
 
-当前实现里，portable snapshot 会覆盖连接、凭据配置、OTP、代理、隧道、快捷命令和大部分应用设置；但设备本地的运行态 UI 状态不会被无差别漫游。
+当前实现里，portable snapshot 会覆盖连接、凭据配置、OTP、代理、隧道、快捷命令、大部分应用设置，以及必要的文本密钥材料；但设备本地的运行态 UI 状态不会被无差别漫游。
 
 ## 导入、导出与诊断
 
@@ -180,11 +198,11 @@ src-tauri/src/cmd/
 
 ## 配置与加密
 
-配置和记录保存在 `~/.dragonfly/dragonfly.redb`，主要由 `src-tauri/src/storage.rs` 和 `src-tauri/src/config/` 管理。首次启动时会把旧版 `.dragonfly` JSON / 文本文件迁入 redb，但不会继续双写旧文件。
+配置和记录保存在 `~/.dragonfly/dragonfly.redb`，主要由 `src-tauri/src/storage.rs` 和 `src-tauri/src/config/` 管理。首次启动时会把旧版 `.dragonfly` JSON / 文本文件迁入 redb；迁移完成后不会继续把旧文件当作主存储。
 
 主要 redb 文档包括：
 
-- JSON 文档：`settings`、`sessions`、`keys`、`passwords`、`otp`、`quick-command`、`tunnels`、`proxies`、`history`、`cloud-sync-state`
+- JSON 文档：`settings`、`sessions`、`keys`、`passwords`、`otp`、`quick-command`、`tunnels`、`proxies`、`history`、`cloud-sync`、`cloud-sync-state`、`ai-history`、`ai-audit`
 - 文本文档：`known_hosts`、`master.key`
 
 敏感字段会在写盘前加密，因此新增配置时要确认是否属于敏感数据边界。
@@ -211,5 +229,6 @@ src-tauri/src/cmd/
 | `cloud-sync-status-changed` | 云同步 / 备份状态变化 |
 | `cloud-sync-history-changed` | 同步 / 备份历史变化 |
 | `cloud-sync-conflict` | 云同步冲突预览 |
+| AI 流式事件 | AI 响应、推理内容与执行状态 |
 
 设计新后端能力时，优先考虑是否应该通过已有事件流对前端暴露，而不是额外引入新的轮询接口。

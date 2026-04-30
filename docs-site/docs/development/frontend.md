@@ -57,6 +57,7 @@ src/
 - 已保存连接 / 分组刷新
 - 应用设置与 UI 设置
 - 启动恢复工作区
+- 左右活动栏和底部区域布局
 
 ### ChildAppProvider
 
@@ -102,8 +103,9 @@ const sessionId = await invoke<string>('create_ssh_session', {
 - `cloud-sync-status-changed`
 - `cloud-sync-history-changed`
 - `cloud-sync-conflict`
+- AI 相关流式事件
 
-终端、文件浏览器、资源监控、传输队列，以及 Sync & Backup 的状态 / 历史 / 冲突提示都建立在这些事件之上。
+终端、文件浏览器、资源监控、传输队列、AI Assistant，以及同步与备份的状态 / 历史 / 冲突提示都建立在这些事件之上。
 
 ## 工作区模型
 
@@ -141,6 +143,18 @@ const sessionId = await invoke<string>('create_ssh_session', {
 
 如果你改的是终端表现层，这通常是第一落点。
 
+## AI Assistant 前端落点
+
+如果你改的是 AI 相关 UI，优先查看这些文件：
+
+- `src/components/panel/AIAssistantPanel.tsx` — 主 AI 面板、会话列表、消息渲染、命令卡片、执行审批
+- `src/components/settings/AiTab.tsx` — AI 总开关、provider、模型、风险与 agent 配置
+- `src/lib/aiEvents.ts` — 从终端、文件、快捷命令等入口打开 AI Assistant 的事件桥
+- `src/lib/aiSettings.ts` — provider / model 默认值、风险规则和模型发现工具
+- `src/components/app/AppPanelContent.tsx` — AI 面板在右侧栏中的挂载方式
+
+这条链路和当前活跃会话耦合较深，改动时要留意 pane / connection 上下文、模型可用性和执行审批状态。
+
 ## Sync & Backup 前端落点
 
 如果你改的是同步与备份相关 UI，优先查看这些文件：
@@ -148,7 +162,7 @@ const sessionId = await invoke<string>('create_ssh_session', {
 - `src/pages/SettingsPage.tsx` — 设置页 tab 结构、保存拦截和主密码前置逻辑
 - `src/components/settings/SyncBackupTab.tsx` — provider 配置、自动策略、手动操作、远程备份与冲突处理
 - `src/components/panel/SyncBackupHistoryPanel.tsx` — 工作区历史面板与冲突快速处理入口
-- `src/App.tsx` — Sync & Backup 面板在主工作区中的接入方式
+- `src/App.tsx` — 云同步与备份面板在主工作区中的接入方式
 - `src/lib/cloudSync.ts` — 前端默认值、格式化和 provider 校验工具
 
 这些文件之间通过设置状态、Tauri commands 和 cloud-sync 事件一起驱动完整体验。
