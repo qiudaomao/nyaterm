@@ -24,10 +24,24 @@ type SummaryCard = {
   description: string;
 };
 
+type DownloadPlatformKey =
+  | 'windows-x86_64'
+  | 'windows-aarch64'
+  | 'linux-x86_64'
+  | 'linux-aarch64'
+  | 'darwin-x86_64'
+  | 'darwin-aarch64';
+
 type DownloadPlatform = {
-  key: string;
+  key: DownloadPlatformKey;
   href: string;
 };
+
+type LatestDownloadManifest = {
+  platforms?: Partial<Record<DownloadPlatformKey, {url?: string}>>;
+};
+
+const latestDownloadManifestUrl = 'https://downloads.nyaterm.app/latest.json';
 
 const downloadPlatforms: DownloadPlatform[] = [
   {
@@ -35,8 +49,16 @@ const downloadPlatforms: DownloadPlatform[] = [
     href: 'https://nyaterm.app/download/windows-x86_64',
   },
   {
+    key: 'windows-aarch64',
+    href: 'https://nyaterm.app/download/windows-aarch64',
+  },
+  {
     key: 'linux-x86_64',
     href: 'https://nyaterm.app/download/linux-x86_64',
+  },
+  {
+    key: 'linux-aarch64',
+    href: 'https://nyaterm.app/download/linux-aarch64',
   },
   {
     key: 'darwin-x86_64',
@@ -70,12 +92,51 @@ function detectDownloadPlatform(): DownloadPlatform {
   return downloadPlatforms[0];
 }
 
-function getDownloadPlatformLabel(key: DownloadPlatform['key']) {
+function getDownloadPlatformByKey(key: DownloadPlatformKey, platforms: DownloadPlatform[] = downloadPlatforms) {
+  return platforms.find((item) => item.key === key) ?? platforms[0];
+}
+
+function isArmArchitecture(architecture: string) {
+  return architecture.includes('arm') || architecture.includes('aarch64');
+}
+
+function getPlatformKeyFromHints(os: string, architecture: string): DownloadPlatformKey {
+  const normalizedOs = os.toLowerCase();
+  const normalizedArchitecture = architecture.toLowerCase();
+  const isArm = isArmArchitecture(normalizedArchitecture);
+
+  if (normalizedOs.includes('mac')) {
+    return isArm ? 'darwin-aarch64' : 'darwin-x86_64';
+  }
+
+  if (normalizedOs.includes('linux')) {
+    return isArm ? 'linux-aarch64' : 'linux-x86_64';
+  }
+
+  if (normalizedOs.includes('win')) {
+    return isArm ? 'windows-aarch64' : 'windows-x86_64';
+  }
+
+  return 'windows-x86_64';
+}
+
+function getDownloadPlatformsFromManifest(manifest: LatestDownloadManifest): DownloadPlatform[] {
+  return downloadPlatforms.map((platform) => {
+    const href = manifest.platforms?.[platform.key]?.url;
+    return href ? {...platform, href} : platform;
+  });
+}
+
+function getDownloadPlatformLabel(key: DownloadPlatformKey) {
   switch (key) {
     case 'windows-x86_64':
       return translate({message: 'Windows x86_64'});
+    case 'windows-aarch64':
+      return translate({message: 'Windows ARM64'});
     case 'linux-x86_64':
       return translate({message: 'Linux x86_64'});
+    case 'linux-aarch64':
+      return translate({message: 'Linux ARM64'});
     case 'darwin-x86_64':
       return translate({message: 'macOS Intel'});
     case 'darwin-aarch64':
@@ -86,11 +147,13 @@ function getDownloadPlatformLabel(key: DownloadPlatform['key']) {
 }
 
 function DownloadButton() {
-  const [platform, setPlatform] = useState<DownloadPlatform>(downloadPlatforms[0]);
+  const [platforms, setPlatforms] = useState<DownloadPlatform[]>(downloadPlatforms);
+  const [platformKey, setPlatformKey] = useState<DownloadPlatformKey>(downloadPlatforms[0].key);
+  const platform = getDownloadPlatformByKey(platformKey, platforms);
 
   useEffect(() => {
     const detectedPlatform = detectDownloadPlatform();
-    setPlatform(detectedPlatform);
+    setPlatformKey(detectedPlatform.key);
 
     const userAgentData = (
       navigator as Navigator & {
@@ -108,16 +171,38 @@ function DownloadButton() {
         const detectedOs = values.platform?.toLowerCase() ?? userAgentData.platform?.toLowerCase() ?? '';
         const architecture = values.architecture?.toLowerCase() ?? '';
 
-        if (detectedOs.includes('mac') && ['arm', 'arm64', 'aarch64'].includes(architecture)) {
-          const appleSilicon = downloadPlatforms.find((item) => item.key === 'darwin-aarch64');
-          if (appleSilicon) {
-            setPlatform(appleSilicon);
-          }
+        if (detectedOs) {
+          setPlatformKey(getPlatformKeyFromHints(detectedOs, architecture));
         }
       })
       .catch(() => {
         // The synchronous detector above is sufficient when high entropy hints are unavailable.
       });
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(latestDownloadManifestUrl, {signal: controller.signal})
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to fetch latest download manifest: ${response.status}`);
+        }
+
+        return response.json() as Promise<LatestDownloadManifest>;
+      })
+      .then((manifest) => {
+        setPlatforms(getDownloadPlatformsFromManifest(manifest));
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+
+        console.warn('Failed to load latest download manifest.', error);
+      });
+
+    return () => controller.abort();
   }, []);
 
   return (
@@ -131,7 +216,7 @@ function DownloadButton() {
           <span />
         </summary>
         <div className={styles.downloadMenuList}>
-          {downloadPlatforms.map((item) => (
+          {platforms.map((item) => (
             <a key={item.key} className={styles.downloadMenuItem} href={item.href}>
               {getDownloadPlatformLabel(item.key)}
             </a>
