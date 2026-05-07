@@ -109,6 +109,9 @@ const BUILTIN_PATTERNS = {
   duration: [
     "\\b[-+]?\\d+(?:\\.\\d+)?\\s*(?:ns|µs|us|ms|sec|mins?|minutes|hrs?|hours|days|weeks|months|years)\\b",
   ],
+  prompt: [
+    "[$#](?=\\s)",
+  ],
 } as const;
 
 // ── Color sets ───────────────────────────────────────────────────────────────
@@ -134,6 +137,7 @@ const DARK_RULE_COLORS = {
   version: "#ff9e64",
   size: "#2ac3de",
   duration: "#f1fa8c",
+  prompt: "#f92672",
 };
 
 /** For light terminal backgrounds (github-light, solarized-light, catppuccin-latte …) */
@@ -155,6 +159,7 @@ const LIGHT_RULE_COLORS = {
   version: "#b04a00",
   size: "#007197",
   duration: "#859900",
+  prompt: "#e00862",
 };
 
 // ── Built-in rule factory ────────────────────────────────────────────────────
@@ -280,6 +285,13 @@ export function getBuiltinRules(isDark: boolean): ResolvedHighlightRule[] {
       name: "Number",
       patterns: [...BUILTIN_PATTERNS.number],
       color: c.number,
+      enabled: true,
+    },
+    {
+      id: "builtin-prompt",
+      name: "Prompt",
+      patterns: [...BUILTIN_PATTERNS.prompt],
+      color: c.prompt,
       enabled: true,
     },
     {
