@@ -70,6 +70,9 @@ Example single-test command:
   - `TunnelManager`
   - `RecordingManager`
   - `PendingAuthManager`
+  - `QuickCommandsStore`
+  - `CloudSyncManager`
+- Tauri commands are registered centrally in `src-tauri/src/lib.rs`; newer backend capability areas now include app, backup, clipboard, cloud sync, logging, and AI in addition to sessions/SFTP/settings/importers.
 - `src-tauri/src/core/session.rs` contains `SessionManager`, which is the central registry for active sessions, command routing, command history, fuzzy history search, and session lifecycle events.
 - Session implementations live under `src-tauri/src/core/`:
   - `ssh/` for SSH transport, auth, OSC/CWD tracking, tunnels, and SFTP
@@ -78,31 +81,29 @@ Example single-test command:
   - `serial.rs` for serial sessions
   - `recording.rs` for terminal recording
   - `watcher.rs` for file-watch driven flows
-- Backend session I/O is event-driven. The Rust side emits session-specific and app-wide events such as `terminal-output-{id}`, `cwd-changed-{id}`, `session-closed-{id}`, `sessions-changed`, `connections-changed`, `command-history-changed`, `transfer-event`, and `otp-request`.
+  - `importer.rs` for Xshell / MobaXterm / WindTerm import
+  - `cloud_sync.rs` for sync/backup runtime and conflict events
+  - `portable_snapshot.rs` for defining what sync/backup payloads include
+  - `ai.rs` for provider calls, streaming responses, structured command cards, and audit/history storage
+- Backend session I/O is event-driven. The Rust side emits session-specific and app-wide events such as `terminal-output-{id}`, `cwd-changed-{id}`, `session-closed-{id}`, `sessions-changed`, `connections-changed`, `command-history-changed`, `transfer-event`, `otp-request`, `cloud-sync-status-changed`, `cloud-sync-history-changed`, and `cloud-sync-conflict`.
 
 ### SSH / auth / transfer details
 - SSH logic is split across `src-tauri/src/core/ssh/`:
-  - `client.rs` handles russh client setup, keepalive config, proxy-aware connection setup, and TOFU-style `known_hosts` verification stored under `~/.nyaterm/known_hosts`
+  - `client.rs` handles russh client setup, keepalive config, proxy-aware connection setup, and TOFU-style `known_hosts` verification
   - `auth.rs` handles saved auth loading plus keyboard-interactive / OTP flows through `PendingAuthManager` and the `otp-request` event
   - `io.rs` streams terminal output and emits CWD updates
   - `sftp.rs` implements remote file operations and emits transfer progress events consumed by `TransferContext`
+  - `tunnel.rs` manages local / remote / dynamic SSH tunnel behavior
 - SFTP commands exposed to the frontend are in `src-tauri/src/cmd/sftp.rs`; the file explorer and transfer UI sit on top of these commands and events.
+- File watcher / auto-upload flows bridge backend and child windows: remote files are downloaded locally, watched by `src-tauri/src/core/watcher.rs`, then uploaded back through the auto-upload UI flow.
 
 ### Persistence model
-- App data is stored under `~/.nyaterm/` through `src-tauri/src/config/`.
-- Important persisted files include:
-  - `settings.json`
-  - `sessions.json`
-  - `keys.json`
-  - `passwords.json`
-  - `otp.json`
-  - `quick-command.json`
-  - `tunnels.json`
-  - `proxies.json`
-  - `history.json`
-  - `known_hosts`
-- Sensitive values in keys/passwords/OTP storage are encrypted before being written.
-- When changing settings or workspace persistence, update both the frontend defaults (`AppContext` / `ChildAppProvider`) and the Rust persistence/migration code (`src-tauri/src/config/settings/mod.rs` and `src-tauri/src/config/ui.rs`).
+- App data lives under `~/.nyaterm/`, but the primary store is now `~/.nyaterm/nyaterm.redb` rather than a set of standalone JSON files.
+- Important redb JSON documents include `settings`, `sessions`, `keys`, `passwords`, `otp`, `quick-command`, `tunnels`, `proxies`, `history`, `cloud-sync`, `cloud-sync-state`, `ai-history`, and `ai-audit`.
+- Important text documents stored through the same layer include `known_hosts` and `master.key`.
+- Sensitive values are encrypted before being written; cloud-sync credentials and other secret-bearing config need to stay within the existing crypto/storage helpers.
+- When changing settings or workspace persistence, update both the frontend defaults (`AppContext` / `ChildAppProvider`) and the Rust persistence/migration code (`src-tauri/src/config/settings/mod.rs`, `src-tauri/src/config/ui.rs`, and related `src-tauri/src/storage.rs` / cloud-sync snapshot code when applicable).
+- The app also contains legacy Dragonfly migration paths; if you change persistence formats, check that import/migration behavior still makes sense for `~/.dragonfly/` data.
 
 ## Project-specific guidance
 
@@ -112,6 +113,7 @@ Example single-test command:
   - `src/i18n/locales/en.json`
   - `src/i18n/locales/zh-CN.json`
 - The root app currently has no dedicated frontend unit test runner configured in `package.json`; the automated tests in this repo are Rust tests under `src-tauri/` and `src-tauri/crates/otp/`.
+- Frontend linting includes a no-`console` check before Biome (`pnpm lint` runs `scripts/check-no-console.mjs` and `biome check src/`).
 - Vite uses the `@` alias for `src/`.
 - Tauri dev/build behavior is configured in `src-tauri/tauri.conf.json`; the dev server runs on port `1420` with HMR on `1421`.
 - There is a separate Docusaurus docs app in `docs-site/`. The most useful repo docs for implementation context are in `docs-site/docs/development/` (`architecture.md`, `frontend.md`, `backend.md`, `setup.md`, `contributing.md`).
