@@ -6,6 +6,9 @@ export interface TerminalColors {
   foreground: string;
   cursor: string;
   selectionBackground: string;
+  lineHighlight: string;
+  findMatchBackground: string;
+  findMatchBorder: string;
   black: string;
   red: string;
   green: string;
@@ -38,6 +41,14 @@ export interface ThemeColors {
   textDimmed: string;
   primary: string;
   primaryHover: string;
+  onPrimary: string;
+  focusRing: string;
+  danger: string;
+  dangerHover: string;
+  success: string;
+  warning: string;
+  link: string;
+  shadow: string;
   scrollThumb: string;
   accent: string;
   // Terminal 16-color ANSI palette
@@ -55,7 +66,7 @@ export interface Theme {
 }
 
 // ── GitHub Dark ────────────────────────────────────────────────────────────
-const githubDark: Theme = {
+const githubDark = {
   id: "github-dark",
   name: "GitHub Dark",
   label: "GitHub",
@@ -73,6 +84,14 @@ const githubDark: Theme = {
     textDimmed: "#6e7681",
     primary: "#3b82f6",
     primaryHover: "#2563eb",
+    onPrimary: "#0d1117",
+    focusRing: "#58a6ff",
+    danger: "#ff7b72",
+    dangerHover: "#f85149",
+    success: "#3fb950",
+    warning: "#d29922",
+    link: "#58a6ff",
+    shadow: "rgb(1 4 9 / 0.45)",
     scrollThumb: "#30363d",
     accent: "#58a6ff",
     terminal: {
@@ -80,6 +99,9 @@ const githubDark: Theme = {
       foreground: "#c9d1d9",
       cursor: "#c9d1d9",
       selectionBackground: "#264f78",
+      lineHighlight: "#161b22",
+      findMatchBackground: "rgba(210, 153, 34, 0.35)",
+      findMatchBorder: "#d29922",
       black: "#484f58",
       red: "#ff7b72",
       green: "#3fb950",
@@ -98,10 +120,10 @@ const githubDark: Theme = {
       brightWhite: "#f0f6fc",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Dracula ────────────────────────────────────────────────────────────────
-const dracula: Theme = {
+const dracula = {
   id: "dracula",
   name: "Dracula",
   label: "Dracula",
@@ -119,6 +141,14 @@ const dracula: Theme = {
     textDimmed: "#6272a4",
     primary: "#bd93f9",
     primaryHover: "#a77bfa",
+    onPrimary: "#282a36",
+    focusRing: "#bd93f9",
+    danger: "#ff5555",
+    dangerHover: "#ff3f3f",
+    success: "#50fa7b",
+    warning: "#f1fa8c",
+    link: "#8be9fd",
+    shadow: "rgb(0 0 0 / 0.4)",
     scrollThumb: "#44475a",
     accent: "#ff79c6",
     terminal: {
@@ -126,6 +156,9 @@ const dracula: Theme = {
       foreground: "#f8f8f2",
       cursor: "#f8f8f2",
       selectionBackground: "#44475a",
+      lineHighlight: "#303341",
+      findMatchBackground: "rgba(241, 250, 140, 0.32)",
+      findMatchBorder: "#f1fa8c",
       black: "#21222c",
       red: "#ff5555",
       green: "#50fa7b",
@@ -144,10 +177,10 @@ const dracula: Theme = {
       brightWhite: "#ffffff",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Nord ───────────────────────────────────────────────────────────────────
-const nord: Theme = {
+const nord = {
   id: "nord",
   name: "Nord",
   label: "Nord",
@@ -162,9 +195,17 @@ const nord: Theme = {
     border: "#4c566a",
     text: "#d8dee9",
     textMuted: "#81a1c1",
-    textDimmed: "#616e88",
+    textDimmed: "#7b88a1",
     primary: "#88c0d0",
     primaryHover: "#7bb8c9",
+    onPrimary: "#2e3440",
+    focusRing: "#88c0d0",
+    danger: "#bf616a",
+    dangerHover: "#a94f59",
+    success: "#a3be8c",
+    warning: "#ebcb8b",
+    link: "#81a1c1",
+    shadow: "rgb(15 17 21 / 0.36)",
     scrollThumb: "#4c566a",
     accent: "#5e81ac",
     terminal: {
@@ -172,6 +213,9 @@ const nord: Theme = {
       foreground: "#d8dee9",
       cursor: "#d8dee9",
       selectionBackground: "#434c5e",
+      lineHighlight: "#343b49",
+      findMatchBackground: "rgba(235, 203, 139, 0.3)",
+      findMatchBorder: "#ebcb8b",
       black: "#3b4252",
       red: "#bf616a",
       green: "#a3be8c",
@@ -190,10 +234,10 @@ const nord: Theme = {
       brightWhite: "#eceff4",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Monokai Pro ────────────────────────────────────────────────────────────
-const monokaiPro: Theme = {
+const monokaiPro = {
   id: "monokai-pro",
   name: "Monokai Pro",
   label: "Monokai",
@@ -211,6 +255,14 @@ const monokaiPro: Theme = {
     textDimmed: "#727072",
     primary: "#ffd866",
     primaryHover: "#e6c25e",
+    onPrimary: "#1d2021",
+    focusRing: "#ffd866",
+    danger: "#ff6188",
+    dangerHover: "#f24d78",
+    success: "#a9dc76",
+    warning: "#ffd866",
+    link: "#78dce8",
+    shadow: "rgb(0 0 0 / 0.42)",
     scrollThumb: "#49474c",
     accent: "#78dce8",
     terminal: {
@@ -218,6 +270,9 @@ const monokaiPro: Theme = {
       foreground: "#fcfcfa",
       cursor: "#fcfcfa",
       selectionBackground: "#49474c",
+      lineHighlight: "#343136",
+      findMatchBackground: "rgba(255, 216, 102, 0.28)",
+      findMatchBorder: "#ffd866",
       black: "#403e41",
       red: "#ff6188",
       green: "#a9dc76",
@@ -236,10 +291,10 @@ const monokaiPro: Theme = {
       brightWhite: "#ffffff",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Solarized Light ────────────────────────────────────────────────────────
-const solarizedLight: Theme = {
+const solarizedLight = {
   id: "solarized-light",
   name: "Solarized Light",
   label: "Solarized",
@@ -254,9 +309,17 @@ const solarizedLight: Theme = {
     border: "#d3cbb7",
     text: "#586e75",
     textMuted: "#93a1a1",
-    textDimmed: "#b0b8b8",
+    textDimmed: "#839496",
     primary: "#268bd2",
     primaryHover: "#1e7abc",
+    onPrimary: "#002b36",
+    focusRing: "#268bd2",
+    danger: "#dc322f",
+    dangerHover: "#bd2c2a",
+    success: "#859900",
+    warning: "#b58900",
+    link: "#268bd2",
+    shadow: "rgb(88 110 117 / 0.18)",
     scrollThumb: "#d3cbb7",
     accent: "#2aa198",
     terminal: {
@@ -264,6 +327,9 @@ const solarizedLight: Theme = {
       foreground: "#586e75",
       cursor: "#586e75",
       selectionBackground: "#eee8d5",
+      lineHighlight: "#f5efdc",
+      findMatchBackground: "rgba(181, 137, 0, 0.22)",
+      findMatchBorder: "#b58900",
       black: "#073642",
       red: "#dc322f",
       green: "#859900",
@@ -271,7 +337,7 @@ const solarizedLight: Theme = {
       blue: "#268bd2",
       magenta: "#d33682",
       cyan: "#2aa198",
-      white: "#eee8d5",
+      white: "#657b83",
       brightBlack: "#002b36",
       brightRed: "#ea6052",
       brightGreen: "#9eb300",
@@ -279,13 +345,13 @@ const solarizedLight: Theme = {
       brightBlue: "#45a5f1",
       brightMagenta: "#e94b99",
       brightCyan: "#3bc6bb",
-      brightWhite: "#fdf6e3",
+      brightWhite: "#586e75",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Catppuccin Mocha ──────────────────────────────────────────────────────
-const catppuccinMocha: Theme = {
+const catppuccinMocha = {
   id: "catppuccin-mocha",
   name: "Catppuccin Mocha",
   label: "Catppuccin",
@@ -303,6 +369,14 @@ const catppuccinMocha: Theme = {
     textDimmed: "#6c7086",
     primary: "#cba6f7",
     primaryHover: "#b48bf2",
+    onPrimary: "#1e1e2e",
+    focusRing: "#cba6f7",
+    danger: "#f38ba8",
+    dangerHover: "#e56f8e",
+    success: "#a6e3a1",
+    warning: "#f9e2af",
+    link: "#89b4fa",
+    shadow: "rgb(0 0 0 / 0.4)",
     scrollThumb: "#45475a",
     accent: "#f5c2e7",
     terminal: {
@@ -310,6 +384,9 @@ const catppuccinMocha: Theme = {
       foreground: "#cdd6f4",
       cursor: "#f5e0dc",
       selectionBackground: "#45475a",
+      lineHighlight: "#252538",
+      findMatchBackground: "rgba(249, 226, 175, 0.28)",
+      findMatchBorder: "#f9e2af",
       black: "#45475a",
       red: "#f38ba8",
       green: "#a6e3a1",
@@ -319,19 +396,19 @@ const catppuccinMocha: Theme = {
       cyan: "#94e2d5",
       white: "#bac2de",
       brightBlack: "#585b70",
-      brightRed: "#f38ba8",
-      brightGreen: "#a6e3a1",
-      brightYellow: "#f9e2af",
-      brightBlue: "#89b4fa",
-      brightMagenta: "#f5c2e7",
-      brightCyan: "#94e2d5",
-      brightWhite: "#a6adc8",
+      brightRed: "#f5a0b7",
+      brightGreen: "#b6f0b2",
+      brightYellow: "#fbe8c0",
+      brightBlue: "#9cc5ff",
+      brightMagenta: "#f7cfed",
+      brightCyan: "#a6eee2",
+      brightWhite: "#cdd6f4",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Tokyo Night ───────────────────────────────────────────────────────────
-const tokyoNight: Theme = {
+const tokyoNight = {
   id: "tokyo-night",
   name: "Tokyo Night",
   label: "Tokyo",
@@ -349,6 +426,14 @@ const tokyoNight: Theme = {
     textDimmed: "#565f89",
     primary: "#7aa2f7",
     primaryHover: "#6690e6",
+    onPrimary: "#1a1b26",
+    focusRing: "#7aa2f7",
+    danger: "#f7768e",
+    dangerHover: "#e9667d",
+    success: "#9ece6a",
+    warning: "#e0af68",
+    link: "#7dcfff",
+    shadow: "rgb(0 0 0 / 0.42)",
     scrollThumb: "#3b4261",
     accent: "#bb9af7",
     terminal: {
@@ -356,6 +441,9 @@ const tokyoNight: Theme = {
       foreground: "#a9b1d6",
       cursor: "#c0caf5",
       selectionBackground: "#33467c",
+      lineHighlight: "#202236",
+      findMatchBackground: "rgba(224, 175, 104, 0.3)",
+      findMatchBorder: "#e0af68",
       black: "#414868",
       red: "#f7768e",
       green: "#9ece6a",
@@ -365,19 +453,19 @@ const tokyoNight: Theme = {
       cyan: "#7dcfff",
       white: "#c0caf5",
       brightBlack: "#565f89",
-      brightRed: "#f7768e",
-      brightGreen: "#9ece6a",
-      brightYellow: "#e0af68",
-      brightBlue: "#7aa2f7",
-      brightMagenta: "#bb9af7",
-      brightCyan: "#7dcfff",
-      brightWhite: "#c0caf5",
+      brightRed: "#ff8ea3",
+      brightGreen: "#b9f27c",
+      brightYellow: "#f4c980",
+      brightBlue: "#8db8ff",
+      brightMagenta: "#c7a9ff",
+      brightCyan: "#9ae6ff",
+      brightWhite: "#d5dcff",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── One Dark Pro ──────────────────────────────────────────────────────────
-const oneDarkPro: Theme = {
+const oneDarkPro = {
   id: "one-dark-pro",
   name: "One Dark Pro",
   label: "One Dark",
@@ -395,6 +483,14 @@ const oneDarkPro: Theme = {
     textDimmed: "#5c6370",
     primary: "#61afef",
     primaryHover: "#519fd9",
+    onPrimary: "#282c34",
+    focusRing: "#61afef",
+    danger: "#e06c75",
+    dangerHover: "#cf5b64",
+    success: "#98c379",
+    warning: "#e5c07b",
+    link: "#61afef",
+    shadow: "rgb(0 0 0 / 0.38)",
     scrollThumb: "#3e4451",
     accent: "#c678dd",
     terminal: {
@@ -402,6 +498,9 @@ const oneDarkPro: Theme = {
       foreground: "#abb2bf",
       cursor: "#528bff",
       selectionBackground: "#3e4451",
+      lineHighlight: "#2c313a",
+      findMatchBackground: "rgba(229, 192, 123, 0.28)",
+      findMatchBorder: "#e5c07b",
       black: "#3f4451",
       red: "#e06c75",
       green: "#98c379",
@@ -420,10 +519,10 @@ const oneDarkPro: Theme = {
       brightWhite: "#e6e6e6",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Rosé Pine ─────────────────────────────────────────────────────────────
-const rosePine: Theme = {
+const rosePine = {
   id: "rose-pine",
   name: "Rosé Pine",
   label: "Rosé Pine",
@@ -441,6 +540,14 @@ const rosePine: Theme = {
     textDimmed: "#6e6a86",
     primary: "#c4a7e7",
     primaryHover: "#b195d9",
+    onPrimary: "#191724",
+    focusRing: "#c4a7e7",
+    danger: "#eb6f92",
+    dangerHover: "#db5f82",
+    success: "#9ccfd8",
+    warning: "#f6c177",
+    link: "#9ccfd8",
+    shadow: "rgb(0 0 0 / 0.42)",
     scrollThumb: "#403d52",
     accent: "#ebbcba",
     terminal: {
@@ -448,28 +555,31 @@ const rosePine: Theme = {
       foreground: "#e0def4",
       cursor: "#524f67",
       selectionBackground: "#2a283e",
+      lineHighlight: "#1f1d2e",
+      findMatchBackground: "rgba(246, 193, 119, 0.28)",
+      findMatchBorder: "#f6c177",
       black: "#26233a",
       red: "#eb6f92",
-      green: "#31748f",
+      green: "#9ccfd8",
       yellow: "#f6c177",
       blue: "#9ccfd8",
       magenta: "#c4a7e7",
-      cyan: "#ebbcba",
+      cyan: "#31748f",
       white: "#e0def4",
       brightBlack: "#6e6a86",
-      brightRed: "#eb6f92",
-      brightGreen: "#31748f",
-      brightYellow: "#f6c177",
-      brightBlue: "#9ccfd8",
-      brightMagenta: "#c4a7e7",
-      brightCyan: "#ebbcba",
-      brightWhite: "#e0def4",
+      brightRed: "#ff86a4",
+      brightGreen: "#b7e3ea",
+      brightYellow: "#ffd18f",
+      brightBlue: "#b7e3ea",
+      brightMagenta: "#d3b7f3",
+      brightCyan: "#4f95ad",
+      brightWhite: "#f2e9f6",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Gruvbox Dark ──────────────────────────────────────────────────────────
-const gruvboxDark: Theme = {
+const gruvboxDark = {
   id: "gruvbox-dark",
   name: "Gruvbox Dark",
   label: "Gruvbox",
@@ -487,6 +597,14 @@ const gruvboxDark: Theme = {
     textDimmed: "#7c6f64",
     primary: "#fabd2f",
     primaryHover: "#e5ab27",
+    onPrimary: "#1d2021",
+    focusRing: "#fabd2f",
+    danger: "#fb4934",
+    dangerHover: "#e33d2b",
+    success: "#b8bb26",
+    warning: "#fabd2f",
+    link: "#83a598",
+    shadow: "rgb(0 0 0 / 0.4)",
     scrollThumb: "#504945",
     accent: "#8ec07c",
     terminal: {
@@ -494,6 +612,9 @@ const gruvboxDark: Theme = {
       foreground: "#ebdbb2",
       cursor: "#ebdbb2",
       selectionBackground: "#504945",
+      lineHighlight: "#32302f",
+      findMatchBackground: "rgba(250, 189, 47, 0.28)",
+      findMatchBorder: "#fabd2f",
       black: "#3c3836",
       red: "#fb4934",
       green: "#b8bb26",
@@ -503,19 +624,19 @@ const gruvboxDark: Theme = {
       cyan: "#8ec07c",
       white: "#d5c4a1",
       brightBlack: "#665c54",
-      brightRed: "#fb4934",
-      brightGreen: "#b8bb26",
-      brightYellow: "#fabd2f",
-      brightBlue: "#83a598",
-      brightMagenta: "#d3869b",
-      brightCyan: "#8ec07c",
+      brightRed: "#ff5f52",
+      brightGreen: "#c7d94c",
+      brightYellow: "#ffd75f",
+      brightBlue: "#9bbdb0",
+      brightMagenta: "#e19ab0",
+      brightCyan: "#a3d39c",
       brightWhite: "#fbf1c7",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── GitHub Light ──────────────────────────────────────────────────────────
-const githubLight: Theme = {
+const githubLight = {
   id: "github-light",
   name: "GitHub Light",
   label: "GitHub Lt",
@@ -533,6 +654,14 @@ const githubLight: Theme = {
     textDimmed: "#8b949e",
     primary: "#0969da",
     primaryHover: "#0550ae",
+    onPrimary: "#ffffff",
+    focusRing: "#0969da",
+    danger: "#cf222e",
+    dangerHover: "#a40e26",
+    success: "#1a7f37",
+    warning: "#9a6700",
+    link: "#0969da",
+    shadow: "rgb(31 35 40 / 0.14)",
     scrollThumb: "#c8ccd1",
     accent: "#1a7f37",
     terminal: {
@@ -540,6 +669,9 @@ const githubLight: Theme = {
       foreground: "#1f2328",
       cursor: "#0969da",
       selectionBackground: "#b6e3ff",
+      lineHighlight: "#f6f8fa",
+      findMatchBackground: "rgba(154, 103, 0, 0.2)",
+      findMatchBorder: "#9a6700",
       black: "#1f2328",
       red: "#cf222e",
       green: "#116329",
@@ -558,10 +690,10 @@ const githubLight: Theme = {
       brightWhite: "#8c959f",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Catppuccin Latte ─────────────────────────────────────────────────────
-const catppuccinLatte: Theme = {
+const catppuccinLatte = {
   id: "catppuccin-latte",
   name: "Catppuccin Latte",
   label: "Catppuccin Lt",
@@ -576,9 +708,17 @@ const catppuccinLatte: Theme = {
     border: "#ccd0da",
     text: "#4c4f69",
     textMuted: "#6c6f85",
-    textDimmed: "#9ca0b0",
+    textDimmed: "#8c8fa1",
     primary: "#8839ef",
     primaryHover: "#7528d4",
+    onPrimary: "#ffffff",
+    focusRing: "#8839ef",
+    danger: "#d20f39",
+    dangerHover: "#b60b2f",
+    success: "#40a02b",
+    warning: "#df8e1d",
+    link: "#1e66f5",
+    shadow: "rgb(76 79 105 / 0.16)",
     scrollThumb: "#bcc0cc",
     accent: "#ea76cb",
     terminal: {
@@ -586,6 +726,9 @@ const catppuccinLatte: Theme = {
       foreground: "#4c4f69",
       cursor: "#dc8a78",
       selectionBackground: "#ccd0da",
+      lineHighlight: "#e6e9ef",
+      findMatchBackground: "rgba(223, 142, 29, 0.22)",
+      findMatchBorder: "#df8e1d",
       black: "#5c5f77",
       red: "#d20f39",
       green: "#40a02b",
@@ -593,7 +736,7 @@ const catppuccinLatte: Theme = {
       blue: "#1e66f5",
       magenta: "#ea76cb",
       cyan: "#179299",
-      white: "#acb0be",
+      white: "#6c6f85",
       brightBlack: "#6c6f85",
       brightRed: "#d20f39",
       brightGreen: "#40a02b",
@@ -601,13 +744,13 @@ const catppuccinLatte: Theme = {
       brightBlue: "#1e66f5",
       brightMagenta: "#ea76cb",
       brightCyan: "#179299",
-      brightWhite: "#bcc0cc",
+      brightWhite: "#4c4f69",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Rosé Pine Dawn ───────────────────────────────────────────────────────
-const rosePineDawn: Theme = {
+const rosePineDawn = {
   id: "rose-pine-dawn",
   name: "Rosé Pine Dawn",
   label: "Rosé Dawn",
@@ -622,9 +765,17 @@ const rosePineDawn: Theme = {
     border: "#dfdad9",
     text: "#575279",
     textMuted: "#797593",
-    textDimmed: "#9893a5",
+    textDimmed: "#817c96",
     primary: "#907aa9",
     primaryHover: "#7d6899",
+    onPrimary: "#191724",
+    focusRing: "#907aa9",
+    danger: "#b4637a",
+    dangerHover: "#994f66",
+    success: "#56949f",
+    warning: "#ea9d34",
+    link: "#286983",
+    shadow: "rgb(87 82 121 / 0.16)",
     scrollThumb: "#cecacd",
     accent: "#d7827e",
     terminal: {
@@ -632,28 +783,31 @@ const rosePineDawn: Theme = {
       foreground: "#575279",
       cursor: "#575279",
       selectionBackground: "#dfdad9",
+      lineHighlight: "#f2e9de",
+      findMatchBackground: "rgba(234, 157, 52, 0.22)",
+      findMatchBorder: "#ea9d34",
       black: "#575279",
       red: "#b4637a",
-      green: "#286983",
+      green: "#56949f",
       yellow: "#ea9d34",
-      blue: "#56949f",
+      blue: "#5d8ab3",
       magenta: "#907aa9",
-      cyan: "#d7827e",
-      white: "#e0def4",
+      cyan: "#286983",
+      white: "#797593",
       brightBlack: "#797593",
-      brightRed: "#b4637a",
-      brightGreen: "#286983",
-      brightYellow: "#ea9d34",
-      brightBlue: "#56949f",
-      brightMagenta: "#907aa9",
-      brightCyan: "#d7827e",
-      brightWhite: "#f2e9de",
+      brightRed: "#c9778d",
+      brightGreen: "#6aa6b0",
+      brightYellow: "#f0ad4e",
+      brightBlue: "#72a3ba",
+      brightMagenta: "#a38bbd",
+      brightCyan: "#3a7e98",
+      brightWhite: "#575279",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Nord Light ────────────────────────────────────────────────────────────
-const nordLight: Theme = {
+const nordLight = {
   id: "nord-light",
   name: "Nord Light",
   label: "Nord Lt",
@@ -671,6 +825,14 @@ const nordLight: Theme = {
     textDimmed: "#7b88a1",
     primary: "#5e81ac",
     primaryHover: "#4e6f96",
+    onPrimary: "#ffffff",
+    focusRing: "#5e81ac",
+    danger: "#bf616a",
+    dangerHover: "#a94f59",
+    success: "#5e8f57",
+    warning: "#b7791f",
+    link: "#5e81ac",
+    shadow: "rgb(46 52 64 / 0.16)",
     scrollThumb: "#c0c7d3",
     accent: "#88c0d0",
     terminal: {
@@ -678,28 +840,31 @@ const nordLight: Theme = {
       foreground: "#2e3440",
       cursor: "#5e81ac",
       selectionBackground: "#d8dee9",
+      lineHighlight: "#e5e9f0",
+      findMatchBackground: "rgba(183, 121, 31, 0.22)",
+      findMatchBorder: "#b7791f",
       black: "#2e3440",
       red: "#bf616a",
-      green: "#a3be8c",
-      yellow: "#ebcb8b",
+      green: "#5e8f57",
+      yellow: "#b7791f",
       blue: "#5e81ac",
       magenta: "#b48ead",
       cyan: "#88c0d0",
-      white: "#d8dee9",
+      white: "#4c566a",
       brightBlack: "#4c566a",
       brightRed: "#d06f79",
-      brightGreen: "#b1cc99",
-      brightYellow: "#f1d59d",
+      brightGreen: "#6ba364",
+      brightYellow: "#c98a28",
       brightBlue: "#81a1c1",
       brightMagenta: "#c59cbd",
       brightCyan: "#9bd3e4",
-      brightWhite: "#eceff4",
+      brightWhite: "#2e3440",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── One Light ─────────────────────────────────────────────────────────────
-const oneLight: Theme = {
+const oneLight = {
   id: "one-light",
   name: "One Light",
   label: "One Light",
@@ -714,9 +879,17 @@ const oneLight: Theme = {
     border: "#dbdbdc",
     text: "#383a42",
     textMuted: "#696c77",
-    textDimmed: "#a0a1a7",
+    textDimmed: "#7f848e",
     primary: "#4078f2",
     primaryHover: "#2f65de",
+    onPrimary: "#ffffff",
+    focusRing: "#4078f2",
+    danger: "#ca1243",
+    dangerHover: "#a90935",
+    success: "#50a14f",
+    warning: "#c18401",
+    link: "#4078f2",
+    shadow: "rgb(56 58 66 / 0.15)",
     scrollThumb: "#c4c4c5",
     accent: "#a626a4",
     terminal: {
@@ -724,6 +897,9 @@ const oneLight: Theme = {
       foreground: "#383a42",
       cursor: "#526eff",
       selectionBackground: "#e5e5e6",
+      lineHighlight: "#f0f0f0",
+      findMatchBackground: "rgba(193, 132, 1, 0.2)",
+      findMatchBorder: "#c18401",
       black: "#383a42",
       red: "#e45649",
       green: "#50a14f",
@@ -731,40 +907,22 @@ const oneLight: Theme = {
       blue: "#4078f2",
       magenta: "#a626a4",
       cyan: "#0184bc",
-      white: "#a0a1a7",
+      white: "#696c77",
       brightBlack: "#696c77",
       brightRed: "#ca1243",
-      brightGreen: "#50a14f",
-      brightYellow: "#c18401",
-      brightBlue: "#4078f2",
-      brightMagenta: "#a626a4",
-      brightCyan: "#0184bc",
-      brightWhite: "#c4c4c5",
+      brightGreen: "#3f8f3e",
+      brightYellow: "#a66f00",
+      brightBlue: "#2f65de",
+      brightMagenta: "#8f1f8d",
+      brightCyan: "#006f9e",
+      brightWhite: "#383a42",
     },
   },
-};
+} as const satisfies Theme;
 
 // ── Exports ────────────────────────────────────────────────────────────────
 
-export const themes: Record<string, Theme> = {
-  "github-dark": githubDark,
-  dracula,
-  nord,
-  "monokai-pro": monokaiPro,
-  "solarized-light": solarizedLight,
-  "catppuccin-mocha": catppuccinMocha,
-  "tokyo-night": tokyoNight,
-  "one-dark-pro": oneDarkPro,
-  "rose-pine": rosePine,
-  "gruvbox-dark": gruvboxDark,
-  "github-light": githubLight,
-  "catppuccin-latte": catppuccinLatte,
-  "rose-pine-dawn": rosePineDawn,
-  "nord-light": nordLight,
-  "one-light": oneLight,
-};
-
-export const themeList: Theme[] = [
+export const themeList = [
   githubDark,
   dracula,
   nord,
@@ -780,6 +938,14 @@ export const themeList: Theme[] = [
   rosePineDawn,
   nordLight,
   oneLight,
-];
+] as const satisfies readonly Theme[];
 
-export const DEFAULT_THEME_ID = "github-dark";
+export type ThemeId = (typeof themeList)[number]["id"];
+
+export const themes = Object.fromEntries(themeList.map((theme) => [theme.id, theme])) as Record<
+  ThemeId,
+  Theme
+> &
+  Record<string, Theme | undefined>;
+
+export const DEFAULT_THEME_ID = "github-dark" satisfies ThemeId;

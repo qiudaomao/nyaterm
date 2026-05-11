@@ -43,6 +43,14 @@ export function applyThemeToDOM(colors: ThemeColors) {
   root.setProperty("--df-text-dimmed", colors.textDimmed);
   root.setProperty("--df-primary", colors.primary);
   root.setProperty("--df-primary-hover", colors.primaryHover);
+  root.setProperty("--df-on-primary", colors.onPrimary);
+  root.setProperty("--df-focus-ring", colors.focusRing);
+  root.setProperty("--df-danger", colors.danger);
+  root.setProperty("--df-danger-hover", colors.dangerHover);
+  root.setProperty("--df-success", colors.success);
+  root.setProperty("--df-warning", colors.warning);
+  root.setProperty("--df-link", colors.link);
+  root.setProperty("--df-shadow", colors.shadow);
   root.setProperty("--df-scroll-thumb", colors.scrollThumb);
   root.setProperty("--df-accent", colors.accent);
 }
