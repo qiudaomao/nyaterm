@@ -1,7 +1,7 @@
-//! redb-backed persistence for NyaTerm's user data.
+//! redb-backed persistence for `NyaTerm`'s user data.
 //!
-//! The public API stores the same JSON/text payloads that used to live as
-//! files under `~/.nyaterm`, so higher layers can keep their serde models.
+//! The public API stores JSON/text payloads so higher layers can keep their
+//! serde models.
 
 use crate::error::{AppError, AppResult};
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
@@ -11,13 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 const DATABASE_FILE: &str = "nyaterm.redb";
-const LEGACY_CONFIG_DIR: &str = ".dragonfly";
-const LEGACY_DATABASE_FILE: &str = "dragonfly.redb";
-const SCHEMA_VERSION: &str = "1";
-const META_SCHEMA_VERSION: &str = "schema_version";
-const META_LEGACY_MIGRATED: &str = "legacy_migrated";
 
-const META_TABLE: TableDefinition<&str, &str> = TableDefinition::new("meta");
 const JSON_DOCS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("json_docs");
 const TEXT_DOCS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("text_docs");
 
@@ -41,34 +35,10 @@ pub const TEXT_MASTER_KEY: &str = "master.key";
 
 static DATABASE: OnceLock<Arc<Database>> = OnceLock::new();
 
-const LEGACY_JSON_FILES: &[(&str, &str)] = &[
-    ("settings.json", JSON_SETTINGS),
-    ("sessions.json", JSON_SESSIONS),
-    ("keys.json", JSON_KEYS),
-    ("passwords.json", JSON_PASSWORDS),
-    ("credentials.json", JSON_CREDENTIALS),
-    ("otp.json", JSON_OTP),
-    ("proxies.json", JSON_PROXIES),
-    ("tunnels.json", JSON_TUNNELS),
-    ("quick-command.json", JSON_QUICK_COMMAND),
-    ("cloud_sync.json", JSON_CLOUD_SYNC),
-    ("cloud_sync_state.json", JSON_CLOUD_SYNC_STATE),
-    ("history.json", JSON_HISTORY),
-    ("ai-history.json", JSON_AI_HISTORY),
-    ("ai-audit.json", JSON_AI_AUDIT),
-];
-
-const LEGACY_TEXT_FILES: &[(&str, &str)] = &[
-    ("known_hosts", TEXT_KNOWN_HOSTS),
-    ("master.key", TEXT_MASTER_KEY),
-];
-
 pub fn init(config_dir: &Path) -> AppResult<()> {
     fs::create_dir_all(config_dir)?;
-    bootstrap_from_legacy_dragonfly_config(config_dir)?;
     let db_path = config_dir.join(DATABASE_FILE);
     let db = Arc::new(open_database(&db_path)?);
-    migrate_legacy_files(&db, config_dir)?;
 
     if DATABASE.set(db).is_err() {
         tracing::debug!("redb storage was already initialized");
@@ -79,20 +49,6 @@ pub fn init(config_dir: &Path) -> AppResult<()> {
 #[cfg(test)]
 fn database_path(config_dir: &Path) -> PathBuf {
     config_dir.join(DATABASE_FILE)
-}
-
-#[allow(dead_code)]
-pub fn json_key_for_legacy_file(file_name: &str) -> Option<&'static str> {
-    LEGACY_JSON_FILES
-        .iter()
-        .find_map(|(name, key)| (*name == file_name).then_some(*key))
-}
-
-#[allow(dead_code)]
-pub fn text_key_for_legacy_file(file_name: &str) -> Option<&'static str> {
-    LEGACY_TEXT_FILES
-        .iter()
-        .find_map(|(name, key)| (*name == file_name).then_some(*key))
 }
 
 pub fn load_json_doc<T: serde::de::DeserializeOwned + Default>(key: &str) -> AppResult<T> {
@@ -165,133 +121,11 @@ fn default_config_dir() -> AppResult<PathBuf> {
     Ok(home.join(".nyaterm"))
 }
 
-fn bootstrap_from_legacy_dragonfly_config(config_dir: &Path) -> AppResult<()> {
-    let Some(home_dir) = config_dir.parent() else {
-        return Ok(());
-    };
-
-    let legacy_dir = home_dir.join(LEGACY_CONFIG_DIR);
-    bootstrap_from_legacy_config_dir(config_dir, &legacy_dir)
-}
-
-fn bootstrap_from_legacy_config_dir(config_dir: &Path, legacy_dir: &Path) -> AppResult<()> {
-    let db_path = config_dir.join(DATABASE_FILE);
-    if db_path.exists() || !legacy_dir.is_dir() {
-        return Ok(());
-    }
-
-    let legacy_db_path = legacy_dir.join(LEGACY_DATABASE_FILE);
-    if legacy_db_path.is_file() {
-        fs::copy(&legacy_db_path, &db_path)?;
-        tracing::info!(
-            "Migrated NyaTerm storage database from legacy Dragonfly path '{}'",
-            legacy_db_path.display()
-        );
-        return Ok(());
-    }
-
-    let mut copied_legacy_files = 0usize;
-    for &(file_name, _) in LEGACY_JSON_FILES.iter().chain(LEGACY_TEXT_FILES.iter()) {
-        let source = legacy_dir.join(file_name);
-        if !source.is_file() {
-            continue;
-        }
-        let destination = config_dir.join(file_name);
-        if destination.exists() {
-            continue;
-        }
-        fs::copy(&source, &destination)?;
-        copied_legacy_files += 1;
-    }
-
-    if copied_legacy_files > 0 {
-        tracing::info!(
-            "Copied {} legacy Dragonfly storage file(s) into NyaTerm storage for redb migration",
-            copied_legacy_files
-        );
-    }
-
-    Ok(())
-}
-
 fn open_database(path: &Path) -> AppResult<Database> {
     if path.exists() {
         Database::open(path).map_err(storage_error)
     } else {
         Database::create(path).map_err(storage_error)
-    }
-}
-
-fn migrate_legacy_files(db: &Database, config_dir: &Path) -> AppResult<()> {
-    let mut migrated_files = Vec::new();
-    let txn = db.begin_write().map_err(storage_error)?;
-    {
-        let mut meta = txn.open_table(META_TABLE).map_err(storage_error)?;
-        meta.insert(META_SCHEMA_VERSION, SCHEMA_VERSION)
-            .map_err(storage_error)?;
-    }
-
-    {
-        let mut json_docs = txn.open_table(JSON_DOCS_TABLE).map_err(storage_error)?;
-        for (file_name, key) in LEGACY_JSON_FILES {
-            let path = config_dir.join(file_name);
-            if json_docs.get(*key).map_err(storage_error)?.is_some() {
-                migrated_files.push(path);
-                continue;
-            }
-            if !path.is_file() {
-                continue;
-            }
-            let content = fs::read_to_string(&path)?;
-            json_docs
-                .insert(*key, content.as_str())
-                .map_err(storage_error)?;
-            migrated_files.push(path);
-        }
-    }
-
-    {
-        let mut text_docs = txn.open_table(TEXT_DOCS_TABLE).map_err(storage_error)?;
-        for (file_name, key) in LEGACY_TEXT_FILES {
-            let path = config_dir.join(file_name);
-            if text_docs.get(*key).map_err(storage_error)?.is_some() {
-                migrated_files.push(path);
-                continue;
-            }
-            if !path.is_file() {
-                continue;
-            }
-            let content = fs::read_to_string(&path)?;
-            text_docs
-                .insert(*key, content.as_str())
-                .map_err(storage_error)?;
-            migrated_files.push(path);
-        }
-    }
-
-    {
-        let mut meta = txn.open_table(META_TABLE).map_err(storage_error)?;
-        meta.insert(META_LEGACY_MIGRATED, "true")
-            .map_err(storage_error)?;
-    }
-
-    txn.commit().map_err(storage_error)?;
-    cleanup_legacy_files(migrated_files);
-    Ok(())
-}
-
-fn cleanup_legacy_files(paths: Vec<PathBuf>) {
-    for path in paths {
-        if !path.is_file() {
-            continue;
-        }
-        if let Err(error) = fs::remove_file(&path) {
-            tracing::warn!(
-                "Failed to remove migrated legacy storage file '{}': {}",
-                path.display(),
-                error
-            );
-        }
     }
 }
 
@@ -405,148 +239,11 @@ mod tests {
     }
 
     #[test]
-    fn migration_keeps_existing_redb_values_and_removes_legacy_files() {
-        let dir = unique_config_dir("migration");
-        fs::create_dir_all(&dir).expect("create temp dir");
-        fs::write(dir.join("settings.json"), "{\"legacy\":true}").expect("write settings");
-        fs::write(dir.join("known_hosts"), "legacy-host key value\n").expect("write known_hosts");
-
-        let db = open_database(&database_path(&dir)).expect("open db");
-        write_json_doc(&db, JSON_SETTINGS, "{\"existing\":true}").expect("preseed");
-        migrate_legacy_files(&db, &dir).expect("migrate");
-
-        assert_eq!(
-            read_json_doc(&db, JSON_SETTINGS)
-                .expect("read settings")
-                .as_deref(),
-            Some("{\"existing\":true}")
-        );
-        assert_eq!(
-            read_text_doc(&db, TEXT_KNOWN_HOSTS)
-                .expect("read known_hosts")
-                .as_deref(),
-            Some("legacy-host key value\n")
-        );
-        assert!(!dir.join("settings.json").exists());
-        assert!(!dir.join("known_hosts").exists());
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn bootstrap_copies_legacy_dragonfly_redb_when_new_database_is_missing() {
-        let root = unique_config_dir("legacy-redb-root");
-        let current_dir = root.join(".nyaterm");
-        let legacy_dir = root.join(LEGACY_CONFIG_DIR);
-        fs::create_dir_all(&current_dir).expect("create current dir");
-        fs::create_dir_all(&legacy_dir).expect("create legacy dir");
-
-        let legacy_db = open_database(&legacy_dir.join(LEGACY_DATABASE_FILE)).expect("open legacy");
-        write_json_doc(&legacy_db, JSON_SETTINGS, "{\"legacy\":true}").expect("write legacy");
-
-        bootstrap_from_legacy_config_dir(&current_dir, &legacy_dir).expect("bootstrap");
-        let current_db = open_database(&database_path(&current_dir)).expect("open current");
-
-        assert_eq!(
-            read_json_doc(&current_db, JSON_SETTINGS)
-                .expect("read settings")
-                .as_deref(),
-            Some("{\"legacy\":true}")
-        );
-        assert!(legacy_dir.join(LEGACY_DATABASE_FILE).exists());
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn bootstrap_copies_legacy_dragonfly_files_for_redb_migration() {
-        let root = unique_config_dir("legacy-files-root");
-        let current_dir = root.join(".nyaterm");
-        let legacy_dir = root.join(LEGACY_CONFIG_DIR);
-        fs::create_dir_all(&current_dir).expect("create current dir");
-        fs::create_dir_all(&legacy_dir).expect("create legacy dir");
-        fs::write(legacy_dir.join("settings.json"), "{\"legacy\":true}").expect("write settings");
-        fs::write(legacy_dir.join("known_hosts"), "legacy-host key value\n")
-            .expect("write known_hosts");
-
-        bootstrap_from_legacy_config_dir(&current_dir, &legacy_dir).expect("bootstrap");
-        let db = open_database(&database_path(&current_dir)).expect("open db");
-        migrate_legacy_files(&db, &current_dir).expect("migrate copied legacy files");
-
-        assert_eq!(
-            read_json_doc(&db, JSON_SETTINGS)
-                .expect("read settings")
-                .as_deref(),
-            Some("{\"legacy\":true}")
-        );
-        assert_eq!(
-            read_text_doc(&db, TEXT_KNOWN_HOSTS)
-                .expect("read known hosts")
-                .as_deref(),
-            Some("legacy-host key value\n")
-        );
-        assert!(legacy_dir.join("settings.json").exists());
-        assert!(legacy_dir.join("known_hosts").exists());
-        assert!(!current_dir.join("settings.json").exists());
-        assert!(!current_dir.join("known_hosts").exists());
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn migration_backfills_missing_docs_after_legacy_marker() {
-        let dir = unique_config_dir("migration-backfill");
-        fs::create_dir_all(&dir).expect("create temp dir");
-        fs::write(
-            dir.join("ai-history.json"),
-            "{\"sessions\":[],\"messages\":[]}",
-        )
-        .expect("write ai history");
-
-        let db = open_database(&database_path(&dir)).expect("open db");
-        let txn = db.begin_write().expect("begin write");
-        {
-            let mut meta = txn.open_table(META_TABLE).expect("open meta");
-            meta.insert(META_SCHEMA_VERSION, SCHEMA_VERSION)
-                .expect("schema version");
-            meta.insert(META_LEGACY_MIGRATED, "true")
-                .expect("legacy marker");
-        }
-        txn.commit().expect("commit marker");
-
-        migrate_legacy_files(&db, &dir).expect("migrate");
-
-        assert_eq!(
-            read_json_doc(&db, JSON_AI_HISTORY)
-                .expect("read ai history")
-                .as_deref(),
-            Some("{\"sessions\":[],\"messages\":[]}")
-        );
-        assert!(!dir.join("ai-history.json").exists());
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn failed_migration_keeps_legacy_file() {
-        let dir = unique_config_dir("migration-failure");
-        fs::create_dir_all(&dir).expect("create temp dir");
-        fs::write(dir.join("settings.json"), [0xff, 0xfe]).expect("write invalid utf8");
-
-        let db = open_database(&database_path(&dir)).expect("open db");
-        assert!(migrate_legacy_files(&db, &dir).is_err());
-        assert!(dir.join("settings.json").exists());
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn new_storage_initializes_redb_without_legacy_files() {
+    fn new_storage_opens_empty_redb() {
         let dir = unique_config_dir("new-storage");
         fs::create_dir_all(&dir).expect("create temp dir");
 
         let db = open_database(&database_path(&dir)).expect("open db");
-        migrate_legacy_files(&db, &dir).expect("initialize");
 
         assert!(database_path(&dir).exists());
         assert!(!dir.join("settings.json").exists());
