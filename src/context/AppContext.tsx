@@ -144,7 +144,7 @@ interface AppContextType {
 
 export type TerminalAppSettings = Pick<
   AppSettings,
-  "appearance" | "interaction" | "terminal" | "translation" | "search" | "ai"
+  "appearance" | "interaction" | "terminal" | "translation" | "search" | "ai" | "keybindings"
 >;
 
 /**
@@ -281,6 +281,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
       show_labels: false,
     },
   },
+  keybindings: {},
 };
 
 const RECENT_CONNECTION_LIMIT = 10;
@@ -1115,6 +1116,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       translation: appSettings.translation,
       search: appSettings.search,
       ai: appSettings.ai,
+      keybindings: appSettings.keybindings,
     }),
     [
       appSettings.appearance,
@@ -1123,6 +1125,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       appSettings.translation,
       appSettings.search,
       appSettings.ai,
+      appSettings.keybindings,
     ],
   );
 

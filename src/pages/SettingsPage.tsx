@@ -15,6 +15,7 @@ import {
   MdBackup,
   MdDashboard,
   MdDns,
+  MdKeyboard,
   MdKeyboardArrowRight,
   MdMouse,
   MdPalette,
@@ -32,6 +33,7 @@ import { AiGeneralTab, AiModelsTab, AiRulesTab } from "@/components/settings/AiT
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { InteractionTab } from "@/components/settings/InteractionTab";
+import { KeyboardShortcutsTab } from "@/components/settings/KeyboardShortcutsTab";
 import { SearchTab } from "@/components/settings/SearchTab";
 import { SecurityTab } from "@/components/settings/SecurityTab";
 import { SyncBackupTab } from "@/components/settings/SyncBackupTab";
@@ -104,7 +106,7 @@ export default function SettingsPage() {
         id: "workspace",
         label: t("settings.groupWorkspace"),
         icon: "dashboard",
-        items: ["general", "appearance", "interaction"],
+        items: ["general", "appearance", "interaction", "keybindings"],
       },
       {
         id: "terminal_session",
@@ -221,6 +223,12 @@ export default function SettingsPage() {
       Component: InteractionTab,
     },
     {
+      id: "keybindings",
+      label: t("settings.keybindings"),
+      icon: "keyboard",
+      Component: KeyboardShortcutsTab,
+    },
+    {
       id: "ai-general",
       label: t("ai.general"),
       icon: "settings",
@@ -255,6 +263,7 @@ export default function SettingsPage() {
     security: MdSecurity,
     terminal: MdTerminal,
     mouse: MdMouse,
+    keyboard: MdKeyboard,
     ai: MdAutoAwesome,
     model: TbCubeSpark,
     rules: FiBook,

@@ -1,4 +1,8 @@
 import { useHotkeys } from "react-hotkeys-hook";
+import { resolveShortcutKeys } from "@/hooks/useShortcutMap";
+import { MOD } from "@/lib/shortcutRegistry";
+
+export { MOD };
 
 const HOTKEY_OPTIONS = { enableOnFormTags: true, preventDefault: true } as const;
 
@@ -20,13 +24,17 @@ export interface ShortcutCallbacks {
   onClearTerminal: () => void;
 }
 
-export function useGlobalShortcuts(cb: ShortcutCallbacks) {
-  // --- Tab / Session ---
-  useHotkeys("ctrl+shift+n, meta+shift+n", cb.onNewSession, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+`, meta+`", cb.onNewLocalTerminal, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+shift+w, meta+shift+w", cb.onCloseTab, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+tab", cb.onNextTab, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+shift+tab", cb.onPrevTab, HOTKEY_OPTIONS);
+export function useGlobalShortcuts(
+  cb: ShortcutCallbacks,
+  keybindings: Record<string, string> = {},
+) {
+  const k = (id: string) => resolveShortcutKeys(id, keybindings);
+
+  useHotkeys(k("tab.newSession"), cb.onNewSession, HOTKEY_OPTIONS);
+  useHotkeys(k("tab.newLocalTerminal"), cb.onNewLocalTerminal, HOTKEY_OPTIONS);
+  useHotkeys(k("tab.close"), cb.onCloseTab, HOTKEY_OPTIONS);
+  useHotkeys(k("tab.next"), cb.onNextTab, HOTKEY_OPTIONS);
+  useHotkeys(k("tab.prev"), cb.onPrevTab, HOTKEY_OPTIONS);
 
   useHotkeys("ctrl+1, meta+1", () => cb.onSwitchTab(0), HOTKEY_OPTIONS);
   useHotkeys("ctrl+2, meta+2", () => cb.onSwitchTab(1), HOTKEY_OPTIONS);
@@ -38,21 +46,15 @@ export function useGlobalShortcuts(cb: ShortcutCallbacks) {
   useHotkeys("ctrl+8, meta+8", () => cb.onSwitchTab(7), HOTKEY_OPTIONS);
   useHotkeys("ctrl+9, meta+9", () => cb.onSwitchTab(-1), HOTKEY_OPTIONS);
 
-  // --- View / Layout ---
-  useHotkeys("ctrl+shift+e, meta+shift+e", cb.onToggleLeftSidebar, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+shift+b, meta+shift+b", cb.onToggleRightSidebar, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+=, meta+=, ctrl+shift+=, meta+shift+=", cb.onZoomIn, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+-, meta+-", cb.onZoomOut, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+0, meta+0", cb.onResetZoom, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+comma, meta+comma", cb.onOpenSettings, HOTKEY_OPTIONS);
+  useHotkeys(k("view.toggleLeftSidebar"), cb.onToggleLeftSidebar, HOTKEY_OPTIONS);
+  useHotkeys(k("view.toggleRightSidebar"), cb.onToggleRightSidebar, HOTKEY_OPTIONS);
+  useHotkeys(k("view.zoomIn"), cb.onZoomIn, HOTKEY_OPTIONS);
+  useHotkeys(k("view.zoomOut"), cb.onZoomOut, HOTKEY_OPTIONS);
+  useHotkeys(k("view.resetZoom"), cb.onResetZoom, HOTKEY_OPTIONS);
+  useHotkeys(k("view.openSettings"), cb.onOpenSettings, HOTKEY_OPTIONS);
 
-  // --- Terminal ---
-  useHotkeys("ctrl+shift+g, meta+shift+g", cb.onManageSyncGroups, HOTKEY_OPTIONS);
-  useHotkeys("ctrl+shift+k, meta+shift+k", cb.onClearTerminal, HOTKEY_OPTIONS);
+  useHotkeys(k("terminal.manageSyncGroups"), cb.onManageSyncGroups, HOTKEY_OPTIONS);
+  useHotkeys(k("terminal.clear"), cb.onClearTerminal, HOTKEY_OPTIONS);
 
-  // --- Special ---
-  useHotkeys("ctrl+shift+l, meta+shift+l", cb.onLockScreen, HOTKEY_OPTIONS);
+  useHotkeys(k("special.lockScreen"), cb.onLockScreen, HOTKEY_OPTIONS);
 }
-
-/** Platform-aware modifier label for shortcut display. */
-export const MOD = navigator.userAgent.includes("Mac") ? "\u2318" : "Ctrl";

@@ -721,6 +721,7 @@ export interface AppSettings {
   ai: AISettings;
   cloud_sync: CloudSyncSettings;
   ui: UiConfig;
+  keybindings: Record<string, string>;
 }
 
 export interface FileEntry {

@@ -1307,23 +1307,26 @@ function App() {
     }
   }, []);
 
-  useGlobalShortcuts({
-    onNewSession: () => handleNewSession(),
-    onNewLocalTerminal: handleNewLocalTerminal,
-    onCloseTab: handleCloseActiveTab,
-    onNextTab: handleNextTab,
-    onPrevTab: handlePrevTab,
-    onSwitchTab: handleSwitchTab,
-    onToggleLeftSidebar: handleToggleLeftSidebar,
-    onToggleRightSidebar: handleToggleRightSidebar,
-    onZoomIn: handleZoomIn,
-    onZoomOut: handleZoomOut,
-    onResetZoom: handleResetZoom,
-    onOpenSettings: handleOpenSettings,
-    onLockScreen: handleLockScreen,
-    onManageSyncGroups: () => setShowSyncGroupDialog(true),
-    onClearTerminal: () => window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
-  });
+  useGlobalShortcuts(
+    {
+      onNewSession: () => handleNewSession(),
+      onNewLocalTerminal: handleNewLocalTerminal,
+      onCloseTab: handleCloseActiveTab,
+      onNextTab: handleNextTab,
+      onPrevTab: handlePrevTab,
+      onSwitchTab: handleSwitchTab,
+      onToggleLeftSidebar: handleToggleLeftSidebar,
+      onToggleRightSidebar: handleToggleRightSidebar,
+      onZoomIn: handleZoomIn,
+      onZoomOut: handleZoomOut,
+      onResetZoom: handleResetZoom,
+      onOpenSettings: handleOpenSettings,
+      onLockScreen: handleLockScreen,
+      onManageSyncGroups: () => setShowSyncGroupDialog(true),
+      onClearTerminal: () => window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
+    },
+    appSettings.keybindings,
+  );
 
   // Recording toggle
   const handleToggleRecording = useCallback(async () => {

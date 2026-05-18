@@ -45,7 +45,7 @@ import { Button } from "@/components/ui/button";
 import { useApp } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useConfigTransfer } from "@/hooks/useConfigTransfer";
-import { MOD } from "@/hooks/useGlobalShortcuts";
+import { resolveDisplayKeys } from "@/hooks/useShortcutMap";
 import { AVAILABLE_LANGUAGES } from "@/i18n";
 import { logger } from "@/lib/logger";
 import { isMacOS } from "@/lib/platform";
@@ -232,13 +232,15 @@ export default function Header({
     { key: "help", label: t("menu.help") },
   ];
 
+  const dk = (id: string) => resolveDisplayKeys(id, appSettings.keybindings);
+
   const menus: Record<string, MenuItem[]> = {
     file: [
       {
         label: t("menu.newSshConnection"),
         action: onNewSession,
         icon: "add",
-        shortcut: `${MOD}+Shift+N`,
+        shortcut: dk("tab.newSession"),
       },
       { label: "separator", separator: true },
       {
@@ -276,19 +278,19 @@ export default function Header({
         label: t("menu.zoomIn"),
         action: () => handleZoom(0.1),
         icon: "zoom_in",
-        shortcut: `${MOD}+=`,
+        shortcut: dk("view.zoomIn"),
       },
       {
         label: t("menu.zoomOut"),
         action: () => handleZoom(-0.1),
         icon: "zoom_out",
-        shortcut: `${MOD}+-`,
+        shortcut: dk("view.zoomOut"),
       },
       {
         label: t("menu.resetZoom"),
         action: handleResetZoom,
         icon: "restart_alt",
-        shortcut: `${MOD}+0`,
+        shortcut: dk("view.resetZoom"),
       },
     ],
     terminal: [
@@ -322,7 +324,7 @@ export default function Header({
             label: t("menu.manageGroups"),
             icon: "settings",
             action: () => onManageSyncGroups?.(),
-            shortcut: `${MOD}+Shift+G`,
+            shortcut: dk("terminal.manageSyncGroups"),
           },
         ],
       },
@@ -338,7 +340,7 @@ export default function Header({
         label: t("menu.clearTerminal"),
         icon: "delete_sweep",
         action: () => onClearTerminal?.(),
-        shortcut: `${MOD}+Shift+K`,
+        shortcut: dk("terminal.clear"),
       },
       {
         label: t("menu.resetTerminalSize"),

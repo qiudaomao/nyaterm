@@ -1,9 +1,6 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { SelectItem } from "@/components/ui/select";
 import { useApp } from "@/context/AppContext";
-import { MOD } from "@/hooks/useGlobalShortcuts";
 import {
   MAX_COMMAND_SUGGESTION_MAX_CHARS,
   MAX_COMMAND_SUGGESTION_MIN_CHARS,
@@ -24,49 +21,6 @@ import {
 export function InteractionTab() {
   const { t } = useTranslation();
   const { appSettings, updateAppSettings } = useApp();
-
-  const shortcutSections = [
-    {
-      title: t("settings.shortcutCategories.terminal"),
-      desc: t("settings.terminalShortcutsDesc"),
-      items: [
-        { label: t("terminalCtx.copy"), keys: `${MOD}+Shift+C` },
-        { label: t("terminalCtx.paste"), keys: `${MOD}+Shift+V` },
-        { label: t("terminalCtx.pasteSelectedText"), keys: `${MOD}+Shift+X` },
-        { label: t("terminalCtx.find"), keys: `${MOD}+Shift+F` },
-        { label: t("terminalCtx.clearScreen"), keys: `${MOD}+Shift+K` },
-        { label: t("terminalCtx.selectAll"), keys: `${MOD}+Shift+A` },
-      ],
-    },
-    {
-      title: t("settings.shortcutCategories.tab"),
-      items: [
-        { label: t("settings.shortcutLabels.newSession"), keys: `${MOD}+Shift+N` },
-        { label: t("settings.shortcutLabels.newLocalTerminal"), keys: `${MOD}+\`` },
-        { label: t("settings.shortcutLabels.closeTab"), keys: `${MOD}+Shift+W` },
-        { label: t("settings.shortcutLabels.nextTab"), keys: "Ctrl+Tab" },
-        { label: t("settings.shortcutLabels.prevTab"), keys: "Ctrl+Shift+Tab" },
-        { label: t("settings.shortcutLabels.switchTab"), keys: `${MOD}+1-9` },
-      ],
-    },
-    {
-      title: t("settings.shortcutCategories.view"),
-      items: [
-        { label: t("settings.shortcutLabels.toggleLeftSidebar"), keys: `${MOD}+Shift+E` },
-        { label: t("settings.shortcutLabels.toggleRightSidebar"), keys: `${MOD}+Shift+B` },
-        { label: t("settings.shortcutLabels.zoomIn"), keys: `${MOD}+=` },
-        { label: t("settings.shortcutLabels.zoomOut"), keys: `${MOD}+-` },
-        { label: t("settings.shortcutLabels.resetZoom"), keys: `${MOD}+0` },
-      ],
-    },
-    {
-      title: t("settings.shortcutCategories.special"),
-      items: [
-        { label: t("settings.shortcutLabels.lockScreen"), keys: `${MOD}+Shift+L` },
-        { label: t("settings.shortcutLabels.openSettings"), keys: `${MOD}+,` },
-      ],
-    },
-  ];
 
   return (
     <div className="space-y-5">
@@ -184,34 +138,6 @@ export function InteractionTab() {
           <SelectItem value="GBK">GBK</SelectItem>
         </SettingSelect>
       </SettingSection>
-
-      {shortcutSections.map((section) => (
-        <SettingSection
-          key={section.title}
-          title={section.title}
-          desc={section.desc}
-          contentClassName="space-y-0"
-        >
-          <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:gap-x-6">
-            {section.items.map((item) => (
-              <div
-                key={item.label}
-                className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="text-sm text-muted-foreground">{item.label}</span>
-                <KbdGroup className="flex-wrap sm:justify-end">
-                  {item.keys.split("+").map((key, i, arr) => (
-                    <React.Fragment key={`${item.label}-${key.trim()}`}>
-                      <Kbd>{key.trim()}</Kbd>
-                      {i < arr.length - 1 && <span className="text-muted-foreground">+</span>}
-                    </React.Fragment>
-                  ))}
-                </KbdGroup>
-              </div>
-            ))}
-          </div>
-        </SettingSection>
-      ))}
     </div>
   );
 }

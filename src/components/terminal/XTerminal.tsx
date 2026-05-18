@@ -17,6 +17,7 @@ import { useShellIntegration } from "@/hooks/useShellIntegration";
 import { useTerminalSearch } from "@/hooks/useTerminalSearch";
 import { useTerminalSettings } from "@/hooks/useTerminalSettings";
 import { emitAIErrorDetected } from "@/lib/aiEvents";
+import { resolveShortcutKeys } from "@/hooks/useShortcutMap";
 import { readClipboardText } from "@/lib/clipboard";
 import { assessCommandRisk } from "@/lib/commandRisk";
 import { invoke } from "@/lib/invoke";
@@ -37,6 +38,7 @@ import {
   getTrackedSubmissionCommand,
   resyncFromTerminalLine,
 } from "@/lib/terminalInputTracker";
+import { matchesKeyEvent } from "@/lib/shortcutRegistry";
 import { XTERM_PERFORMANCE_CONFIG } from "@/lib/xtermPerformance";
 import type { AIContext, CommandRiskResponse } from "@/types/global";
 import { Button } from "../ui/button";
@@ -749,75 +751,79 @@ export default function XTerminal({
 
     let lastSelection = "";
 
+    const kb = terminalAppSettings.keybindings;
     terminal.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
-      const ctrl = e.ctrlKey || e.metaKey;
-      const shift = e.shiftKey;
 
-      if (ctrl && shift) {
-        switch (e.code) {
-          case "KeyC": {
-            e.preventDefault();
-            const sel = terminal.getSelection();
-            if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.copy", kb), e)) {
+        e.preventDefault();
+        const sel = terminal.getSelection();
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        return false;
+      }
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.paste", kb), e)) {
+        e.preventDefault();
+        readClipboardText()
+          .then((text) => {
+            pasteText(text);
+          })
+          .catch(() => {});
+        return false;
+      }
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.find", kb), e)) {
+        e.preventDefault();
+        doFindRef.current();
+        return false;
+      }
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.clear", kb), e)) {
+        e.preventDefault();
+        terminal.clear();
+        return false;
+      }
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.pasteSelected", kb), e)) {
+        e.preventDefault();
+        const sel = terminal.getSelection() || lastSelection;
+        pasteText(sel);
+        return false;
+      }
+      if (matchesKeyEvent(resolveShortcutKeys("terminal.selectAll", kb), e)) {
+        e.preventDefault();
+        terminal.selectAll();
+        return false;
+      }
+
+      const swallowIds = [
+        "tab.newSession",
+        "tab.close",
+        "tab.next",
+        "tab.prev",
+        "tab.newLocalTerminal",
+        "view.toggleLeftSidebar",
+        "view.toggleRightSidebar",
+        "view.zoomIn",
+        "view.zoomOut",
+        "view.resetZoom",
+        "view.openSettings",
+        "terminal.manageSyncGroups",
+        "special.lockScreen",
+        "tab.switchTo",
+      ];
+      for (const sid of swallowIds) {
+        if (sid === "tab.switchTo") {
+          if (
+            (e.ctrlKey || e.metaKey) &&
+            !e.shiftKey &&
+            /^Digit[1-9]$/.test(e.code)
+          ) {
             return false;
           }
-          case "KeyV":
-            e.preventDefault();
-            readClipboardText()
-              .then((text) => {
-                pasteText(text);
-              })
-              .catch(() => {});
-            return false;
-          case "KeyF":
-            e.preventDefault();
-            doFindRef.current();
-            return false;
-          case "KeyK":
-            e.preventDefault();
-            terminal.clear();
-            return false;
-          case "KeyX": {
-            e.preventDefault();
-            const sel = terminal.getSelection() || lastSelection;
-            pasteText(sel);
-            return false;
-          }
-          case "KeyA":
-            e.preventDefault();
-            terminal.selectAll();
-            return false;
-          case "KeyN":
-          case "KeyW":
-          case "KeyE":
-          case "KeyB":
-          case "KeyL":
-          case "Tab":
-            return false;
+          continue;
+        }
+        if (matchesKeyEvent(resolveShortcutKeys(sid, kb), e)) {
+          return false;
         }
       }
 
-      if (ctrl && !shift) {
-        switch (e.code) {
-          case "Tab":
-          case "Digit1":
-          case "Digit2":
-          case "Digit3":
-          case "Digit4":
-          case "Digit5":
-          case "Digit6":
-          case "Digit7":
-          case "Digit8":
-          case "Digit9":
-          case "Digit0":
-          case "Equal":
-          case "Minus":
-          case "Backquote":
-          case "Comma":
-            return false;
-        }
-      }
       return true;
     });
 

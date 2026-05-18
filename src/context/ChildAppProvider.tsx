@@ -128,6 +128,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
       show_labels: false,
     },
   },
+  keybindings: {},
 };
 
 /**

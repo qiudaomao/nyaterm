@@ -75,11 +75,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context/AppContext";
+import { resolveShortcutKeys } from "@/hooks/useShortcutMap";
 import { openAIAssistant } from "@/lib/aiEvents";
 import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { logger } from "@/lib/logger";
 import { sendSessionInput } from "@/lib/sessionInput";
+import { matchesKeyEvent } from "@/lib/shortcutRegistry";
 import { cn, formatSize } from "@/lib/utils";
 import { openAutoUpload } from "@/lib/windowManager";
 import type {
@@ -1521,6 +1523,27 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       const nextSelection = new Set(filteredSortedFiles.map((entry) => entry.name));
       setSelectedFiles(nextSelection);
       lastSelectedRef.current = filteredSortedFiles[0]?.name ?? null;
+      return;
+    }
+
+    if (
+      matchesKeyEvent(
+        resolveShortcutKeys("fileExplorer.rename", appSettings.keybindings),
+        event.nativeEvent,
+      ) &&
+      selectedRealFiles.length === 1 &&
+      activeSessionId &&
+      !renameDialogData
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      const entry = selectedRealFiles[0];
+      setRenameDialogData({
+        sessionId: activeSessionId,
+        oldPath: getEntryFullPath(entry),
+        name: entry.name,
+        currentDirPath: currentPath,
+      });
       return;
     }
 
