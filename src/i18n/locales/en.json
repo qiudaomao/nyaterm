@@ -662,6 +662,10 @@
     "searchOrCreateCategory": "Search or create category...",
     "selectIcon": "Select Icon",
     "sendToAll": "Send to All Sessions",
+    "sort": "Sort",
+    "sortByName": "By name",
+    "sortByUpdated": "By updated time",
+    "sortByUseCount": "By usage",
     "uncategorized": "Uncategorized"
   },
   "recording": {
