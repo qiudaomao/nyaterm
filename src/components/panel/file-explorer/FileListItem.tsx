@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MdAutoAwesome,
@@ -56,6 +57,13 @@ interface FileListItemProps {
   onProperties: (entry: FileEntry) => void;
   aiActions: AICustomActionConfig[];
   onAIAction: (entry: FileEntry, action: AICustomActionConfig) => void;
+  inlineRename?: {
+    value: string;
+    isSubmitting: boolean;
+  } | null;
+  onInlineRenameChange: (value: string) => void;
+  onInlineRenameSubmit: () => void;
+  onInlineRenameCancel: () => void;
 }
 
 function formatModifiedTime(unix: number): string {
@@ -63,6 +71,11 @@ function formatModifiedTime(unix: number): string {
   const d = new Date(unix * 1000);
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getFilenameSelectionEnd(name: string): number {
+  const lastDot = name.lastIndexOf(".");
+  return lastDot > 0 ? lastDot : name.length;
 }
 
 export function FileListItem({
@@ -89,8 +102,15 @@ export function FileListItem({
   onProperties,
   aiActions,
   onAIAction,
+  inlineRename,
+  onInlineRenameChange,
+  onInlineRenameSubmit,
+  onInlineRenameCancel,
 }: FileListItemProps) {
   const { t } = useTranslation();
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameBlurGuardUntilRef = useRef(0);
+  const preventNextContextMenuAutoFocusRef = useRef(false);
   const entryIcon = getFileIcon(entry);
   const modifiedTime = formatModifiedTime(entry.mtime);
   const fileSize = isParentDirectoryEntry || entry.is_dir ? "-" : formatSize(entry.size);
@@ -100,6 +120,43 @@ export function FileListItem({
   const itemTitle = isParentDirectoryEntry
     ? t("fileExplorer.goUp")
     : `${permissions} ${fileSize} ${modifiedTime} ${owner}:${group}`;
+  const isRenaming = !!inlineRename;
+
+  useLayoutEffect(() => {
+    if (!isRenaming) {
+      return;
+    }
+
+    renameBlurGuardUntilRef.current = performance.now() + 350;
+    const input = renameInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(0, getFilenameSelectionEnd(entry.name));
+  }, [entry.name, isRenaming]);
+
+  useEffect(() => {
+    if (!isRenaming) {
+      return;
+    }
+
+    let frame = 0;
+    const timeout = window.setTimeout(() => {
+      frame = window.requestAnimationFrame(() => {
+        const input = renameInputRef.current;
+        if (!input || document.activeElement === input) return;
+        input.focus();
+        input.setSelectionRange(0, getFilenameSelectionEnd(entry.name));
+      });
+      renameBlurGuardUntilRef.current = performance.now() + 350;
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [entry.name, isRenaming]);
 
   return (
     <ContextMenu>
@@ -121,15 +178,29 @@ export function FileListItem({
           onMouseLeave={(e) => {
             if (!isSelected) e.currentTarget.style.backgroundColor = "";
           }}
-          onMouseDown={(e) => onSelectionStart(entry, e)}
+          onMouseDown={(e) => {
+            if (isRenaming) {
+              e.stopPropagation();
+              return;
+            }
+            onSelectionStart(entry, e);
+          }}
           onDoubleClick={() => {
+            if (isRenaming) return;
             if (entry.is_dir) {
               onItemClick(entry);
             } else {
               onOpenDefault(entry);
             }
           }}
-          onContextMenu={(e) => onContextMenuSelect(entry, e)}
+          onContextMenu={(e) => {
+            if (isRenaming) {
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            onContextMenuSelect(entry, e);
+          }}
           title={itemTitle}
         >
           <div className="flex min-w-0 items-center gap-2 px-2">
@@ -137,7 +208,43 @@ export function FileListItem({
               className="shrink-0 text-base"
               style={{ color: isSelected ? "var(--df-primary)" : entryIcon.color }}
             />
-            <span className="min-w-0 flex-1 truncate text-xs">{entry.name}</span>
+            {isRenaming ? (
+              <input
+                ref={renameInputRef}
+                className="h-6 min-w-0 flex-1 rounded border border-[var(--df-primary)] bg-[var(--df-bg-panel)] px-1.5 text-xs text-[var(--df-text)] outline-none"
+                value={inlineRename.value}
+                onChange={(event) => onInlineRenameChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInlineRenameSubmit();
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInlineRenameCancel();
+                  }
+                }}
+                onBlur={() => {
+                  if (performance.now() < renameBlurGuardUntilRef.current) {
+                    window.setTimeout(() => {
+                      renameInputRef.current?.focus();
+                    }, 0);
+                    return;
+                  }
+                  if (!inlineRename.isSubmitting) {
+                    onInlineRenameCancel();
+                  }
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+                onContextMenu={(event) => event.stopPropagation()}
+                disabled={inlineRename.isSubmitting}
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-xs">{entry.name}</span>
+            )}
           </div>
           <span
             className="truncate px-2 font-mono text-[0.625rem] tabular-nums"
@@ -171,7 +278,16 @@ export function FileListItem({
           </span>
         </li>
       </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-[200px]">
+      <ContextMenuContent
+        className="min-w-[200px]"
+        onCloseAutoFocus={(event) => {
+          if (!preventNextContextMenuAutoFocusRef.current) {
+            return;
+          }
+          preventNextContextMenuAutoFocusRef.current = false;
+          event.preventDefault();
+        }}
+      >
         {isParentDirectoryEntry ? (
           <>
             <ContextMenuItem onClick={() => onItemClick(entry)}>
@@ -222,7 +338,12 @@ export function FileListItem({
               {t("fileExplorer.cmDownload")}
             </ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem onClick={() => activeSessionId && onRename(entry)}>
+            <ContextMenuItem
+              onClick={() => {
+                preventNextContextMenuAutoFocusRef.current = true;
+                activeSessionId && onRename(entry);
+              }}
+            >
               <MdEdit className="text-[0.875rem] text-muted-foreground mr-2" />
               {t("fileExplorer.cmRename")}
             </ContextMenuItem>

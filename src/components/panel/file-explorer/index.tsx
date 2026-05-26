@@ -52,9 +52,6 @@ import NewSymlinkDialog, {
 import PropertiesDialog, {
   type PropertiesDialogData,
 } from "@/components/dialog/file-explorer/PropertiesDialog";
-import RenameDialog, {
-  type RenameDialogData,
-} from "@/components/dialog/file-explorer/RenameDialog";
 import PanelHeader from "@/components/layout/PanelHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -265,6 +262,14 @@ type LoadDirectoryOptions = {
   selectEntryName?: string;
 };
 
+type InlineRenameState = {
+  entryName: string;
+  oldPath: string;
+  initialName: string;
+  value: string;
+  isSubmitting: boolean;
+};
+
 // Keep per-session explorer state alive when the panel is unmounted and shown again.
 const fileExplorerSessionCacheStore = new Map<string, FileExplorerSessionCache>();
 const FILE_LIST_ITEM_HEIGHT = 30;
@@ -430,7 +435,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [renameDialogData, setRenameDialogData] = useState<RenameDialogData | null>(null);
+  const [inlineRenameState, setInlineRenameState] = useState<InlineRenameState | null>(null);
   const [deleteDialogData, setDeleteDialogData] = useState<DeleteDialogData | null>(null);
   const [moveDialogData, setMoveDialogData] = useState<MoveDialogData | null>(null);
   const [newItemDialogData, setNewItemDialogData] = useState<NewItemDialogData | null>(null);
@@ -452,6 +457,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const pendingRevealNameRef = useRef<string | null>(null);
+  const inlineRenameScopeRef = useRef("");
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const dragSelectionRef = useRef<{
@@ -720,6 +726,12 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
             }
 
             const entryNames = new Set(entries.map((entry) => entry.name));
+            if (selectEntryName && entryNames.has(selectEntryName)) {
+              lastSelectedRef.current = selectEntryName;
+              pendingRevealNameRef.current = selectEntryName;
+              return new Set([selectEntryName]);
+            }
+
             const next = new Set([...prev].filter((name) => entryNames.has(name)));
             if (lastSelectedRef.current && !entryNames.has(lastSelectedRef.current)) {
               lastSelectedRef.current = null;
@@ -1236,6 +1248,25 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
         .sort((left, right) => compareFileEntries(left, right, fileSortMode)),
     [files, fileSearchQuery, fileSortMode],
   );
+
+  useEffect(() => {
+    const nextScope = `${activeSessionId ?? ""}:${currentPath}`;
+    if (inlineRenameScopeRef.current === nextScope) {
+      return;
+    }
+    inlineRenameScopeRef.current = nextScope;
+    setInlineRenameState(null);
+  }, [activeSessionId, currentPath]);
+
+  useEffect(() => {
+    setInlineRenameState((prev) => {
+      if (!prev || filteredSortedFiles.some((entry) => entry.name === prev.entryName)) {
+        return prev;
+      }
+      return null;
+    });
+  }, [filteredSortedFiles]);
+
   const isFileSearchActive = fileSearchQuery.trim().length > 0;
   const fileListGridTemplate = useMemo(
     () => FILE_LIST_COLUMNS.map((column) => `${fileListColumnWidths[column.id]}px`).join(" "),
@@ -1528,17 +1559,11 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       ) &&
       selectedRealFiles.length === 1 &&
       activeSessionId &&
-      !renameDialogData
+      !inlineRenameState
     ) {
       event.preventDefault();
       event.stopPropagation();
-      const entry = selectedRealFiles[0];
-      setRenameDialogData({
-        sessionId: activeSessionId,
-        oldPath: getEntryFullPath(entry),
-        name: entry.name,
-        currentDirPath: currentPath,
-      });
+      beginInlineRename(selectedRealFiles[0]);
       return;
     }
 
@@ -1621,6 +1646,66 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   const getEntryFullPath = (entry: FileEntry) => {
     return currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`;
   };
+
+  const beginInlineRename = useCallback(
+    (entry: FileEntry) => {
+      if (!activeSessionId || isParentDirectoryEntry(entry)) return;
+
+      dragSelectionRef.current = null;
+      lastSelectedRef.current = entry.name;
+      setSelectedFiles(new Set([entry.name]));
+      setInlineRenameState({
+        entryName: entry.name,
+        oldPath: currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`,
+        initialName: entry.name,
+        value: entry.name,
+        isSubmitting: false,
+      });
+    },
+    [activeSessionId, currentPath],
+  );
+
+  const cancelInlineRename = useCallback(() => {
+    setInlineRenameState((prev) => (prev?.isSubmitting ? prev : null));
+  }, []);
+
+  const handleInlineRenameSubmit = useCallback(async () => {
+    if (!activeSessionId || !inlineRenameState || inlineRenameState.isSubmitting) return;
+
+    const newName = inlineRenameState.value.trim();
+    if (!newName || newName === inlineRenameState.initialName) {
+      setInlineRenameState(null);
+      return;
+    }
+
+    const newPath =
+      currentPathRef.current === "/" ? `/${newName}` : `${currentPathRef.current}/${newName}`;
+    setInlineRenameState((prev) =>
+      prev && prev.entryName === inlineRenameState.entryName
+        ? { ...prev, value: newName, isSubmitting: true }
+        : prev,
+    );
+
+    try {
+      await invoke("rename_remote_file", {
+        sessionId: activeSessionId,
+        oldPath: inlineRenameState.oldPath,
+        newPath,
+      });
+      await loadDirectory(currentPathRef.current, {
+        history: "preserve",
+        selectEntryName: newName,
+      });
+      setInlineRenameState(null);
+    } catch (e) {
+      toast.error(String(e));
+      setInlineRenameState((prev) =>
+        prev && prev.entryName === inlineRenameState.entryName
+          ? { ...prev, isSubmitting: false }
+          : prev,
+      );
+    }
+  }, [activeSessionId, inlineRenameState, loadDirectory]);
 
   const getEntryAiActions = (entry: FileEntry) => {
     if (entry.is_dir || entry.size > appSettings.ai.max_ai_file_size_bytes) {
@@ -2311,15 +2396,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
                           onUpload={handleUploadFiles}
                           onUploadFolder={handleUploadFolder}
                           onDownload={handleDownloadFromContextMenu}
-                          onRename={(entry) => {
-                            if (activeSessionId)
-                              setRenameDialogData({
-                                sessionId: activeSessionId,
-                                oldPath: getEntryFullPath(entry),
-                                name: entry.name,
-                                currentDirPath: currentPath,
-                              });
-                          }}
+                          onRename={beginInlineRename}
                           onMove={(entry) => {
                             if (activeSessionId)
                               setMoveDialogData({
@@ -2343,6 +2420,21 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
                           }}
                           aiActions={getEntryAiActions(entry)}
                           onAIAction={(entry, action) => void handleFileAIAction(entry, action)}
+                          inlineRename={
+                            inlineRenameState?.entryName === entry.name
+                              ? {
+                                  value: inlineRenameState.value,
+                                  isSubmitting: inlineRenameState.isSubmitting,
+                                }
+                              : null
+                          }
+                          onInlineRenameChange={(value) =>
+                            setInlineRenameState((prev) =>
+                              prev?.entryName === entry.name ? { ...prev, value } : prev,
+                            )
+                          }
+                          onInlineRenameSubmit={() => void handleInlineRenameSubmit()}
+                          onInlineRenameCancel={cancelInlineRename}
                         />
                       ))}
                     </ul>
@@ -2495,14 +2587,6 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
             </Tooltip>
           </div>
         </div>
-      )}
-
-      {renameDialogData && (
-        <RenameDialog
-          data={renameDialogData}
-          onClose={() => setRenameDialogData(null)}
-          onSuccess={() => void refreshCurrentDirectory()}
-        />
       )}
 
       {deleteDialogData && (
