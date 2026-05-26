@@ -102,7 +102,7 @@ export default function ImportDialog({ open, onClose }: ImportDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="w-[360px] sm:max-w-[360px] p-6">
+        <DialogContent className="w-[min(360px,calc(100vw-2rem))] sm:max-w-[360px] p-6">
           <DialogHeader>
             <DialogTitle className="text-sm">{t("settings.importConfig")}</DialogTitle>
             <DialogDescription className="text-xs">

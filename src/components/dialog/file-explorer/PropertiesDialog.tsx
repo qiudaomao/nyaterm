@@ -180,7 +180,7 @@ export default function PropertiesDialog({ data, onClose }: PropertiesDialogProp
 
   return (
     <Dialog open onOpenChange={(v) => !v && !isSaving && onClose()}>
-      <DialogContent className="w-[420px] sm:max-w-[420px] p-0 gap-0">
+      <DialogContent className="w-[min(420px,calc(100vw-2rem))] sm:max-w-[420px] p-0 gap-0">
         <DialogHeader className="px-5 py-3 border-b">
           <DialogTitle className="text-sm flex items-center gap-2 min-w-0">
             {data.is_dir ? (
@@ -266,9 +266,9 @@ export default function PropertiesDialog({ data, onClose }: PropertiesDialogProp
                       ),
                     },
                   ].map((row) => (
-                    <div key={row.key} className="flex items-start">
+                    <div key={row.key} className="flex min-w-0 items-start">
                       <span className="w-24 shrink-0 text-muted-foreground">{row.label}:</span>
-                      <span>{row.value}</span>
+                      <span className="min-w-0 break-words">{row.value}</span>
                     </div>
                   ))}
                 </div>

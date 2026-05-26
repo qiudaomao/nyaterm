@@ -66,7 +66,7 @@ export default function VariablePromptDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
-      <DialogContent className="w-[400px] sm:max-w-[400px] p-0 gap-0">
+      <DialogContent className="w-[min(400px,calc(100vw-2rem))] sm:max-w-[400px] p-0 gap-0">
         <DialogHeader className="px-5 py-3 border-b">
           <DialogTitle className="text-sm">{t("quickCommands.fillVariables")}</DialogTitle>
           <DialogDescription className="sr-only">

@@ -86,14 +86,14 @@ export default function NewItemDialog({ data, onClose, onSuccess }: NewItemDialo
 
   return (
     <Dialog open onOpenChange={(v) => !v && !isSubmitting && onClose()}>
-      <DialogContent className="w-[500px] sm:max-w-[500px] p-0 gap-0">
+      <DialogContent className="w-[min(500px,calc(100vw-2rem))] sm:max-w-[500px] p-0 gap-0">
         <DialogHeader className="px-5 py-3 border-b">
           <DialogTitle className="text-sm">{t(titleKey)}</DialogTitle>
           <DialogDescription className="sr-only">{t(titleKey)}</DialogDescription>
         </DialogHeader>
 
         <div className="p-5 space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Label className="text-xs w-16 shrink-0">{t(labelKey)}</Label>
             <Input
               ref={inputRef}
@@ -106,9 +106,9 @@ export default function NewItemDialog({ data, onClose, onSuccess }: NewItemDialo
             />
           </div>
 
-          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             <Label className="text-xs w-16 shrink-0 mt-3">{t("fileExplorer.permissions")}:</Label>
-            <div className="flex-1 space-y-3">
+            <div className="min-w-0 flex-1 space-y-3">
               {/* Permission Grid */}
               <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-x-2 gap-y-3 text-xs items-center">
                 <span className="text-muted-foreground mr-2">{t("fileExplorer.permUser")}</span>
@@ -229,21 +229,21 @@ export default function NewItemDialog({ data, onClose, onSuccess }: NewItemDialo
           </div>
         </div>
 
-        <DialogFooter className="px-5 py-3 border-t flex flex-row items-center justify-between sm:justify-between">
-          <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+        <DialogFooter className="px-5 py-3 border-t flex flex-col-reverse items-stretch justify-between sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs">
             <Checkbox
               checked={openAfterCreate}
               onCheckedChange={(v) => setOpenAfterCreate(v === true)}
             />
-            {t(openLabelKey)}
+            <span className="min-w-0 break-words">{t(openLabelKey)}</span>
           </label>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 justify-end gap-2">
             <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
               {t("dialog.cancel")}
             </Button>
             <Button size="sm" onClick={handleSubmit} disabled={isSubmitting || !name.trim()}>
               {isSubmitting && <MdRefresh className="text-[0.875rem] animate-spin h-4 w-4 mr-1" />}
-              OK
+              {t("common.confirm")}
             </Button>
           </div>
         </DialogFooter>

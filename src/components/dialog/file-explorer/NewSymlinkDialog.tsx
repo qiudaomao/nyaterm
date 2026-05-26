@@ -57,14 +57,14 @@ export default function NewSymlinkDialog({ data, onClose, onSuccess }: NewSymlin
 
   return (
     <Dialog open onOpenChange={(v) => !v && !isSubmitting && onClose()}>
-      <DialogContent className="w-[480px] sm:max-w-[480px] p-0 gap-0">
+      <DialogContent className="w-[min(480px,calc(100vw-2rem))] sm:max-w-[480px] p-0 gap-0">
         <DialogHeader className="px-5 py-3 border-b">
           <DialogTitle className="text-sm">{t("fileExplorer.newSymlink")}</DialogTitle>
           <DialogDescription className="sr-only">{t("fileExplorer.newSymlink")}</DialogDescription>
         </DialogHeader>
 
         <div className="p-5 space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Label className="text-xs w-20 shrink-0">{t("fileExplorer.symlinkName")}</Label>
             <Input
               className="text-sm flex-1 h-8"
@@ -75,7 +75,7 @@ export default function NewSymlinkDialog({ data, onClose, onSuccess }: NewSymlin
               autoFocus
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Label className="text-xs w-20 shrink-0">{t("fileExplorer.symlinkTarget")}</Label>
             <Input
               className="text-sm flex-1 h-8"
@@ -98,7 +98,7 @@ export default function NewSymlinkDialog({ data, onClose, onSuccess }: NewSymlin
             disabled={isSubmitting || !name.trim() || !target.trim()}
           >
             {isSubmitting && <MdRefresh className="text-[0.875rem] animate-spin h-4 w-4 mr-1" />}
-            OK
+            {t("common.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

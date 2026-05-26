@@ -73,7 +73,7 @@ export default function DeleteDialog({ data, onClose, onSuccess }: DeleteDialogP
 
   return (
     <Dialog open onOpenChange={(v) => !v && !isSubmitting && onClose()}>
-      <DialogContent className="w-80 sm:max-w-80">
+      <DialogContent className="w-[min(20rem,calc(100vw-2rem))] sm:max-w-80">
         <DialogHeader>
           <DialogTitle className="text-sm break-words">
             {data.items.length === 1
