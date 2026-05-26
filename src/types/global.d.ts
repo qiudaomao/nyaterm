@@ -1,6 +1,17 @@
 /** Type of terminal session. */
 export type SessionType = "SSH" | "Local" | "Telnet" | "Serial";
 
+export interface AppRuntimeInfo {
+  portable: boolean;
+  mode: "installed" | "portable";
+  executableDir: string;
+  dataDir: string;
+  configDir: string;
+  logDir: string;
+  webviewDataDir: string;
+  portableMarkerPath?: string | null;
+}
+
 /** AI Agent command execution wrapper profile. */
 export type AIExecutionProfile = "auto" | "posix" | "powershell" | "cmd" | "send_only" | "disabled";
 

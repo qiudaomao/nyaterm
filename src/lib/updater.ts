@@ -2,7 +2,14 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { logger } from "@/lib/logger";
 
-export type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "ready" | "error";
+export type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "ready"
+  | "error"
+  | "manual";
 
 export interface UpdateProgress {
   downloaded: number;

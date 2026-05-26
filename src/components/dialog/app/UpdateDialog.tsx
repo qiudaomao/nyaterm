@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useApp } from "@/context/AppContext";
 import { Progress } from "@/components/ui/progress";
 import type { UpdateInfo, UpdateProgress, UpdateStatus } from "@/lib/updater";
 import { checkForUpdate, downloadAndInstallUpdate, relaunchApp } from "@/lib/updater";
@@ -23,6 +24,8 @@ interface UpdateDialogProps {
   onClose: () => void;
   onUpdateFound?: (info: UpdateInfo) => void;
 }
+
+const RELEASES_URL = "https://github.com/nyakang/nyaterm/releases";
 
 type MarkdownNodeProps = {
   children?: ReactNode;
@@ -146,6 +149,7 @@ function MarkdownContent({ content }: { content: string }) {
 
 export default function UpdateDialog({ open, onClose, onUpdateFound }: UpdateDialogProps) {
   const { t } = useTranslation();
+  const { runtimeInfo } = useApp();
   const [status, setStatus] = useState<UpdateStatus>("checking");
   const [progress, setProgress] = useState<UpdateProgress>({ downloaded: 0, total: 0 });
   const [error, setError] = useState<string>("");
@@ -161,11 +165,17 @@ export default function UpdateDialog({ open, onClose, onUpdateFound }: UpdateDia
     getVersion()
       .then(setCurrentVersion)
       .catch(() => {});
-    setStatus("checking");
     setProgress({ downloaded: 0, total: 0 });
     setError("");
     setLocalUpdateInfo(null);
     isUpdating.current = false;
+
+    if (runtimeInfo.portable) {
+      setStatus("manual");
+      return;
+    }
+
+    setStatus("checking");
 
     let cancelled = false;
     checkForUpdate()
@@ -188,7 +198,7 @@ export default function UpdateDialog({ open, onClose, onUpdateFound }: UpdateDia
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, runtimeInfo.portable]);
 
   const handleUpdate = useCallback(async () => {
     if (isUpdating.current) return;
@@ -218,7 +228,11 @@ export default function UpdateDialog({ open, onClose, onUpdateFound }: UpdateDia
   }, []);
 
   const canClose =
-    status === "checking" || status === "available" || status === "idle" || status === "error";
+    status === "checking" ||
+    status === "available" ||
+    status === "idle" ||
+    status === "error" ||
+    status === "manual";
   const percent = progress.total > 0 ? Math.round((progress.downloaded / progress.total) * 100) : 0;
 
   return (
@@ -256,6 +270,28 @@ export default function UpdateDialog({ open, onClose, onUpdateFound }: UpdateDia
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={onClose}>
                 {t("common.close")}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {status === "manual" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{t("updater.portableManualTitle")}</DialogTitle>
+              <DialogDescription className="space-y-2 pt-1 text-xs">
+                <span className="block">
+                  {t("updater.currentVersion")}: v{currentVersion}
+                </span>
+                <span className="block">{t("updater.portableManualDesc")}</span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={onClose}>
+                {t("common.close")}
+              </Button>
+              <Button size="sm" onClick={() => void openUrl(RELEASES_URL)}>
+                {t("updater.openReleases")}
               </Button>
             </DialogFooter>
           </>

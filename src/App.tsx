@@ -125,6 +125,8 @@ function App() {
     isLocked,
     setIsLocked,
     settingsLoaded,
+    runtimeInfo,
+    runtimeInfoLoaded,
   } = useApp();
   const uiConfig = appSettings.ui;
   const { t, i18n } = useTranslation();
@@ -171,6 +173,8 @@ function App() {
 
   // Background update check on startup
   useEffect(() => {
+    if (!runtimeInfoLoaded || runtimeInfo.portable) return;
+
     const timer = setTimeout(() => {
       checkForUpdate()
         .then((info) => {
@@ -182,7 +186,7 @@ function App() {
         .catch(() => {});
     }, 3000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [runtimeInfo.portable, runtimeInfoLoaded]);
 
   const handleOpenPanel = useCallback(
     (panelId: "activeSessions" | "syncBackupHistory") => {

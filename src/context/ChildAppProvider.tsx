@@ -5,7 +5,13 @@ import {
   DEFAULT_COMMAND_SUGGESTION_MAX_CHARS,
   DEFAULT_COMMAND_SUGGESTION_MIN_CHARS,
 } from "@/lib/interactionSettings";
-import type { AppSettings, Group, SavedConnection, UiConfig } from "@/types/global";
+import type {
+  AppRuntimeInfo,
+  AppSettings,
+  Group,
+  SavedConnection,
+  UiConfig,
+} from "@/types/global";
 import i18n from "../i18n";
 import { invoke } from "../lib/invoke";
 import { logger, setLoggerLevel } from "../lib/logger";
@@ -132,6 +138,17 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     },
   },
   keybindings: {},
+};
+
+const DEFAULT_RUNTIME_INFO: AppRuntimeInfo = {
+  portable: false,
+  mode: "installed",
+  executableDir: "",
+  dataDir: "",
+  configDir: "",
+  logDir: "",
+  webviewDataDir: "",
+  portableMarkerPath: null,
 };
 
 /**
@@ -272,6 +289,8 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
       isLocked: false,
       setIsLocked: noop,
       settingsLoaded,
+      runtimeInfo: DEFAULT_RUNTIME_INFO,
+      runtimeInfoLoaded: true,
     }),
     [
       noop,

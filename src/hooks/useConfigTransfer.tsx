@@ -1,6 +1,4 @@
-import { appLogDir } from "@tauri-apps/api/path";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -81,8 +79,7 @@ export function useConfigTransfer() {
 
   const handleOpenLogs = async () => {
     try {
-      const logDir = await appLogDir();
-      await openPath(logDir);
+      await invoke("open_log_dir");
     } catch (error) {
       logger.error({
         domain: "ui.error",

@@ -1,6 +1,5 @@
-import { appLogDir } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BiExport, BiImport, BiServer } from "react-icons/bi";
@@ -48,6 +47,7 @@ import { useConfigTransfer } from "@/hooks/useConfigTransfer";
 import { resolveDisplayKeys } from "@/hooks/useShortcutMap";
 import { AVAILABLE_LANGUAGES } from "@/i18n";
 import { logger } from "@/lib/logger";
+import { invoke } from "@/lib/invoke";
 import { isMacOS } from "@/lib/platform";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -364,8 +364,7 @@ export default function Header({
         icon: "article",
         action: async () => {
           try {
-            const logDir = await appLogDir();
-            await openPath(logDir);
+            await invoke("open_log_dir");
           } catch (error) {
             logger.error({
               domain: "ui.error",

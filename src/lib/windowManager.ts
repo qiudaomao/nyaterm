@@ -7,6 +7,7 @@ import {
 } from "@tauri-apps/api/window";
 import i18n from "../i18n";
 import { isMacOS } from "./platform";
+import { invoke } from "./invoke";
 
 interface ChildWindowOptions {
   label: string;
@@ -104,32 +105,30 @@ export async function openChildWindow(opts: ChildWindowOptions) {
     await syncMainWindowModalState().catch(() => {});
     return existing;
   }
-  const parentWindow = await getMainWindow();
-  const win = new WebviewWindow(opts.label, {
-    url: opts.url,
-    title: opts.title,
-    width: opts.width ?? 720,
-    height: opts.height ?? 560,
-    visible: false,
-    center: true,
-    decorations: isMacOS,
-    titleBarStyle: isMacOS ? "overlay" : undefined,
-    hiddenTitle: isMacOS || undefined,
-    resizable: opts.resizable ?? true,
-    alwaysOnTop: needsAlwaysOnTop(opts.label),
-    parent: parentWindow,
+  await invoke("open_child_window", {
+    options: {
+      label: opts.label,
+      title: opts.title,
+      url: opts.url,
+      width: opts.width ?? 720,
+      height: opts.height ?? 560,
+      resizable: opts.resizable ?? true,
+      alwaysOnTop: needsAlwaysOnTop(opts.label),
+    },
   });
-  win.once("tauri://created", () => {
-    emit("child-window-opened", { label: opts.label });
-    void win.setAlwaysOnTop(needsAlwaysOnTop(opts.label)).catch(() => {});
-    void win.setFocus().catch(() => {});
-    void syncMainWindowModalState();
-  });
+
+  const win = await WebviewWindow.getByLabel(opts.label);
+  if (!win) {
+    throw new Error(`Failed to create child window: ${opts.label}`);
+  }
+
+  emit("child-window-opened", { label: opts.label });
+  await win.setAlwaysOnTop(needsAlwaysOnTop(opts.label)).catch(() => {});
+  await win.setFocus().catch(() => {});
+  await syncMainWindowModalState().catch(() => {});
+
   win.once("tauri://destroyed", () => {
     emit("child-window-closed", { label: opts.label });
-    void syncMainWindowModalState();
-  });
-  win.once("tauri://error", () => {
     void syncMainWindowModalState();
   });
   return win;

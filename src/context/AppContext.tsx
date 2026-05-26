@@ -33,6 +33,7 @@ import {
   updateSplitRatio as updateWorkspaceSplitRatio,
 } from "@/lib/workspaceTabs";
 import type {
+  AppRuntimeInfo,
   AppSettings,
   Group,
   PaneSplitDirection,
@@ -140,6 +141,8 @@ interface AppContextType {
 
   // Loading
   settingsLoaded: boolean;
+  runtimeInfo: AppRuntimeInfo;
+  runtimeInfoLoaded: boolean;
 }
 
 export type TerminalAppSettings = Pick<
@@ -289,6 +292,17 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
 
 const RECENT_CONNECTION_LIMIT = 10;
 
+const DEFAULT_RUNTIME_INFO: AppRuntimeInfo = {
+  portable: false,
+  mode: "installed",
+  executableDir: "",
+  dataDir: "",
+  configDir: "",
+  logDir: "",
+  webviewDataDir: "",
+  portableMarkerPath: null,
+};
+
 function areSettingsValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (typeof left !== typeof right) return false;
@@ -426,6 +440,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Loading State
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [runtimeInfo, setRuntimeInfo] = useState<AppRuntimeInfo>(DEFAULT_RUNTIME_INFO);
+  const [runtimeInfoLoaded, setRuntimeInfoLoaded] = useState(false);
 
   const setActiveTabId = useCallback((id: string | null) => {
     activeTabIdRef.current = id;
@@ -434,6 +450,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // 1. Load App Settings
   useEffect(() => {
+    invoke<AppRuntimeInfo>("get_app_runtime_info")
+      .then((info) => {
+        setRuntimeInfo(info);
+      })
+      .catch((error) => {
+        logger.error({
+          domain: "app.lifecycle",
+          event: "runtime_info.load_failed",
+          message: "Failed to load app runtime info",
+          error,
+        });
+      })
+      .finally(() => {
+        setRuntimeInfoLoaded(true);
+      });
+
     invoke<AppSettings>("get_app_settings")
       .then((cfg) => {
         appSettingsRef.current = cfg;
@@ -1083,6 +1115,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isLocked,
       setIsLocked,
       settingsLoaded,
+      runtimeInfo,
+      runtimeInfoLoaded,
     }),
     [
       tabs,
@@ -1119,6 +1153,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       broadcastToAll,
       isLocked,
       settingsLoaded,
+      runtimeInfo,
+      runtimeInfoLoaded,
     ],
   );
 
