@@ -72,6 +72,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context/AppContext";
+import { useTransfer } from "@/context/TransferContext";
 import { resolveShortcutKeys } from "@/hooks/useShortcutMap";
 import { openAIAssistant } from "@/lib/aiEvents";
 import { getErrorMessage } from "@/lib/errors";
@@ -471,6 +472,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   const [isExternalDropActive, setIsExternalDropActive] = useState(false);
   const [listScrollTop, setListScrollTop] = useState(0);
   const [listViewportHeight, setListViewportHeight] = useState(0);
+  const refreshUploadCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   filesRef.current = files;
   activeSessionIdRef.current = activeSessionId;
@@ -775,79 +777,31 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   }, [loadDirectory]);
 
   const uploadLocalEntriesToTarget = useCallback(
-    async (
+    (
       target: { sessionId: string; remoteDir: string },
       entries: Array<{ path: string; isDir: boolean }>,
     ) => {
       if (entries.length === 0) return;
 
-      let refreshAfterUpload = false;
-
-      for (const entry of entries) {
-        if (!entry.path) continue;
-
-        if (entry.isDir) {
-          const folderName = getLocalPathName(entry.path, "uploaded_folder");
-          const remotePath = buildRemoteUploadPath(target.remoteDir, folderName);
-
-          try {
-            await invoke("upload_local_directory", {
+      enqueueUploads(
+        entries
+          .filter((entry) => !!entry.path)
+          .map((entry) => {
+            const fileName = getLocalPathName(
+              entry.path,
+              entry.isDir ? "uploaded_folder" : "uploaded_file",
+            );
+            return {
               sessionId: target.sessionId,
+              fileName,
               localPath: entry.path,
-              remotePath,
-            });
-            refreshAfterUpload = true;
-          } catch (error) {
-            logger.error({
-              domain: "transfer.lifecycle",
-              event: "upload.folder_failed",
-              message: "Upload folder failed",
-              ids: { session_id: target.sessionId },
-              data: {
-                local_path: entry.path,
-                remote_path: remotePath,
-              },
-              error,
-            });
-          }
-
-          continue;
-        }
-
-        const fileName = getLocalPathName(entry.path, "uploaded_file");
-        const remotePath = buildRemoteUploadPath(target.remoteDir, fileName);
-
-        try {
-          await invoke("upload_local_file", {
-            sessionId: target.sessionId,
-            localPath: entry.path,
-            remotePath,
-          });
-          refreshAfterUpload = true;
-        } catch (error) {
-          logger.error({
-            domain: "transfer.lifecycle",
-            event: "upload.failed",
-            message: "Upload failed",
-            ids: { session_id: target.sessionId },
-            data: {
-              local_path: entry.path,
-              remote_path: remotePath,
-            },
-            error,
-          });
-        }
-      }
-
-      if (
-        refreshAfterUpload &&
-        activeSessionIdRef.current === target.sessionId &&
-        normalizeDirectoryPath(currentPathRef.current) === normalizeDirectoryPath(target.remoteDir)
-      ) {
-        void refreshCurrentDirectory();
-      }
+              remotePath: buildRemoteUploadPath(target.remoteDir, fileName),
+              kind: entry.isDir ? ("directory" as const) : ("file" as const),
+            };
+          }),
+      );
     },
-    [refreshCurrentDirectory],
+    [enqueueUploads],
   );
 
   const resolveLocalDropPaths = useCallback(async (paths: string[]) => {
@@ -1240,6 +1194,47 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       unlistenPromise.then((unlisten) => unlisten());
     };
   }, [processExternalDropPaths, resetExternalDropHover]);
+
+  useEffect(() => {
+    const unlisten = listen<{
+      session_id: string;
+      remote_path: string;
+      direction: string;
+      status: string;
+      parent_id?: string;
+    }>("transfer-event", (event) => {
+      const payload = event.payload;
+      if (
+        payload.direction !== "upload" ||
+        payload.status !== "completed" ||
+        payload.parent_id ||
+        payload.session_id !== activeSessionIdRef.current
+      ) {
+        return;
+      }
+
+      const visibleDir = normalizeDirectoryPath(currentPathRef.current);
+      if (!visibleDir || getRemoteParentDirectory(payload.remote_path) !== visibleDir) {
+        return;
+      }
+
+      if (refreshUploadCompletionTimerRef.current) {
+        clearTimeout(refreshUploadCompletionTimerRef.current);
+      }
+      refreshUploadCompletionTimerRef.current = setTimeout(() => {
+        refreshUploadCompletionTimerRef.current = null;
+        void refreshCurrentDirectory();
+      }, 250);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+      if (refreshUploadCompletionTimerRef.current) {
+        clearTimeout(refreshUploadCompletionTimerRef.current);
+        refreshUploadCompletionTimerRef.current = null;
+      }
+    };
+  }, [refreshCurrentDirectory]);
 
   const filteredSortedFiles = useMemo(
     () =>

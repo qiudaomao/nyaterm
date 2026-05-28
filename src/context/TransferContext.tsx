@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +15,21 @@ import { invoke } from "@/lib/invoke";
 
 export type TransferDirection = "upload" | "download";
 export type TransferKind = "file" | "directory";
-export type TransferStatus = "transferring" | "paused" | "completed" | "error" | "cancelled";
+export type TransferStatus =
+  | "queued"
+  | "transferring"
+  | "paused"
+  | "completed"
+  | "error"
+  | "cancelled";
+
+export interface EnqueueUploadRequest {
+  sessionId: string;
+  fileName: string;
+  localPath: string;
+  remotePath: string;
+  kind: TransferKind;
+}
 
 export interface TransferItem {
   id: string;
@@ -33,6 +48,7 @@ export interface TransferItem {
   itemCountCompleted?: number;
   error?: string;
   timestamp: number;
+  queueState?: "pending" | "running";
 }
 
 interface TransferContextValue {
@@ -44,6 +60,7 @@ interface TransferContextValue {
   resumeTransfer: (id: string) => Promise<void>;
   cancelTransfer: (id: string) => Promise<void>;
   retryTransfer: (item: TransferItem) => Promise<void>;
+  enqueueUploads: (uploads: EnqueueUploadRequest[]) => string[];
 }
 
 const TransferContext = createContext<TransferContextValue | null>(null);
@@ -67,11 +84,26 @@ interface TransferEventPayload {
   error_msg?: string;
 }
 
+function createTransferId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `transfer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export function TransferProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const [transferMap, setTransferMap] = useState<Map<string, TransferItem>>(() => new Map());
+  const transferMapRef = useRef(transferMap);
+  const queuedUploadsRef = useRef<Map<string, EnqueueUploadRequest>>(new Map());
+  const activeQueuedUploadIdRef = useRef<string | null>(null);
+  const [queueRevision, setQueueRevision] = useState(0);
 
   const transfers = useMemo(() => Array.from(transferMap.values()), [transferMap]);
+
+  useEffect(() => {
+    transferMapRef.current = transferMap;
+  }, [transferMap]);
 
   useEffect(() => {
     const unlisten = listen<TransferEventPayload>("transfer-event", (e) => {
@@ -84,7 +116,9 @@ export function TransferProvider({ children }: { children: ReactNode }) {
         }
         setTransferMap((prev) => {
           const next = new Map(prev);
+          const existing = next.get(p.id);
           next.set(p.id, {
+            ...existing,
             id: p.id,
             sessionId: p.session_id,
             fileName: p.file_name,
@@ -99,7 +133,8 @@ export function TransferProvider({ children }: { children: ReactNode }) {
             totalSize: p.total_size,
             itemCountTotal: p.item_count_total,
             itemCountCompleted: p.item_count_completed,
-            timestamp: Date.now(),
+            timestamp: existing?.timestamp ?? Date.now(),
+            queueState: queuedUploadsRef.current.has(p.id) ? "running" : undefined,
           });
           return next;
         });
@@ -115,6 +150,7 @@ export function TransferProvider({ children }: { children: ReactNode }) {
         if (p.status === "progress") {
           updated = {
             ...existing,
+            status: "transferring",
             bytesTransferred: p.bytes_transferred,
             totalSize: p.total_size,
             itemCountTotal: p.item_count_total ?? existing.itemCountTotal,
@@ -182,6 +218,86 @@ export function TransferProvider({ children }: { children: ReactNode }) {
     };
   }, [t]);
 
+  useEffect(() => {
+    void queueRevision;
+    if (activeQueuedUploadIdRef.current) {
+      return;
+    }
+
+    const nextQueued = Array.from(transferMap.values())
+      .filter((transfer) => queuedUploadsRef.current.has(transfer.id))
+      .find((transfer) => transfer.status === "queued");
+
+    if (!nextQueued) {
+      return;
+    }
+
+    const request = queuedUploadsRef.current.get(nextQueued.id);
+    if (!request) {
+      return;
+    }
+
+    activeQueuedUploadIdRef.current = nextQueued.id;
+    setTransferMap((prev) => {
+      const existing = prev.get(nextQueued.id);
+      if (!existing || existing.status !== "queued") {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(nextQueued.id, {
+        ...existing,
+        status: "transferring",
+        queueState: "running",
+        error: undefined,
+      });
+      return next;
+    });
+
+    void (async () => {
+      try {
+        if (request.kind === "directory") {
+          await invoke("upload_local_directory", {
+            sessionId: request.sessionId,
+            localPath: request.localPath,
+            remotePath: request.remotePath,
+            transferId: nextQueued.id,
+          });
+        } else {
+          await invoke("upload_local_file", {
+            sessionId: request.sessionId,
+            localPath: request.localPath,
+            remotePath: request.remotePath,
+            transferId: nextQueued.id,
+          });
+        }
+      } catch (error) {
+        setTransferMap((prev) => {
+          const existing = prev.get(nextQueued.id);
+          if (
+            !existing ||
+            existing.status === "completed" ||
+            existing.status === "cancelled" ||
+            existing.status === "error"
+          ) {
+            return prev;
+          }
+          const next = new Map(prev);
+          next.set(nextQueued.id, {
+            ...existing,
+            status: "error",
+            queueState: undefined,
+            error: String(error),
+          });
+          return next;
+        });
+      } finally {
+        queuedUploadsRef.current.delete(nextQueued.id);
+        activeQueuedUploadIdRef.current = null;
+        setQueueRevision((revision) => revision + 1);
+      }
+    })();
+  }, [queueRevision, transferMap]);
+
   const clearCompleted = useCallback(() => {
     setTransferMap((prev) => {
       const next = new Map(prev);
@@ -193,10 +309,12 @@ export function TransferProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearAll = useCallback(() => {
+    queuedUploadsRef.current.clear();
     setTransferMap(new Map());
   }, []);
 
   const removeTransfer = useCallback((id: string) => {
+    queuedUploadsRef.current.delete(id);
     setTransferMap((prev) => {
       if (!prev.has(id)) return prev;
       const next = new Map(prev);
@@ -206,6 +324,18 @@ export function TransferProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pauseTransfer = useCallback(async (id: string) => {
+    const existing = transferMapRef.current.get(id);
+    if (queuedUploadsRef.current.has(id) && existing?.status === "queued") {
+      setTransferMap((prev) => {
+        const queued = prev.get(id);
+        if (!queued || queued.status !== "queued") return prev;
+        const next = new Map(prev);
+        next.set(id, { ...queued, status: "paused" });
+        return next;
+      });
+      return;
+    }
+
     try {
       await invoke("pause_transfer", { transferId: id });
     } catch (error) {
@@ -214,6 +344,23 @@ export function TransferProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resumeTransfer = useCallback(async (id: string) => {
+    const existing = transferMapRef.current.get(id);
+    if (
+      queuedUploadsRef.current.has(id) &&
+      activeQueuedUploadIdRef.current !== id &&
+      existing?.status === "paused"
+    ) {
+      setTransferMap((prev) => {
+        const queued = prev.get(id);
+        if (!queued || queued.status !== "paused") return prev;
+        const next = new Map(prev);
+        next.set(id, { ...queued, status: "queued" });
+        return next;
+      });
+      setQueueRevision((revision) => revision + 1);
+      return;
+    }
+
     try {
       await invoke("resume_transfer", { transferId: id });
     } catch (error) {
@@ -222,6 +369,27 @@ export function TransferProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cancelTransfer = useCallback(async (id: string) => {
+    const existing = transferMapRef.current.get(id);
+    if (queuedUploadsRef.current.has(id) && activeQueuedUploadIdRef.current !== id) {
+      queuedUploadsRef.current.delete(id);
+      setTransferMap((prev) => {
+        const queued = prev.get(id);
+        if (!queued || queued.status === "completed" || queued.status === "error") return prev;
+        const next = new Map(prev);
+        next.set(id, {
+          ...queued,
+          status: "cancelled",
+          queueState: undefined,
+          error: undefined,
+        });
+        return next;
+      });
+      setQueueRevision((revision) => revision + 1);
+      return;
+    }
+
+    if (!existing) return;
+
     try {
       await invoke("cancel_transfer", { transferId: id });
       setTransferMap((prev) => {
@@ -250,12 +418,14 @@ export function TransferProvider({ children }: { children: ReactNode }) {
             sessionId: item.sessionId,
             localPath: item.localPath,
             remotePath: item.remotePath,
+            transferId: item.id,
           });
         } else {
           await invoke("upload_local_file", {
             sessionId: item.sessionId,
             localPath: item.localPath,
             remotePath: item.remotePath,
+            transferId: item.id,
           });
         }
       } else if (item.kind === "directory") {
@@ -276,6 +446,42 @@ export function TransferProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const enqueueUploads = useCallback((uploads: EnqueueUploadRequest[]) => {
+    const normalizedUploads = uploads.filter(
+      (upload) => upload.sessionId && upload.localPath && upload.remotePath && upload.fileName,
+    );
+    if (normalizedUploads.length === 0) {
+      return [];
+    }
+
+    const ids = normalizedUploads.map(() => createTransferId());
+    setTransferMap((prev) => {
+      const next = new Map(prev);
+      normalizedUploads.forEach((upload, index) => {
+        const id = ids[index];
+        queuedUploadsRef.current.set(id, upload);
+        next.set(id, {
+          id,
+          sessionId: upload.sessionId,
+          fileName: upload.fileName,
+          remotePath: upload.remotePath,
+          localPath: upload.localPath,
+          direction: "upload",
+          kind: upload.kind,
+          status: "queued",
+          size: 0,
+          bytesTransferred: 0,
+          totalSize: 0,
+          timestamp: Date.now() + index,
+          queueState: "pending",
+        });
+      });
+      return next;
+    });
+    setQueueRevision((revision) => revision + 1);
+    return ids;
+  }, []);
+
   const contextValue = useMemo(
     () => ({
       transfers,
@@ -286,6 +492,7 @@ export function TransferProvider({ children }: { children: ReactNode }) {
       resumeTransfer,
       cancelTransfer,
       retryTransfer,
+      enqueueUploads,
     }),
     [
       transfers,
@@ -296,6 +503,7 @@ export function TransferProvider({ children }: { children: ReactNode }) {
       resumeTransfer,
       cancelTransfer,
       retryTransfer,
+      enqueueUploads,
     ],
   );
 

@@ -64,6 +64,7 @@ pub async fn upload_local_file(
     session_id: String,
     local_path: String,
     remote_path: String,
+    transfer_id: Option<String>,
 ) -> AppResult<()> {
     sftp::upload_local_file(
         app,
@@ -71,6 +72,7 @@ pub async fn upload_local_file(
         &session_id,
         &local_path,
         &remote_path,
+        transfer_id,
     )
     .await
 }
@@ -159,6 +161,7 @@ pub async fn upload_local_directory(
     session_id: String,
     local_path: String,
     remote_path: String,
+    transfer_id: Option<String>,
 ) -> AppResult<()> {
     sftp::upload_local_directory(
         app,
@@ -166,6 +169,7 @@ pub async fn upload_local_directory(
         &session_id,
         &local_path,
         &remote_path,
+        transfer_id,
     )
     .await
 }

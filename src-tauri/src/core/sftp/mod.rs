@@ -335,6 +335,7 @@ pub async fn upload_local_file(
     session_id: &str,
     local_path: &str,
     remote_path: &str,
+    transfer_id: Option<String>,
 ) -> AppResult<()> {
     let auto_fs = get_or_create_auto_fs(&manager, session_id).await?;
     let transfer_settings = crate::config::load_app_settings(&app)
@@ -348,6 +349,7 @@ pub async fn upload_local_file(
         local_path,
         remote_path,
         &transfer_settings,
+        transfer_id,
     )
     .await
 }
@@ -502,10 +504,11 @@ pub async fn upload_local_directory(
     session_id: &str,
     local_path: &str,
     remote_path: &str,
+    transfer_id: Option<String>,
 ) -> AppResult<()> {
     let auto_fs = get_or_create_auto_fs(&manager, session_id).await?;
     let guard = auto_fs.backend().await?;
     let fs = guard.as_ref().unwrap();
-    fs.upload_directory(&app, session_id, local_path, remote_path)
+    fs.upload_directory(&app, session_id, local_path, remote_path, transfer_id)
         .await
 }

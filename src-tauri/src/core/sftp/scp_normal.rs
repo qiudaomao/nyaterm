@@ -112,6 +112,7 @@ impl ScpNormalBackend {
                 .await?;
             } else if !entry.is_symlink {
                 let child_controller = create_child_file_transfer_controller(
+                    None,
                     session_id,
                     entry.name.clone(),
                     &child_remote,
@@ -197,6 +198,7 @@ impl ScpNormalBackend {
                 .await?;
             } else if file_type.is_file() {
                 let child_controller = create_child_file_transfer_controller(
+                    None,
                     session_id,
                     entry_name,
                     &child_remote,
@@ -924,6 +926,7 @@ impl RemoteFs for ScpNormalBackend {
                 remote_path,
                 &actual_local_path,
                 create_child_file_transfer_controller(
+                    None,
                     session_id,
                     file_name_from_path(remote_path),
                     remote_path,
@@ -955,6 +958,7 @@ impl RemoteFs for ScpNormalBackend {
         local_path: &str,
         remote_path: &str,
         transfer_settings: &crate::config::TransferSettings,
+        transfer_id: Option<String>,
     ) -> AppResult<()> {
         let max_retries = transfer_settings.max_transfer_retries;
         let actual_remote_path = match resolve_remote_path(
@@ -967,7 +971,9 @@ impl RemoteFs for ScpNormalBackend {
             Some(path) => path,
             None => {
                 let file_name = file_name_from_path(remote_path);
-                let transfer_id = uuid::Uuid::new_v4().to_string();
+                let transfer_id = transfer_id
+                    .clone()
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 let _ = app.emit(
                     "transfer-event",
                     &TransferEvent {
@@ -1016,6 +1022,7 @@ impl RemoteFs for ScpNormalBackend {
                 local_path,
                 &actual_remote_path,
                 create_child_file_transfer_controller(
+                    transfer_id.clone(),
                     session_id,
                     file_name_from_path(&actual_remote_path),
                     &actual_remote_path,
@@ -1049,6 +1056,7 @@ impl RemoteFs for ScpNormalBackend {
     ) -> AppResult<()> {
         let total_files = self.count_remote_files(remote_path).await?;
         let directory_controller = create_directory_transfer_controller(
+            None,
             session_id,
             file_name_from_path(remote_path),
             remote_path,
@@ -1110,9 +1118,11 @@ impl RemoteFs for ScpNormalBackend {
         session_id: &str,
         local_path: &str,
         remote_path: &str,
+        transfer_id: Option<String>,
     ) -> AppResult<()> {
         let local_stats = collect_local_directory_stats(local_path).await?;
         let directory_controller = create_directory_transfer_controller(
+            transfer_id,
             session_id,
             file_name_from_path(local_path),
             remote_path,

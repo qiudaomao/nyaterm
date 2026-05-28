@@ -47,6 +47,12 @@ function formatTime(ts: number): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function getTransferDisplayRank(transfer: TransferItem): number {
+  if (transfer.status === "transferring") return 0;
+  if (transfer.status === "queued") return 1;
+  return 2;
+}
+
 function HeaderActionButton({
   label,
   icon: Icon,
@@ -118,15 +124,20 @@ function TransferRow({
         ? Math.min(100, Math.round((item.bytesTransferred / item.totalSize) * 100))
         : 0;
   const canPause = item.status === "transferring";
+  const canPauseQueued = item.status === "queued";
   const canResume = item.status === "paused";
   const canRetry = item.status === "error" || item.status === "cancelled";
-  const canCancel = item.status === "transferring" || item.status === "paused";
-  const canDelete = !canCancel;
+  const canCancel =
+    item.status === "queued" || item.status === "transferring" || item.status === "paused";
+  const canDelete = !canCancel || item.status === "queued" || item.queueState === "pending";
 
   let statusColor = "#facc15";
   let statusText = `${progress}%`;
 
-  if (item.status === "paused") {
+  if (item.status === "queued") {
+    statusColor = "#a1a1aa";
+    statusText = t("fileTransfer.queued");
+  } else if (item.status === "paused") {
     statusColor = "#fb923c";
     statusText = t("fileTransfer.paused");
   } else if (item.status === "completed") {
@@ -214,7 +225,8 @@ function TransferRow({
                 }}
               >
                 {statusText}
-              </span>            )}
+              </span>
+            )}
           </div>
 
           {(item.status === "transferring" || item.status === "paused") &&
@@ -238,7 +250,7 @@ function TransferRow({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[180px]">
-        <ContextMenuItem onClick={() => onPause(item.id)} disabled={!canPause}>
+        <ContextMenuItem onClick={() => onPause(item.id)} disabled={!canPause && !canPauseQueued}>
           <MdPause className="mr-2 text-[0.875rem]" />
           {t("fileTransfer.pause")}
         </ContextMenuItem>
@@ -304,36 +316,56 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
       ? topLevelTransfers.filter(
           (transfer) =>
             transfer.sessionId === activeSessionId ||
+            transfer.status === "queued" ||
             transfer.status === "transferring" ||
             transfer.status === "paused",
         )
       : topLevelTransfers;
 
-    return [...filteredTransfers].sort((a, b) => b.timestamp - a.timestamp);
+    return [...filteredTransfers].sort((a, b) => {
+      const rankDiff = getTransferDisplayRank(a) - getTransferDisplayRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return b.timestamp - a.timestamp;
+    });
   }, [activeSessionId, transfers]);
 
-  const hasRunning = visibleTransfers.some((transfer) => transfer.status === "transferring");
+  const hasRunning = visibleTransfers.some(
+    (transfer) => transfer.status === "transferring" || transfer.status === "queued",
+  );
   const hasPaused = visibleTransfers.some((transfer) => transfer.status === "paused");
   const hasActive = visibleTransfers.some(
-    (transfer) => transfer.status === "transferring" || transfer.status === "paused",
+    (transfer) =>
+      transfer.status === "queued" ||
+      transfer.status === "transferring" ||
+      transfer.status === "paused",
   );
   const hasCompleted = visibleTransfers.some((transfer) => transfer.status === "completed");
   const hasClearable = visibleTransfers.some(
-    (transfer) => transfer.status !== "transferring" && transfer.status !== "paused",
+    (transfer) =>
+      transfer.status !== "queued" &&
+      transfer.status !== "transferring" &&
+      transfer.status !== "paused",
   );
 
   const handlePauseAll = useCallback(() => {
     void Promise.all(
       visibleTransfers
-        .filter((transfer) => transfer.status === "transferring")
+        .filter((transfer) => transfer.status === "transferring" || transfer.status === "queued")
         .map((transfer) => pauseTransfer(transfer.id)),
     );
   }, [pauseTransfer, visibleTransfers]);
 
   const handleClearAll = useCallback(() => {
     visibleTransfers
-      .filter((transfer) => transfer.status !== "transferring" && transfer.status !== "paused")
-      .forEach((transfer) => removeTransfer(transfer.id));
+      .filter(
+        (transfer) =>
+          transfer.status !== "queued" &&
+          transfer.status !== "transferring" &&
+          transfer.status !== "paused",
+      )
+      .forEach((transfer) => {
+        removeTransfer(transfer.id);
+      });
   }, [removeTransfer, visibleTransfers]);
 
   const handleResumeAll = useCallback(() => {
@@ -347,7 +379,12 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
   const handleCancelAll = useCallback(() => {
     void Promise.all(
       visibleTransfers
-        .filter((transfer) => transfer.status === "transferring" || transfer.status === "paused")
+        .filter(
+          (transfer) =>
+            transfer.status === "queued" ||
+            transfer.status === "transferring" ||
+            transfer.status === "paused",
+        )
         .map((transfer) => cancelTransfer(transfer.id)),
     );
   }, [cancelTransfer, visibleTransfers]);

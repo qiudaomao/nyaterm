@@ -94,6 +94,7 @@ impl ScpEnhancedBackend {
                 .await?;
             } else if !entry.is_symlink {
                 let child_controller = create_child_file_transfer_controller(
+                    None,
                     session_id,
                     entry.name.clone(),
                     &child_remote,
@@ -179,6 +180,7 @@ impl ScpEnhancedBackend {
                 .await?;
             } else if file_type.is_file() {
                 let child_controller = create_child_file_transfer_controller(
+                    None,
                     session_id,
                     entry_name,
                     &child_remote,
@@ -860,6 +862,7 @@ impl RemoteFs for ScpEnhancedBackend {
                     &actual_local_path,
                     transfer_settings,
                     create_child_file_transfer_controller(
+                        None,
                         session_id,
                         file_name_from_path(remote_path),
                         remote_path,
@@ -890,6 +893,7 @@ impl RemoteFs for ScpEnhancedBackend {
         local_path: &str,
         remote_path: &str,
         transfer_settings: &crate::config::TransferSettings,
+        transfer_id: Option<String>,
     ) -> AppResult<()> {
         let max_retries = transfer_settings.max_transfer_retries;
 
@@ -919,6 +923,7 @@ impl RemoteFs for ScpEnhancedBackend {
                     remote_path,
                     transfer_settings,
                     create_child_file_transfer_controller(
+                        transfer_id.clone(),
                         session_id,
                         file_name_from_path(remote_path),
                         remote_path,
@@ -951,6 +956,7 @@ impl RemoteFs for ScpEnhancedBackend {
     ) -> AppResult<()> {
         let total_files = self.count_remote_files(remote_path).await?;
         let directory_controller = create_directory_transfer_controller(
+            None,
             session_id,
             file_name_from_path(remote_path),
             remote_path,
@@ -1012,9 +1018,11 @@ impl RemoteFs for ScpEnhancedBackend {
         session_id: &str,
         local_path: &str,
         remote_path: &str,
+        transfer_id: Option<String>,
     ) -> AppResult<()> {
         let local_stats = collect_local_directory_stats(local_path).await?;
         let directory_controller = create_directory_transfer_controller(
+            transfer_id,
             session_id,
             file_name_from_path(local_path),
             remote_path,

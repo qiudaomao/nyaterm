@@ -342,6 +342,7 @@ pub(crate) fn file_name_from_path(path: &str) -> String {
 }
 
 pub(crate) fn create_directory_transfer_controller(
+    id: Option<String>,
     session_id: &str,
     display_name: String,
     remote_path: &str,
@@ -351,7 +352,7 @@ pub(crate) fn create_directory_transfer_controller(
     total_size: u64,
 ) -> Arc<TransferController> {
     let controller = Arc::new(TransferController::new_with_kind(
-        uuid::Uuid::new_v4().to_string(),
+        id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         session_id.to_string(),
         display_name,
         remote_path.to_string(),
@@ -367,6 +368,7 @@ pub(crate) fn create_directory_transfer_controller(
 }
 
 pub(crate) fn create_child_file_transfer_controller(
+    id: Option<String>,
     session_id: &str,
     file_name: String,
     remote_path: &str,
@@ -375,7 +377,7 @@ pub(crate) fn create_child_file_transfer_controller(
     parent_id: Option<String>,
 ) -> Arc<TransferController> {
     Arc::new(TransferController::new_with_kind(
-        uuid::Uuid::new_v4().to_string(),
+        id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         session_id.to_string(),
         file_name,
         remote_path.to_string(),
