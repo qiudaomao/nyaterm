@@ -1,5 +1,10 @@
+import { Check, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -7,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  isValidSerialBaudRate,
+  MAX_SERIAL_BAUD_RATE,
+  MIN_SERIAL_BAUD_RATE,
+  normalizeSerialBaudRateInput,
+  SERIAL_BAUD_RATE_OPTIONS,
+} from "@/lib/serial";
+import { cn } from "@/lib/utils";
 
 interface SerialPortOption {
   unavailable?: boolean;
@@ -34,6 +47,142 @@ interface SerialFormProps {
 
 function RequiredMark() {
   return <span className="ml-0.5 text-destructive">*</span>;
+}
+
+interface BaudRatePickerProps {
+  value: string;
+  onValueChange: (v: string) => void;
+}
+
+function BaudRatePicker({ value, onValueChange }: BaudRatePickerProps) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState("");
+  const standardValueSet = useMemo(() => new Set(SERIAL_BAUD_RATE_OPTIONS), []);
+  const isStandardValue = standardValueSet.has(value);
+  const isCustomValue = !!value && !isStandardValue;
+  const isDraftValid = isValidSerialBaudRate(customDraft);
+  const showDraftError = customDraft.length > 0 && !isDraftValid;
+  const normalizedDraft = isDraftValid ? String(Number(customDraft)) : "";
+
+  useEffect(() => {
+    if (!open) return;
+    setCustomDraft(isCustomValue ? value : "");
+  }, [isCustomValue, open, value]);
+
+  const selectPreset = (nextValue: string) => {
+    onValueChange(nextValue);
+    setCustomDraft("");
+    setOpen(false);
+  };
+
+  const commitCustom = (close = true) => {
+    if (!isDraftValid) return;
+    onValueChange(normalizedDraft);
+    setCustomDraft(normalizedDraft);
+    if (close) {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-1 h-8 w-full justify-between px-3 text-xs font-normal"
+        >
+          <span className={cn("min-w-0 truncate", value ? "" : "text-muted-foreground")}>
+            {value || t("dialog.selectBaudRate", "Select baud rate")}
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {isCustomValue && isValidSerialBaudRate(value) && (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[0.625rem] leading-none text-primary">
+                {t("dialog.customBaudRate", "Custom")}
+              </span>
+            )}
+            <ChevronDown className="size-3.5 opacity-50" />
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        collisionPadding={16}
+        className="w-[var(--radix-popover-trigger-width)] min-w-[13rem] overflow-hidden p-1.5"
+      >
+        <div className="grid grid-cols-2 gap-1">
+          {SERIAL_BAUD_RATE_OPTIONS.map((option) => {
+            const selected = value === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                className={cn(
+                  "flex h-7 items-center justify-between rounded px-2 text-left text-xs transition-colors hover:bg-accent",
+                  selected ? "bg-primary/15 text-primary" : "text-foreground",
+                )}
+                onClick={() => selectPreset(option)}
+              >
+                <span className="truncate">{option}</span>
+                {selected && <Check className="size-3.5 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-1.5 border-t pt-1.5">
+          <div className="mb-1 px-1 text-[0.6875rem] font-medium text-muted-foreground">
+            {t("dialog.customBaudRate", "Custom")}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Input
+              className="h-7 min-w-0 flex-1 px-2 text-xs"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder={t("dialog.customBaudRatePlaceholder", "e.g. 74880")}
+              value={customDraft}
+              aria-invalid={showDraftError}
+              onChange={(event) => setCustomDraft(normalizeSerialBaudRateInput(event.target.value))}
+              onBlur={() => {
+                if (isDraftValid && normalizedDraft !== value) {
+                  commitCustom(false);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitCustom();
+                } else if (event.key === "Escape") {
+                  setOpen(false);
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-xs"
+              disabled={!isDraftValid}
+              aria-label={t("dialog.applyCustomBaudRate", "Apply custom baud rate")}
+              onClick={() => commitCustom()}
+            >
+              <Check className="size-3.5" />
+            </Button>
+          </div>
+          {showDraftError && (
+            <p className="mt-1 px-1 text-[0.6875rem] leading-snug text-destructive">
+              {t("dialog.baudRateInvalid", {
+                min: MIN_SERIAL_BAUD_RATE,
+                max: MAX_SERIAL_BAUD_RATE,
+                defaultValue: "Baud rate must be between {{min}} and {{max}}",
+              })}
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function SerialForm({
@@ -113,18 +262,7 @@ export function SerialForm({
           <Label className="text-xs font-medium text-foreground/80">
             {t("dialog.baudRate", "Baud Rate")}
           </Label>
-          <Select value={baudRate} onValueChange={setBaudRate}>
-            <SelectTrigger className="mt-1 h-8 text-xs font-normal">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="9600">9600</SelectItem>
-              <SelectItem value="19200">19200</SelectItem>
-              <SelectItem value="38400">38400</SelectItem>
-              <SelectItem value="57600">57600</SelectItem>
-              <SelectItem value="115200">115200</SelectItem>
-            </SelectContent>
-          </Select>
+          <BaudRatePicker value={baudRate} onValueChange={setBaudRate} />
         </div>
       </div>
       <div className="flex flex-wrap gap-3">

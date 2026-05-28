@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
+import { isValidSerialBaudRate, MAX_SERIAL_BAUD_RATE, MIN_SERIAL_BAUD_RATE } from "@/lib/serial";
 import type { Group, OtpEntry, ProxyConfig, SavedConnection } from "@/types/global";
 
 const isValidPort = (value: number) => Number.isInteger(value) && value >= 1 && value <= 65535;
@@ -307,13 +308,23 @@ export default function NewSessionPage() {
       }
     }
 
-    if (currentTab === "serial" && !serialPortName.trim()) {
-      return t("dialog.serialPortRequired", "Serial port is required");
+    if (currentTab === "serial") {
+      if (!serialPortName.trim()) {
+        return t("dialog.serialPortRequired", "Serial port is required");
+      }
+      if (!isValidSerialBaudRate(baudRate)) {
+        return t("dialog.baudRateInvalid", {
+          min: MIN_SERIAL_BAUD_RATE,
+          max: MAX_SERIAL_BAUD_RATE,
+          defaultValue: "Baud rate must be between {{min}} and {{max}}",
+        });
+      }
     }
 
     return "";
   }, [
     authType,
+    baudRate,
     currentTab,
     hasPassword,
     host,
