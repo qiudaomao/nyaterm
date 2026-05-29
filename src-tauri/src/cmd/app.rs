@@ -74,18 +74,18 @@ pub async fn open_child_window(
         return Ok(());
     }
 
+    let width = options.width.unwrap_or(720.0);
+    let height = options.height.unwrap_or(560.0);
+    let placement = crate::window_state::center_child_in_main_monitor(&app, width, height);
+
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         options.label,
         tauri::WebviewUrl::App(options.url.into()),
     )
     .title(options.title)
-    .inner_size(
-        options.width.unwrap_or(720.0),
-        options.height.unwrap_or(560.0),
-    )
+    .inner_size(width, height)
     .visible(false)
-    .center()
     .decorations(cfg!(target_os = "macos"))
     .resizable(options.resizable.unwrap_or(true))
     .always_on_top(options.always_on_top.unwrap_or(false));
@@ -109,9 +109,20 @@ pub async fn open_child_window(
         }
     }
 
-    builder
+    let window = builder
         .build()
         .map_err(|error| AppError::Config(error.to_string()))?;
+
+    if let Some(placement) = placement {
+        if window
+            .set_position(crate::window_state::placement_to_position(placement))
+            .is_err()
+        {
+            let _ = window.center();
+        }
+    } else {
+        let _ = window.center();
+    }
 
     Ok(())
 }
