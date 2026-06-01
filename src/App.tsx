@@ -18,15 +18,20 @@ import { useUnreadTabs } from "./hooks/useUnreadTabs";
 import { AI_OPEN_EVENT, type AIOpenIntent } from "./lib/aiEvents";
 import {
   canCreateSessionFromPane,
-  collectActiveShellSessionIds,
+  collectActiveNonSerialSessionIds,
   getItemSide,
   hasLiveSession,
+  isNonSerialSessionType,
   NON_PANEL_IDS,
   type TrayAction,
 } from "./lib/appWorkspace";
 import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "./lib/errors";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
+import {
+  listenOpenSendCommandPanel,
+  type SendCommandPanelDraft,
+} from "./lib/sendCommandPanelEvents";
 import {
   buildTerminalCommandInput,
   clearSessionCommandHistory,
@@ -67,8 +72,8 @@ import type {
   CloudConflictPreview,
   PaneSplitDirection,
   SavedConnection,
-  SessionPane,
   SessionInfo,
+  SessionPane,
   SessionType,
   Tab,
 } from "./types/global";
@@ -165,6 +170,17 @@ function App() {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [helpDotVisible, setHelpDotVisible] = useState(false);
+  const [sendCommandDraft, setSendCommandDraft] = useState<SendCommandPanelDraft | null>(null);
+  const handleSendCommandDraftConsumed = useCallback(() => {
+    setSendCommandDraft(null);
+  }, []);
+
+  useEffect(() => {
+    return listenOpenSendCommandPanel((draft) => {
+      setSendCommandDraft(draft);
+      updateUi({ show_serial_send_panel: true });
+    });
+  }, [updateUi]);
 
   // Recording state: tracks which sessions are currently being recorded
   const [recordingSessions, setRecordingSessions] = useState<Set<string>>(new Set());
@@ -616,7 +632,7 @@ function App() {
         window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
       });
     },
-    [],
+    [setActiveTabId],
   );
 
   const handleUnsplit = useCallback(() => {
@@ -1566,8 +1582,15 @@ function App() {
     activePane && !activePane.connecting && !activePane.connectError && activePane.type === "Serial"
       ? activePane.sessionId
       : null;
-  const activeShellSessionIds = useMemo(
-    () => collectActiveShellSessionIds(terminalWindows, tabsById),
+  const activeNonSerialSessionId =
+    activePane &&
+    !activePane.connecting &&
+    !activePane.connectError &&
+    isNonSerialSessionType(activePane.type)
+      ? activePane.sessionId
+      : null;
+  const activeNonSerialSessionIds = useMemo(
+    () => collectActiveNonSerialSessionIds(terminalWindows, tabsById),
     [tabsById, terminalWindows],
   );
   const activeBottomPanel = uiConfig.show_serial_send_panel
@@ -1716,7 +1739,10 @@ function App() {
           quickCmdHeight: uiConfig.quick_cmd_height || 180,
           serialSendHeight: uiConfig.serial_send_height || 180,
           activeSerialSessionId,
-          activeShellSessionIds,
+          activeNonSerialSessionId,
+          activeNonSerialSessionIds,
+          sendCommandDraft,
+          onSendCommandDraftConsumed: handleSendCommandDraftConsumed,
           onQuickCmdResize: handleQuickCmdResize,
           onSerialSendResize: handleSerialSendResize,
           onCommandSend: handleHistoryCommand,

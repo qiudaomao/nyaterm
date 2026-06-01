@@ -37,12 +37,14 @@ interface TerminalContextMenuProps {
   children: React.ReactNode;
   terminalRef: React.RefObject<Terminal | null>;
   onFind: (selection?: string) => void;
+  onPasteText: (text: string) => void;
 }
 
 export default function TerminalContextMenu({
   children,
   terminalRef,
   onFind,
+  onPasteText,
 }: TerminalContextMenuProps) {
   const { t } = useTranslation();
   const termSettings = useTerminalAppSettings();
@@ -54,9 +56,9 @@ export default function TerminalContextMenu({
   const pasteText = useCallback(
     (text: string) => {
       if (!text) return;
-      terminalRef.current?.paste(text);
+      onPasteText(text);
     },
-    [terminalRef],
+    [onPasteText],
   );
 
   const translationProviders = [

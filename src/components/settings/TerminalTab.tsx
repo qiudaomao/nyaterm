@@ -141,6 +141,20 @@ export function TerminalTab() {
           />
         </SettingRow>
 
+        <SettingRow
+          label={t("terminal.showMultiLinePasteDialog")}
+          desc={t("terminal.showMultiLinePasteDialogDesc")}
+        >
+          <SettingSwitch
+            checked={appSettings.terminal.show_multi_line_paste_dialog ?? true}
+            onChange={(v) =>
+              updateAppSettings({
+                terminal: { ...appSettings.terminal, show_multi_line_paste_dialog: v },
+              })
+            }
+          />
+        </SettingRow>
+
         <SettingRow label={t("settings.showRemoteStats")} desc={t("settings.showRemoteStatsDesc")}>
           <SettingSwitch
             checked={appSettings.ui.show_remote_stats ?? true}

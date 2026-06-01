@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdCellTower, MdClose, MdLogout, MdPause, MdPlayArrow } from "react-icons/md";
+import MultiLinePasteDialog from "@/components/dialog/terminal/MultiLinePasteDialog";
 import { useTerminalAppSettings } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useActionLinks } from "@/hooks/useActionLinks";
@@ -31,6 +32,7 @@ import { detectCredentialPromptKind } from "@/lib/credentialAutofill";
 import { invoke } from "@/lib/invoke";
 import { hexLuminance } from "@/lib/keywordHighlightPresets";
 import { logger } from "@/lib/logger";
+import { openSendCommandPanel } from "@/lib/sendCommandPanelEvents";
 import {
   buildTerminalCommandInput,
   listenSessionInputPreview,
@@ -111,6 +113,20 @@ function readRecentOutput(terminal: Terminal, lineLimit: number) {
 function hasErrorKeyword(output: string) {
   return /\b(error|failed|permission denied|no space left on device|connection refused|segmentation fault|out of memory|cannot allocate memory|command not found|module not found|port already in use)\b/i.test(
     output,
+  );
+}
+
+function isMultiLineText(text: string): boolean {
+  return /[\r\n]/u.test(text);
+}
+
+function isShiftInsertPasteEvent(e: KeyboardEvent): boolean {
+  return (
+    e.shiftKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey &&
+    (e.code === "Insert" || e.key === "Insert")
   );
 }
 
@@ -535,6 +551,7 @@ export default function XTerminal({
   const [performanceMode, setPerformanceMode] = useState<PerformanceMode>("normal");
   const [performanceOverlay, setPerformanceOverlay] = useState<PerformanceOverlayState>(null);
   const [skippedOutputChars, setSkippedOutputChars] = useState(0);
+  const [multiLinePasteText, setMultiLinePasteText] = useState<string | null>(null);
   const aiCapturingRef = useRef(false);
 
   const { terminalTheme } = useTheme();
@@ -557,6 +574,7 @@ export default function XTerminal({
   const terminalAppSettingsRef = useRef(terminalAppSettings);
   const tRef = useRef(t);
   const doFindRef = useRef<(selection?: string) => void>(() => {});
+  const pasteTextRef = useRef<(text: string) => void>(() => {});
   const executeActionCommandRef = useRef<((command: string) => void) | null>(null);
   const disconnectedRef = useRef(false);
   const reconnectingRef = useRef(false);
@@ -1012,8 +1030,20 @@ export default function XTerminal({
       void executeInputCommand(command).catch(() => {});
     };
     const pasteText = (text: string) => {
-      if (text) terminal.paste(text);
+      if (!text) return;
+      const showMultiLinePasteDialog =
+        terminalAppSettingsRef.current?.terminal?.show_multi_line_paste_dialog ?? true;
+      if (
+        showMultiLinePasteDialog &&
+        sessionTypeRef.current !== "Serial" &&
+        isMultiLineText(text)
+      ) {
+        setMultiLinePasteText(text);
+        return;
+      }
+      terminal.paste(text);
     };
+    pasteTextRef.current = pasteText;
 
     let lastSelection = "";
     let primaryMouseDown: { x: number; y: number } | null = null;
@@ -1035,6 +1065,16 @@ export default function XTerminal({
     terminal.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       const kb = terminalAppSettingsRef.current.keybindings;
+
+      if (isShiftInsertPasteEvent(e)) {
+        e.preventDefault();
+        readClipboardText()
+          .then((text) => {
+            pasteText(text);
+          })
+          .catch(() => {});
+        return false;
+      }
 
       if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const selectedInputRange = getSelectedInputRange(terminal, inputStateRef.current);
@@ -1754,6 +1794,7 @@ export default function XTerminal({
       shellIntegrationRef.current.commandRunning = false;
       executeActionCommandRef.current = null;
       replaceInputCommandRef.current = null;
+      pasteTextRef.current = () => {};
       resetCredentialAutofill();
 
       oscDisposable.dispose();
@@ -1892,6 +1933,30 @@ export default function XTerminal({
     [setShowSearchBar, setSearchQuery, searchAddonRef],
   );
 
+  const handlePasteText = useCallback((text: string) => {
+    pasteTextRef.current(text);
+  }, []);
+
+  const handleDirectMultiLinePaste = useCallback(() => {
+    if (!multiLinePasteText) return;
+    terminalRef.current?.paste(multiLinePasteText);
+    terminalRef.current?.focus();
+    setMultiLinePasteText(null);
+  }, [multiLinePasteText]);
+
+  const handleSendMultiLinePasteByLine = useCallback(() => {
+    if (!multiLinePasteText) return;
+    openSendCommandPanel({
+      text: multiLinePasteText,
+      sourceSessionId: sessionId,
+      sendMode: "line",
+      count: 1,
+      intervalSeconds: 1,
+      target: "current",
+    });
+    setMultiLinePasteText(null);
+  }, [multiLinePasteText, sessionId]);
+
   useEffect(() => {
     doFindRef.current = doFind;
   }, [doFind]);
@@ -1909,7 +1974,11 @@ export default function XTerminal({
         />
       )}
       <div className="flex-1 min-w-0 h-full relative">
-        <TerminalContextMenu terminalRef={terminalRef} onFind={doFind}>
+        <TerminalContextMenu
+          terminalRef={terminalRef}
+          onFind={doFind}
+          onPasteText={handlePasteText}
+        >
           <div ref={containerRef} className="h-full w-full" />
         </TerminalContextMenu>
 
@@ -1970,6 +2039,14 @@ export default function XTerminal({
 
         <ActionLinkTooltip state={tooltipState} />
         <ActionLinkMenu state={menuState} onClose={closeMenu} />
+
+        <MultiLinePasteDialog
+          open={multiLinePasteText !== null}
+          text={multiLinePasteText}
+          onClose={() => setMultiLinePasteText(null)}
+          onDirectPaste={handleDirectMultiLinePaste}
+          onSendLineByLine={handleSendMultiLinePasteByLine}
+        />
       </div>
     </div>
   );

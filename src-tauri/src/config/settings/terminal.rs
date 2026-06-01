@@ -69,6 +69,8 @@ pub struct TerminalSettings {
     pub show_line_numbers: bool,
     #[serde(default = "default_false")]
     pub show_timestamps: bool,
+    #[serde(default = "default_true")]
+    pub show_multi_line_paste_dialog: bool,
 }
 
 fn default_scrollback() -> u32 {
@@ -92,6 +94,7 @@ impl Default for TerminalSettings {
             action_links_matchers: ActionLinksMatcherSettings::default(),
             show_line_numbers: false,
             show_timestamps: false,
+            show_multi_line_paste_dialog: true,
         }
     }
 }

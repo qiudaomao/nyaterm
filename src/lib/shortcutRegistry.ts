@@ -39,7 +39,7 @@ export const SHORTCUT_REGISTRY: ShortcutDefinition[] = [
     id: "terminal.paste",
     category: "terminal",
     labelKey: "terminalCtx.paste",
-    defaultKeys: "ctrl+shift+v, meta+shift+v",
+    defaultKeys: "ctrl+shift+v, meta+shift+v, shift+insert",
   },
   {
     id: "terminal.pasteSelected",
@@ -260,6 +260,7 @@ function formatSingleKey(key: string): string {
   if (lower === "backquote") return "`";
   if (lower === "space") return "Space";
   if (lower === "delete") return "Delete";
+  if (lower === "insert") return "Insert";
   if (lower === "backspace") return "Backspace";
   if (lower === "enter") return "Enter";
   if (lower === "arrowup") return "\u2191";
@@ -369,6 +370,7 @@ const CODE_TO_KEY: Record<string, string> = {
   Enter: "enter",
   Backspace: "backspace",
   Delete: "delete",
+  Insert: "insert",
   BracketLeft: "[",
   BracketRight: "]",
   Semicolon: ";",
@@ -443,6 +445,7 @@ const KEY_TO_CODE: Record<string, string> = {
   enter: "Enter",
   backspace: "Backspace",
   delete: "Delete",
+  insert: "Insert",
   "[": "BracketLeft",
   "]": "BracketRight",
   ";": "Semicolon",

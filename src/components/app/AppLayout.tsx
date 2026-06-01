@@ -23,6 +23,7 @@ import {
   loadBackgroundImageDataUrl,
 } from "@/lib/backgroundImage";
 import { isMacOS } from "@/lib/platform";
+import type { SendCommandPanelDraft } from "@/lib/sendCommandPanelEvents";
 import type { UpdateInfo } from "@/lib/updater";
 import { bounceTopModalWindow } from "@/lib/windowManager";
 import type { AppearanceSettings, UiConfig } from "@/types/global";
@@ -55,7 +56,10 @@ interface AppLayoutProps {
     quickCmdHeight: number;
     serialSendHeight: number;
     activeSerialSessionId: string | null;
-    activeShellSessionIds: string[];
+    activeNonSerialSessionId: string | null;
+    activeNonSerialSessionIds: string[];
+    sendCommandDraft: SendCommandPanelDraft | null;
+    onSendCommandDraftConsumed: () => void;
     onQuickCmdResize: (delta: number) => void;
     onSerialSendResize: (delta: number) => void;
     onCommandSend: (command: string, execute?: boolean) => void;
@@ -290,7 +294,10 @@ export default function AppLayout({
                 >
                   <SerialSendPanel
                     serialSessionId={bottomPanel.activeSerialSessionId}
-                    shellSessionIds={bottomPanel.activeShellSessionIds}
+                    currentShellSessionId={bottomPanel.activeNonSerialSessionId}
+                    shellSessionIds={bottomPanel.activeNonSerialSessionIds}
+                    draft={bottomPanel.sendCommandDraft}
+                    onDraftConsumed={bottomPanel.onSendCommandDraftConsumed}
                   />
                 </div>
               </>

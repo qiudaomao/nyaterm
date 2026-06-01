@@ -224,6 +224,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     },
     show_line_numbers: false,
     show_timestamps: false,
+    show_multi_line_paste_dialog: true,
   },
   interaction: {
     copy_on_select: false,
