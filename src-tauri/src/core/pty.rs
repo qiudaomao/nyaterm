@@ -7,7 +7,9 @@ use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
 use super::update_cwd_if_changed;
-use super::zmodem::{ZmodemAction, ZmodemDetector, ZmodemEvent, ZmodemTransfer};
+use super::zmodem::{
+    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemEvent, ZmodemTransfer,
+};
 use crate::config::AiExecutionProfile;
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
@@ -274,24 +276,39 @@ fn pty_session_thread(
                     }
 
                     // ZMODEM: detect header in raw bytes.
-                    if !suppress_visible {
-                        if let Some((direction, header_offset)) = zmodem_detector.feed(raw) {
-                            if header_offset > 0 {
-                                let pre =
-                                    String::from_utf8_lossy(&raw[..header_offset]).to_string();
-                                if !pre.is_empty() {
-                                    output_reader.push_owned(pre);
+                    let process_raw = if !suppress_visible {
+                        match zmodem_detector.feed(raw) {
+                            ZmodemDetectResult::Detected {
+                                direction,
+                                passthrough,
+                                initial_bytes,
+                            } => {
+                                if !passthrough.is_empty() {
+                                    let pre = String::from_utf8_lossy(&passthrough).to_string();
+                                    if !pre.is_empty() {
+                                        output_reader.push_owned(pre);
+                                    }
                                 }
+                                let transfer = ZmodemTransfer::new(direction, &initial_bytes);
+                                *zmodem_state_reader.lock().unwrap() = Some(transfer);
+                                let _ = app_read.emit(
+                                    &zmodem_event_reader,
+                                    &ZmodemEvent::Detected { direction },
+                                );
+                                continue;
                             }
-                            let transfer = ZmodemTransfer::new(direction, &raw[header_offset..]);
-                            *zmodem_state_reader.lock().unwrap() = Some(transfer);
-                            let _ = app_read
-                                .emit(&zmodem_event_reader, &ZmodemEvent::Detected { direction });
-                            continue;
+                            ZmodemDetectResult::NoMatch { passthrough } => {
+                                if passthrough.is_empty() {
+                                    continue;
+                                }
+                                passthrough
+                            }
                         }
-                    }
+                    } else {
+                        raw.to_vec()
+                    };
 
-                    let text = String::from_utf8_lossy(raw).to_string();
+                    let text = String::from_utf8_lossy(&process_raw).to_string();
                     let mut result = stripper.push(&text);
 
                     for path in &result.cwd_paths {

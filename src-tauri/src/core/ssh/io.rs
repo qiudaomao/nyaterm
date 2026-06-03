@@ -1,7 +1,9 @@
 use super::client::{SshHandle, SshHandler, SshPostLoginConfig};
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
-use crate::core::zmodem::{ZmodemAction, ZmodemDetector, ZmodemEvent, ZmodemTransfer};
+use crate::core::zmodem::{
+    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemEvent, ZmodemTransfer,
+};
 use crate::core::{
     update_cwd_if_changed, RecordingManager, SessionCommand, SessionManager,
     SessionOutputCoalescer, SharedCwd,
@@ -289,23 +291,82 @@ pub(super) async fn ssh_io_loop(
 
                         // ZMODEM: detect header in raw bytes before lossy UTF-8 conversion.
                         if phase == IoPhase::Normal {
-                            if let Some((direction, header_offset)) = zmodem_detector.feed(data) {
-                                // Forward any pre-header bytes to the terminal.
-                                if header_offset > 0 {
-                                    let pre = String::from_utf8_lossy(&data[..header_offset]).to_string();
-                                    if !pre.is_empty() {
-                                        output.push_owned(pre);
+                            match zmodem_detector.feed(data) {
+                                ZmodemDetectResult::Detected { direction, passthrough, initial_bytes } => {
+                                    // Forward any pre-header bytes to the terminal.
+                                    if !passthrough.is_empty() {
+                                        let pre = String::from_utf8_lossy(&passthrough).to_string();
+                                        if !pre.is_empty() {
+                                            output.push_owned(pre);
+                                        }
                                     }
+                                    let transfer = ZmodemTransfer::new(direction, &initial_bytes);
+                                    zmodem_transfer = Some(transfer);
+                                    let _ = app.emit(&zmodem_event_name, &ZmodemEvent::Detected { direction });
+                                    tracing::info!(
+                                        session_id = %session_id,
+                                        ?direction,
+                                        "ZMODEM transfer detected"
+                                    );
+                                    continue;
                                 }
-                                let transfer = ZmodemTransfer::new(direction, &data[header_offset..]);
-                                zmodem_transfer = Some(transfer);
-                                let _ = app.emit(&zmodem_event_name, &ZmodemEvent::Detected { direction });
-                                tracing::info!(
-                                    session_id = %session_id,
-                                    ?direction,
-                                    "ZMODEM transfer detected"
-                                );
-                                continue;
+                                ZmodemDetectResult::NoMatch { passthrough } if passthrough.is_empty() => {
+                                    continue;
+                                }
+                                ZmodemDetectResult::NoMatch { passthrough } => {
+                                    let text = String::from_utf8_lossy(&passthrough).to_string();
+                                    let mut result = stripper.push(&text);
+
+                                    if capture_processor.has_active() {
+                                        result.visible = capture_processor.process(&result.visible);
+                                    }
+
+                                    match phase {
+                                        IoPhase::WaitInitial => {
+                                            emit_output(
+                                                &app, &output, &cwd_event, &cwd,
+                                                &recording_mgr, &session_id, &manager,
+                                                &result,
+                                            ).await;
+
+                                            if let Some(script) = pending_script.take() {
+                                                let _ = channel.data(script.as_bytes()).await;
+                                            }
+                                            phase = IoPhase::Suppressing;
+                                            inject_deadline.as_mut().reset(
+                                                tokio::time::Instant::now()
+                                                    + std::time::Duration::from_secs(INJECT_TIMEOUT_SECS),
+                                            );
+                                        }
+                                        IoPhase::Suppressing => {
+                                            for path in &result.cwd_paths {
+                                                if let Some(next_cwd) = update_cwd_if_changed(&cwd, path).await {
+                                                    let _ = app.emit(&cwd_event, &next_cwd);
+                                                }
+                                            }
+                                            for command in &result.accepted_commands {
+                                                manager
+                                                    .confirm_command_submission(&session_id, command.clone())
+                                                    .await;
+                                            }
+                                            if result.ready {
+                                                phase = IoPhase::Normal;
+                                                arm_post_login_timer(
+                                                    &pending_post_login,
+                                                    &mut post_login_deadline,
+                                                );
+                                            }
+                                        }
+                                        IoPhase::Normal => {
+                                            emit_output(
+                                                &app, &output, &cwd_event, &cwd,
+                                                &recording_mgr, &session_id, &manager,
+                                                &result,
+                                            ).await;
+                                        }
+                                    }
+                                    continue;
+                                }
                             }
                         }
 

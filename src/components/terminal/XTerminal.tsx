@@ -65,7 +65,7 @@ import {
 } from "./terminalInputSelection";
 import { createTerminalLinkHandlers } from "./terminalLinkHandlers";
 import type { PerformanceMode, PerformanceOverlayState, XTerminalProps } from "./xterminalTypes";
-import { handleZmodemEvent, type ZmodemEventPayload } from "./zmodemTerminalEvents";
+import { createZmodemEventHandler, type ZmodemEventPayload } from "./zmodemTerminalEvents";
 import "@xterm/xterm/css/xterm.css";
 
 /**
@@ -331,6 +331,7 @@ export default function XTerminal({
       removePopup: removeLinkPopup,
     } = createTerminalLinkHandlers(terminal, tRef);
     const searchAddon = new SearchAddon();
+    const zmodemHandler = createZmodemEventHandler(terminal, sessionId, () => tRef.current);
 
     terminal.options.linkHandler = oscLinkHandler;
     terminal.loadAddon(fitAddon);
@@ -1030,7 +1031,7 @@ export default function XTerminal({
         `zmodem-event-${sessionId}`,
         (event) => {
           if (!isTerminalAlive()) return;
-          void handleZmodemEvent(terminal, sessionId, event.payload, tRef.current);
+          zmodemHandler.handle(event.payload);
         },
       );
       if (disposed) {
@@ -1327,6 +1328,7 @@ export default function XTerminal({
       if (focusUnlisten) focusUnlisten();
       if (captureUnlisten) captureUnlisten();
       if (zmodemUnlisten) zmodemUnlisten();
+      zmodemHandler.dispose();
       if (pendingOutputFlushRef.current !== null) {
         cancelAnimationFrame(pendingOutputFlushRef.current);
         pendingOutputFlushRef.current = null;

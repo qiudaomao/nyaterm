@@ -3,7 +3,9 @@
 use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
-use super::zmodem::{ZmodemAction, ZmodemDetector, ZmodemEvent, ZmodemTransfer};
+use super::zmodem::{
+    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemEvent, ZmodemTransfer,
+};
 use crate::config::AiExecutionProfile;
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::{RecordingManager, SessionOutputCoalescer};
@@ -295,25 +297,36 @@ async fn telnet_session_task(
                     }
 
                     // ZMODEM: detect header.
-                    if let Some((direction, header_offset)) = zmodem_detector.feed(&visible) {
-                        if header_offset > 0 {
-                            let pre =
-                                String::from_utf8_lossy(&visible[..header_offset]).to_string();
-                            if !pre.is_empty() {
-                                if let Some(ref recorder) = recording_mgr_reader {
-                                    recorder.write_output(&sid_reader, &pre);
+                    let process_visible = match zmodem_detector.feed(&visible) {
+                        ZmodemDetectResult::Detected {
+                            direction,
+                            passthrough,
+                            initial_bytes,
+                        } => {
+                            if !passthrough.is_empty() {
+                                let pre = String::from_utf8_lossy(&passthrough).to_string();
+                                if !pre.is_empty() {
+                                    if let Some(ref recorder) = recording_mgr_reader {
+                                        recorder.write_output(&sid_reader, &pre);
+                                    }
+                                    output_reader.push_owned(pre);
                                 }
-                                output_reader.push_owned(pre);
                             }
+                            let transfer = ZmodemTransfer::new(direction, &initial_bytes);
+                            *zmodem_state_reader.lock().await = Some(transfer);
+                            let _ = app_reader
+                                .emit(&zmodem_event_reader, &ZmodemEvent::Detected { direction });
+                            continue;
                         }
-                        let transfer = ZmodemTransfer::new(direction, &visible[header_offset..]);
-                        *zmodem_state_reader.lock().await = Some(transfer);
-                        let _ = app_reader
-                            .emit(&zmodem_event_reader, &ZmodemEvent::Detected { direction });
-                        continue;
-                    }
+                        ZmodemDetectResult::NoMatch { passthrough } => {
+                            if passthrough.is_empty() {
+                                continue;
+                            }
+                            passthrough
+                        }
+                    };
 
-                    let mut text = String::from_utf8_lossy(&visible).to_string();
+                    let mut text = String::from_utf8_lossy(&process_visible).to_string();
                     let mut proc = capture_for_reader.lock().await;
                     if proc.has_active() {
                         text = proc.process(&text);

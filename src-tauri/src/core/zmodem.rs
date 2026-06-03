@@ -9,6 +9,7 @@
 use serde::Serialize;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 // ZMODEM protocol constants for header detection.
 const ZPAD: u8 = 0x2A; // '*'
@@ -22,6 +23,9 @@ const ZMODEM_HEADER_LEN: usize = 4;
 
 /// Five consecutive CAN (0x18) bytes abort a ZMODEM session.
 const CANCEL_SEQ_LEN: usize = 5;
+
+const ZMODEM_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+const ZMODEM_PROGRESS_BYTES: u64 = 256 * 1024;
 
 /// Direction of the ZMODEM transfer from the **local** perspective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -41,14 +45,18 @@ pub enum ZmodemEvent {
     Detected { direction: ZmodemDirection },
     /// Progress update for an active transfer.
     Progress {
+        #[serde(rename = "fileName")]
         file_name: String,
+        #[serde(rename = "bytesTransferred")]
         bytes_transferred: u64,
+        #[serde(rename = "totalSize")]
         total_size: u64,
         direction: ZmodemDirection,
     },
     /// The ZMODEM session completed successfully.
     Complete {
         direction: ZmodemDirection,
+        #[serde(rename = "fileCount")]
         file_count: u32,
     },
     /// The ZMODEM session failed.
@@ -63,6 +71,18 @@ pub enum ZmodemAction {
     EmitEvent(ZmodemEvent),
 }
 
+/// Result of scanning a raw byte chunk for ZMODEM startup.
+pub enum ZmodemDetectResult {
+    /// No complete header was detected. `passthrough` is known-safe terminal text.
+    NoMatch { passthrough: Vec<u8> },
+    /// A ZMODEM header was detected.
+    Detected {
+        direction: ZmodemDirection,
+        passthrough: Vec<u8>,
+        initial_bytes: Vec<u8>,
+    },
+}
+
 // ---------------------------------------------------------------------------
 // Detection
 // ---------------------------------------------------------------------------
@@ -72,78 +92,110 @@ pub enum ZmodemAction {
 /// Handles the pattern being split across multiple reads by keeping
 /// a small state machine.
 pub struct ZmodemDetector {
-    /// Sliding window of recent bytes for pattern matching.
-    window: [u8; ZMODEM_HEADER_LEN],
-    window_len: usize,
+    /// Bytes withheld until they are known not to be a split ZMODEM header.
+    pending: Vec<u8>,
 }
 
 impl ZmodemDetector {
     pub fn new() -> Self {
         Self {
-            window: [0; ZMODEM_HEADER_LEN],
-            window_len: 0,
+            pending: Vec::new(),
         }
     }
 
-    /// Feed raw bytes and return `Some(direction)` if a ZMODEM header is found.
+    /// Feed raw bytes and return whether a ZMODEM header was found.
     ///
     /// The direction is inferred from the frame type byte that follows the
     /// header prefix:
     /// - ZRQINIT (0x00) → remote wants to **send** → we **download**
     /// - ZRINIT  (0x01) → remote wants to **receive** → we **upload**
     ///
-    /// Returns the byte offset where the header starts (useful for splitting
-    /// pre-header terminal text from the ZMODEM data).
-    pub fn feed(&mut self, data: &[u8]) -> Option<(ZmodemDirection, usize)> {
-        for (i, &byte) in data.iter().enumerate() {
-            self.push_byte(byte);
+    /// `passthrough` contains bytes that can be shown in the terminal. Split
+    /// header prefixes are retained internally until enough bytes arrive.
+    pub fn feed(&mut self, data: &[u8]) -> ZmodemDetectResult {
+        self.pending.extend_from_slice(data);
 
-            if self.window_len >= ZMODEM_HEADER_LEN {
-                let w = &self.window[..ZMODEM_HEADER_LEN];
-                if w[0] == ZPAD
-                    && w[1] == ZPAD
-                    && w[2] == ZDLE
-                    && matches!(w[3], ZHEX | ZBIN | ZBIN32)
-                {
-                    // Peek the frame type from the data that follows.
-                    // For ZHEX headers, the frame type is hex-encoded (2 ASCII chars).
-                    // For ZBIN/ZBIN32 headers, the frame type is a raw byte.
-                    let remaining = &data[i + 1..];
-                    let frame_type = if w[3] == ZHEX {
-                        parse_hex_frame_type(remaining)
-                    } else {
-                        remaining.first().copied()
-                    };
-
-                    let direction = match frame_type {
-                        Some(0x00) => Some(ZmodemDirection::Download), // ZRQINIT
-                        Some(0x01) => Some(ZmodemDirection::Upload),   // ZRINIT
-                        _ => None,
-                    };
-
-                    if let Some(dir) = direction {
-                        let header_start = i + 1 - ZMODEM_HEADER_LEN;
-                        self.reset();
-                        return Some((dir, header_start));
-                    }
-                }
-            }
+        if let Some((direction, header_start)) = detect_zmodem_start(&self.pending) {
+            let passthrough = self.pending[..header_start].to_vec();
+            let initial_bytes = self.pending[header_start..].to_vec();
+            self.reset();
+            return ZmodemDetectResult::Detected {
+                direction,
+                passthrough,
+                initial_bytes,
+            };
         }
-        None
+
+        let keep_from = retained_prefix_start(&self.pending);
+        let passthrough = self.pending[..keep_from].to_vec();
+        if keep_from > 0 {
+            self.pending.drain(..keep_from);
+        }
+
+        ZmodemDetectResult::NoMatch { passthrough }
     }
 
     pub fn reset(&mut self) {
-        self.window_len = 0;
+        self.pending.clear();
+    }
+}
+
+fn detect_zmodem_start(data: &[u8]) -> Option<(ZmodemDirection, usize)> {
+    for start in 0..data.len() {
+        if data.len().saturating_sub(start) < ZMODEM_HEADER_LEN {
+            break;
+        }
+
+        let header = &data[start..start + ZMODEM_HEADER_LEN];
+        if header[0] != ZPAD
+            || header[1] != ZPAD
+            || header[2] != ZDLE
+            || !matches!(header[3], ZHEX | ZBIN | ZBIN32)
+        {
+            continue;
+        }
+
+        let remaining = &data[start + ZMODEM_HEADER_LEN..];
+        let frame_type = if header[3] == ZHEX {
+            parse_hex_frame_type(remaining)
+        } else {
+            remaining.first().copied()
+        };
+
+        let direction = match frame_type {
+            Some(0x00) => Some(ZmodemDirection::Download),
+            Some(0x01) => Some(ZmodemDirection::Upload),
+            _ => None,
+        };
+
+        if let Some(direction) = direction {
+            return Some((direction, start));
+        }
     }
 
-    fn push_byte(&mut self, byte: u8) {
-        if self.window_len < ZMODEM_HEADER_LEN {
-            self.window[self.window_len] = byte;
-            self.window_len += 1;
-        } else {
-            self.window.copy_within(1.., 0);
-            self.window[ZMODEM_HEADER_LEN - 1] = byte;
+    None
+}
+
+fn retained_prefix_start(data: &[u8]) -> usize {
+    let max_suffix = data.len().min(ZMODEM_HEADER_LEN + 1);
+    for len in (1..=max_suffix).rev() {
+        let start = data.len() - len;
+        if is_possible_zmodem_prefix(&data[start..]) {
+            return start;
         }
+    }
+    data.len()
+}
+
+fn is_possible_zmodem_prefix(data: &[u8]) -> bool {
+    match data {
+        [] => true,
+        [ZPAD] => true,
+        [ZPAD, ZPAD] => true,
+        [ZPAD, ZPAD, ZDLE] => true,
+        [ZPAD, ZPAD, ZDLE, kind] => matches!(*kind, ZHEX | ZBIN | ZBIN32),
+        [ZPAD, ZPAD, ZDLE, ZHEX, first_hex] => hex_digit(*first_hex).is_some(),
+        _ => false,
     }
 }
 
@@ -179,6 +231,8 @@ pub struct ZmodemTransfer {
     /// Count of consecutive CAN bytes seen — 5 in a row means abort.
     cancel_count: usize,
     file_count: u32,
+    progress_throttle: ProgressThrottle,
+    send_buf: Vec<u8>,
 }
 
 enum TransferState {
@@ -216,6 +270,46 @@ struct SendFile {
     size: u64,
     file: std::fs::File,
     sent: u64,
+    position: u64,
+}
+
+struct ProgressThrottle {
+    last_emit_at: Option<Instant>,
+    last_emit_bytes: u64,
+}
+
+impl ProgressThrottle {
+    fn new() -> Self {
+        Self {
+            last_emit_at: None,
+            last_emit_bytes: 0,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.last_emit_at = None;
+        self.last_emit_bytes = 0;
+    }
+
+    fn should_emit(&mut self, bytes_transferred: u64, force: bool) -> bool {
+        self.should_emit_at(bytes_transferred, force, Instant::now())
+    }
+
+    fn should_emit_at(&mut self, bytes_transferred: u64, force: bool, now: Instant) -> bool {
+        if force
+            || self.last_emit_at.is_none()
+            || bytes_transferred.saturating_sub(self.last_emit_bytes) >= ZMODEM_PROGRESS_BYTES
+            || self
+                .last_emit_at
+                .is_some_and(|last| now.duration_since(last) >= ZMODEM_PROGRESS_INTERVAL)
+        {
+            self.last_emit_at = Some(now);
+            self.last_emit_bytes = bytes_transferred;
+            return true;
+        }
+
+        false
+    }
 }
 
 impl ZmodemTransfer {
@@ -227,6 +321,8 @@ impl ZmodemTransfer {
             },
             cancel_count: 0,
             file_count: 0,
+            progress_throttle: ProgressThrottle::new(),
+            send_buf: Vec::new(),
         }
     }
 
@@ -408,18 +504,21 @@ impl ZmodemTransfer {
                         );
                         match std::fs::File::create(&file_path) {
                             Ok(file) => {
+                                self.progress_throttle.reset();
                                 *current_file = Some(ReceiveFile {
                                     name: name.clone(),
                                     size,
                                     file,
                                     written: 0,
                                 });
-                                actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
-                                    file_name: name,
-                                    bytes_transferred: 0,
-                                    total_size: size,
-                                    direction: ZmodemDirection::Download,
-                                }));
+                                if self.progress_throttle.should_emit(0, true) {
+                                    actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                                        file_name: name,
+                                        bytes_transferred: 0,
+                                        total_size: size,
+                                        direction: ZmodemDirection::Download,
+                                    }));
+                                }
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -437,6 +536,14 @@ impl ZmodemTransfer {
                     }
                     zmodem2::ReceiverEvent::FileComplete => {
                         if let Some(rf) = current_file {
+                            if self.progress_throttle.should_emit(rf.written, true) {
+                                actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                                    file_name: rf.name.clone(),
+                                    bytes_transferred: rf.written,
+                                    total_size: rf.size,
+                                    direction: ZmodemDirection::Download,
+                                }));
+                            }
                             let _ = rf.file.flush();
                         }
                         self.file_count += 1;
@@ -456,11 +563,10 @@ impl ZmodemTransfer {
             // Drain file data and write to the output file.
             let file_data = receiver.drain_file();
             if !file_data.is_empty() {
-                let file_data = file_data.to_vec();
                 let len = file_data.len();
 
                 if let Some(rf) = current_file {
-                    if let Err(e) = rf.file.write_all(&file_data) {
+                    if let Err(e) = rf.file.write_all(file_data) {
                         tracing::error!("Failed to write file data: {e}");
                         self.state = TransferState::Done;
                         actions.push(ZmodemAction::SendToRemote(cancel_sequence()));
@@ -470,12 +576,14 @@ impl ZmodemTransfer {
                         return actions;
                     }
                     rf.written += len as u64;
-                    actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
-                        file_name: rf.name.clone(),
-                        bytes_transferred: rf.written,
-                        total_size: rf.size,
-                        direction: ZmodemDirection::Download,
-                    }));
+                    if self.progress_throttle.should_emit(rf.written, false) {
+                        actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                            file_name: rf.name.clone(),
+                            bytes_transferred: rf.written,
+                            total_size: rf.size,
+                            direction: ZmodemDirection::Download,
+                        }));
+                    }
                 }
 
                 if let Err(e) = receiver.advance_file(len) {
@@ -535,25 +643,33 @@ impl ZmodemTransfer {
         // in the no_std fixed-capacity internal buffer.
         while let Some(req) = sender.poll_file() {
             if let Some(sf) = current_file {
-                if let Err(e) = sf.file.seek(SeekFrom::Start(u64::from(req.offset))) {
-                    tracing::warn!("File seek error: {e}");
-                    break;
+                let requested_offset = u64::from(req.offset);
+                if sf.position != requested_offset {
+                    if let Err(e) = sf.file.seek(SeekFrom::Start(requested_offset)) {
+                        tracing::warn!("File seek error: {e}");
+                        break;
+                    }
+                    sf.position = requested_offset;
                 }
-                let mut buf = vec![0u8; req.len];
-                match sf.file.read(&mut buf) {
+                if self.send_buf.len() < req.len {
+                    self.send_buf.resize(req.len, 0);
+                }
+                match sf.file.read(&mut self.send_buf[..req.len]) {
                     Ok(n) => {
-                        buf.truncate(n);
-                        if let Err(e) = sender.feed_file(&buf) {
+                        if let Err(e) = sender.feed_file(&self.send_buf[..n]) {
                             tracing::warn!("feed_file error: {e}");
                             break;
                         }
-                        sf.sent += n as u64;
-                        actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
-                            file_name: sf.name.clone(),
-                            bytes_transferred: sf.sent,
-                            total_size: sf.size,
-                            direction: ZmodemDirection::Upload,
-                        }));
+                        sf.sent = sf.sent.max(requested_offset + n as u64);
+                        sf.position += n as u64;
+                        if self.progress_throttle.should_emit(sf.sent, false) {
+                            actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                                file_name: sf.name.clone(),
+                                bytes_transferred: sf.sent,
+                                total_size: sf.size,
+                                direction: ZmodemDirection::Upload,
+                            }));
+                        }
                         drain_sender_outgoing(sender, &mut actions);
                     }
                     Err(e) => {
@@ -568,16 +684,37 @@ impl ZmodemTransfer {
         while let Some(event) = sender.poll_event() {
             match event {
                 zmodem2::SenderEvent::FileComplete => {
+                    if let Some(sf) = current_file {
+                        if self.progress_throttle.should_emit(sf.sent, true) {
+                            actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                                file_name: sf.name.clone(),
+                                bytes_transferred: sf.sent,
+                                total_size: sf.size,
+                                direction: ZmodemDirection::Upload,
+                            }));
+                        }
+                    }
                     self.file_count += 1;
                     *current_file = None;
                     *file_index += 1;
                     if *file_index < files.len() {
+                        self.progress_throttle.reset();
                         actions.extend(Self::start_file_for_sender(
                             sender,
                             files,
                             *file_index,
                             current_file,
                         ));
+                        if let Some(sf) = current_file {
+                            if self.progress_throttle.should_emit(0, true) {
+                                actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                                    file_name: sf.name.clone(),
+                                    bytes_transferred: 0,
+                                    total_size: sf.size,
+                                    direction: ZmodemDirection::Upload,
+                                }));
+                            }
+                        }
                     } else if let Err(e) = sender.finish_session() {
                         tracing::warn!("finish_session error: {e}");
                     }
@@ -614,7 +751,19 @@ impl ZmodemTransfer {
             return vec![];
         }
 
-        Self::start_file_for_sender(sender, files, *file_index, current_file)
+        self.progress_throttle.reset();
+        let mut actions = Self::start_file_for_sender(sender, files, *file_index, current_file);
+        if let Some(sf) = current_file {
+            if self.progress_throttle.should_emit(0, true) {
+                actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
+                    file_name: sf.name.clone(),
+                    bytes_transferred: 0,
+                    total_size: sf.size,
+                    direction: ZmodemDirection::Upload,
+                }));
+            }
+        }
+        actions
     }
 
     fn start_file_for_sender(
@@ -663,6 +812,7 @@ impl ZmodemTransfer {
             size,
             file,
             sent: 0,
+            position: 0,
         });
 
         vec![]
@@ -732,4 +882,108 @@ fn cancel_sequence() -> Vec<u8> {
     let mut seq = vec![ZDLE; CANCEL_SEQ_LEN];
     seq.extend([0x08; CANCEL_SEQ_LEN]); // backspace to clean up display
     seq
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ProgressThrottle, ZmodemDetectResult, ZmodemDetector, ZmodemDirection,
+        ZMODEM_PROGRESS_BYTES, ZMODEM_PROGRESS_INTERVAL,
+    };
+    use std::time::{Duration, Instant};
+
+    fn detected_direction(result: ZmodemDetectResult) -> ZmodemDirection {
+        match result {
+            ZmodemDetectResult::Detected { direction, .. } => direction,
+            ZmodemDetectResult::NoMatch { .. } => panic!("expected ZMODEM detection"),
+        }
+    }
+
+    #[test]
+    fn detects_complete_zhex_download_header() {
+        let mut detector = ZmodemDetector::new();
+        let result = detector.feed(b"ready\r\n**\x18B00");
+
+        match result {
+            ZmodemDetectResult::Detected {
+                direction,
+                passthrough,
+                initial_bytes,
+            } => {
+                assert_eq!(direction, ZmodemDirection::Download);
+                assert_eq!(passthrough, b"ready\r\n");
+                assert_eq!(initial_bytes, b"**\x18B00");
+            }
+            ZmodemDetectResult::NoMatch { .. } => panic!("expected ZMODEM detection"),
+        }
+    }
+
+    #[test]
+    fn detects_zbin_upload_header_across_chunks() {
+        let mut detector = ZmodemDetector::new();
+        match detector.feed(b"prefix**\x18") {
+            ZmodemDetectResult::NoMatch { passthrough } => assert_eq!(passthrough, b"prefix"),
+            ZmodemDetectResult::Detected { .. } => panic!("unexpected early detection"),
+        }
+
+        let result = detector.feed(b"A\x01payload");
+        match result {
+            ZmodemDetectResult::Detected {
+                direction,
+                passthrough,
+                initial_bytes,
+            } => {
+                assert_eq!(direction, ZmodemDirection::Upload);
+                assert!(passthrough.is_empty());
+                assert_eq!(initial_bytes, b"**\x18A\x01payload");
+            }
+            ZmodemDetectResult::NoMatch { .. } => panic!("expected ZMODEM detection"),
+        }
+    }
+
+    #[test]
+    fn detects_zhex_frame_type_split_after_first_hex_digit() {
+        let mut detector = ZmodemDetector::new();
+        match detector.feed(b"**\x18B0") {
+            ZmodemDetectResult::NoMatch { passthrough } => assert!(passthrough.is_empty()),
+            ZmodemDetectResult::Detected { .. } => panic!("unexpected early detection"),
+        }
+
+        assert_eq!(
+            detected_direction(detector.feed(b"1rest")),
+            ZmodemDirection::Upload
+        );
+    }
+
+    #[test]
+    fn progress_throttle_emits_first_time() {
+        let mut throttle = ProgressThrottle::new();
+        assert!(throttle.should_emit_at(0, false, Instant::now()));
+    }
+
+    #[test]
+    fn progress_throttle_respects_time_and_byte_thresholds() {
+        let mut throttle = ProgressThrottle::new();
+        let start = Instant::now();
+        assert!(throttle.should_emit_at(0, false, start));
+        assert!(!throttle.should_emit_at(1, false, start + Duration::from_millis(10)));
+        assert!(throttle.should_emit_at(
+            ZMODEM_PROGRESS_BYTES,
+            false,
+            start + Duration::from_millis(20)
+        ));
+        assert!(throttle.should_emit_at(
+            ZMODEM_PROGRESS_BYTES + 1,
+            false,
+            start + ZMODEM_PROGRESS_INTERVAL + Duration::from_millis(30)
+        ));
+    }
+
+    #[test]
+    fn progress_throttle_force_emits_completion() {
+        let mut throttle = ProgressThrottle::new();
+        let start = Instant::now();
+        assert!(throttle.should_emit_at(128, false, start));
+        assert!(throttle.should_emit_at(129, true, start + Duration::from_millis(1)));
+    }
 }
