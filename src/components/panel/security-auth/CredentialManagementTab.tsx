@@ -44,10 +44,13 @@ function CredentialEditor({
   const [showPassword, setShowPassword] = useState(false);
   const usernamePromptRegex = entry.username_prompt_regex ?? "";
   const passwordPromptRegex = entry.password_prompt_regex ?? "";
-  const usernameRegexValid = validatePromptRegex(usernamePromptRegex);
-  const passwordRegexValid = validatePromptRegex(passwordPromptRegex);
-  const regexError = (value: string) =>
-    value.trim() ? t("credentialManager.invalidRegex") : t("credentialManager.regexRequired");
+  const usernameRegexValid =
+    !usernamePromptRegex.trim() || validatePromptRegex(usernamePromptRegex);
+  const passwordRegexValid =
+    !passwordPromptRegex.trim() || validatePromptRegex(passwordPromptRegex);
+  const showUsernameRegexValid = Boolean(usernamePromptRegex.trim() && usernameRegexValid);
+  const showPasswordRegexValid = Boolean(passwordPromptRegex.trim() && passwordRegexValid);
+  const regexError = (value: string) => (value.trim() ? t("credentialManager.invalidRegex") : "");
 
   return (
     <div className="border-b bg-accent/25 p-3">
@@ -80,12 +83,12 @@ function CredentialEditor({
         <div className="space-y-2 border-t pt-3">
           <div className="flex items-center gap-1.5 text-xs font-medium">
             <UserRound className="h-3.5 w-3.5 text-primary" />
-            {t("credentialManager.usernameLabel")}
+            {t("credentialManager.usernameOptionalLabel")}
           </div>
           <div className="space-y-2">
             <div className="space-y-1.5">
               <Label className="text-[0.6875rem] text-muted-foreground">
-                {t("credentialManager.promptRegexLabel")}
+                {t("credentialManager.promptRegexOptionalLabel")}
               </Label>
               <div className="relative">
                 <Input
@@ -95,7 +98,7 @@ function CredentialEditor({
                   onChange={(event) => onChange({ username_prompt_regex: event.target.value })}
                   aria-invalid={!usernameRegexValid}
                 />
-                {usernameRegexValid ? (
+                {showUsernameRegexValid ? (
                   <CheckCircle2 className="pointer-events-none absolute top-1/2 right-2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-500" />
                 ) : null}
               </div>
@@ -128,7 +131,7 @@ function CredentialEditor({
           <div className="space-y-2">
             <div className="space-y-1.5">
               <Label className="text-[0.6875rem] text-muted-foreground">
-                {t("credentialManager.promptRegexLabel")}
+                {t("credentialManager.promptRegexOptionalLabel")}
               </Label>
               <div className="relative">
                 <Input
@@ -138,7 +141,7 @@ function CredentialEditor({
                   onChange={(event) => onChange({ password_prompt_regex: event.target.value })}
                   aria-invalid={!passwordRegexValid}
                 />
-                {passwordRegexValid ? (
+                {showPasswordRegexValid ? (
                   <CheckCircle2 className="pointer-events-none absolute top-1/2 right-2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-500" />
                 ) : null}
               </div>
@@ -322,16 +325,14 @@ export function CredentialManagementTab({
     setEditEntry((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const usernamePromptRegex = editEntry.username_prompt_regex ?? "";
+  const passwordPromptRegex = editEntry.password_prompt_regex ?? "";
   const regexValid =
-    validatePromptRegex(editEntry.username_prompt_regex ?? "") &&
-    validatePromptRegex(editEntry.password_prompt_regex ?? "");
+    (!usernamePromptRegex.trim() || validatePromptRegex(usernamePromptRegex)) &&
+    (!passwordPromptRegex.trim() || validatePromptRegex(passwordPromptRegex));
 
   const saveDisabled =
-    passwordLoading ||
-    !editEntry.name?.trim() ||
-    !editEntry.username?.trim() ||
-    (isNew && !editEntry.password) ||
-    !regexValid;
+    passwordLoading || !editEntry.name?.trim() || (isNew && !editEntry.password) || !regexValid;
 
   const handleSave = useCallback(async () => {
     if (saveDisabled) return;
@@ -427,7 +428,7 @@ export function CredentialManagementTab({
                       </div>
                       <div className="mt-1 flex items-start gap-0.5">
                         <span className="min-w-0 select-text break-all text-[0.6875rem] text-muted-foreground">
-                          {entry.username}
+                          {entry.username || t("credentialManager.passwordOnlyCredential")}
                         </span>
                         {entry.username ? <CopyButton value={entry.username} /> : null}
                       </div>

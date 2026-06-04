@@ -4,8 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type CredentialPromptKind,
   compilePromptRegex,
+  extractCredentialPromptText,
   findMatchingCredentials,
+  findPasswordOnlyFallbackCredentials,
   getCredentialPromptPattern,
+  isDefaultPasswordPrompt,
   stripTerminalControlSequences,
 } from "@/lib/credentialAutofill";
 import { invoke } from "@/lib/invoke";
@@ -34,22 +37,8 @@ export interface CredentialPanelState {
   promptText: string;
 }
 
-function extractCredentialPromptText(output: string) {
-  const lastChar = output[output.length - 1];
-  if (lastChar === "\r" || lastChar === "\n") return "";
-
-  const normalized = output.replace(/\r/g, "\n").replace(/\n+/g, "\n");
-  const lines = normalized.split("\n");
-  const prompt = (lines[lines.length - 1] ?? "").trim();
-  return prompt.length > 500 ? prompt.slice(-500) : prompt;
-}
-
 function extractCurrentPromptLine(promptText: string) {
   return promptText.trim();
-}
-
-function looksLikePasswordPrompt(promptText: string) {
-  return /\b(pass(word|phrase|code)?|pin)\b/i.test(promptText);
 }
 
 function credentialPatternMatches(
@@ -326,12 +315,11 @@ export function useCredentialAutofill(
             return;
           }
 
-          if (looksLikePasswordPrompt(currentLine)) {
+          if (isDefaultPasswordPrompt(currentLine)) {
             pendingCredentialRef.current = null;
+          } else {
             return;
           }
-
-          return;
         }
 
         const passwordMatches = findMatchingCredentials(credentials, "password", promptText);
@@ -340,6 +328,16 @@ export function useCredentialAutofill(
 
           showPanel("password", passwordMatches, promptText);
           return;
+        }
+
+        if (isDefaultPasswordPrompt(promptText)) {
+          const fallbackMatches = findPasswordOnlyFallbackCredentials(credentials);
+          if (fallbackMatches.length > 0) {
+            if (!rememberPrompt("password", promptText, now)) return;
+
+            showPanel("password", fallbackMatches, promptText);
+            return;
+          }
         }
 
         const usernameMatches = findMatchingCredentials(credentials, "username", promptText);
@@ -365,7 +363,6 @@ export function useCredentialAutofill(
     (payload: string) => {
       if (performanceModeRef.current === "overloaded") return;
       if (!activeRef.current || !visibleRef.current) return;
-      if (credentialsRef.current.length === 0) return;
 
       const visible = stripTerminalControlSequences(payload);
       if (!visible) return;

@@ -9,6 +9,7 @@ const USERNAME_PROMPT_PATTERN =
   /\b(user\s*name|username|login|login\s+as|account|user)\b|(?:\u7528\u6237\u540d|\u7528\u6237|\u8d26\u53f7|\u8d26\u6237|\u767b\u5f55\u540d)/i;
 const PASSWORD_PROMPT_PATTERN =
   /\b(pass(word|phrase|code)?|pin|otp|verification\s*code|auth(entication)?\s*code|2fa|mfa)\b|(?:\u5bc6\u7801|\u53e3\u4ee4|\u9a8c\u8bc1\u7801|\u52a8\u6001\u7801|\u52a8\u6001\u53e3\u4ee4)/i;
+const PROMPT_TERMINATOR_PATTERN = /[:\uff1a]\s*$/u;
 
 export function stripTerminalControlSequences(text: string): string {
   return text.replace(OSC_PATTERN, "").replace(ANSI_PATTERN, "");
@@ -27,10 +28,17 @@ export function extractCredentialPromptText(output: string): string {
 
 export function detectCredentialPromptKind(output: string): CredentialPromptKind | null {
   const prompt = extractCredentialPromptText(output);
-  if (!prompt || !/[:\uff1a]\s*$/u.test(prompt)) return null;
+  if (!prompt || !PROMPT_TERMINATOR_PATTERN.test(prompt)) return null;
   if (PASSWORD_PROMPT_PATTERN.test(prompt)) return "password";
   if (USERNAME_PROMPT_PATTERN.test(prompt)) return "username";
   return null;
+}
+
+export function isDefaultPasswordPrompt(output: string): boolean {
+  const prompt = extractCredentialPromptText(output);
+  return Boolean(
+    prompt && PROMPT_TERMINATOR_PATTERN.test(prompt) && PASSWORD_PROMPT_PATTERN.test(prompt),
+  );
 }
 
 export function compilePromptRegex(pattern: string): RegExp | null {
@@ -72,6 +80,12 @@ export function findMatchingCredentials(
   output: string,
 ): SavedCredential[] {
   return credentials.filter((credential) => credentialMatchesPrompt(credential, kind, output));
+}
+
+export function findPasswordOnlyFallbackCredentials(
+  credentials: SavedCredential[],
+): SavedCredential[] {
+  return credentials.filter((credential) => credential.enabled);
 }
 
 export function validatePromptRegex(pattern: string): boolean {
