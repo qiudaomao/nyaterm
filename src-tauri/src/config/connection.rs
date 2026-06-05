@@ -1,6 +1,6 @@
 use super::{
-    load_app_settings, load_proxies, save_app_settings, save_proxies, uuid_v4, ProxyConfig,
-    ProxySettings,
+    ProxyConfig, ProxySettings, load_app_settings, load_proxies, save_app_settings, save_proxies,
+    uuid_v4,
 };
 use crate::error::{AppError, AppResult};
 use crate::storage;
@@ -36,6 +36,8 @@ pub enum ConnectionType {
     LocalTerminal {
         #[serde(default)]
         shell_path: String,
+        #[serde(default)]
+        shell_args: String,
         #[serde(default)]
         working_dir: Option<String>,
         #[serde(default, skip_serializing_if = "is_ai_execution_profile_auto")]

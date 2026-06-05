@@ -98,6 +98,7 @@ export default function NewSessionPage() {
 
   // Local Terminal States
   const [shellPath, setShellPath] = useState("powershell.exe");
+  const [shellArgs, setShellArgs] = useState("");
   const [workingDir, setWorkingDir] = useState("");
   const [serialBackspaceMode, setSerialBackspaceMode] = useState("ctrl_h");
   const [telnetBackspaceMode, setTelnetBackspaceMode] = useState("del");
@@ -160,6 +161,7 @@ export default function NewSessionPage() {
           setTelnetBackspaceMode(found.backspace_mode || "del");
         } else if (found.type === "local_terminal") {
           setShellPath(found.shell_path || "powershell.exe");
+          setShellArgs(found.shell_args || "");
           setWorkingDir(found.working_dir || "");
         } else if (found.type === "serial") {
           setSerialPortName(found.port_name || "");
@@ -226,6 +228,7 @@ export default function NewSessionPage() {
     setParity("none");
     setStopBits("1");
     setShellPath("powershell.exe");
+    setShellArgs("");
     setWorkingDir("");
     setSerialBackspaceMode("ctrl_h");
     setTelnetBackspaceMode("del");
@@ -348,6 +351,10 @@ export default function NewSessionPage() {
       }
     }
 
+    if (currentTab === "local" && !shellPath.trim()) {
+      return t("dialog.shellPathRequired", "Shell path is required");
+    }
+
     return "";
   }, [
     authType,
@@ -361,6 +368,7 @@ export default function NewSessionPage() {
     postLoginDelayMs,
     postLoginEnabled,
     serialPortName,
+    shellPath,
     sshPort,
     telnetPort,
     t,
@@ -387,6 +395,7 @@ export default function NewSessionPage() {
       const normalizedUsername = username.trim();
       const normalizedSerialPortName = serialPortName.trim();
       const normalizedShellPath = shellPath.trim();
+      const normalizedShellArgs = shellArgs.trim();
       const normalizedWorkingDir = workingDir.trim();
       let finalGroupId = groupId;
       if (groupId === "new" && newGroupNamePending) {
@@ -501,6 +510,7 @@ export default function NewSessionPage() {
         ...(currentTab === "local"
           ? {
               shell_path: normalizedShellPath,
+              shell_args: normalizedShellArgs,
               working_dir: normalizedWorkingDir || undefined,
             }
           : {}),
@@ -818,6 +828,8 @@ export default function NewSessionPage() {
             <LocalTerminal
               shellPath={shellPath}
               setShellPath={setShellPath}
+              shellArgs={shellArgs}
+              setShellArgs={setShellArgs}
               workingDir={workingDir}
               setWorkingDir={setWorkingDir}
             />

@@ -5,7 +5,7 @@ use crate::core::{
 };
 use crate::error::{AppError, AppResult};
 use crate::observability::{self, StructuredLog, StructuredLogLevel};
-use crate::utils::fuzzy::{fuzzy_search_items, FuzzyResult};
+use crate::utils::fuzzy::{FuzzyResult, fuzzy_search_items};
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -41,10 +41,12 @@ pub async fn create_local_session(
         match conn.config {
             config::ConnectionType::LocalTerminal {
                 shell_path,
+                shell_args,
                 working_dir,
                 ..
             } => Some(core::LocalSessionConfig {
                 shell_path,
+                shell_args,
                 working_dir,
                 name: conn.name,
             }),
@@ -83,7 +85,7 @@ pub async fn create_telnet_session(
             _ => {
                 return Err(AppError::Config(
                     "Connection is not a Telnet connection".to_string(),
-                ))
+                ));
             }
         }
     } else {
@@ -141,7 +143,7 @@ pub async fn create_serial_session(
             _ => {
                 return Err(AppError::Config(
                     "Connection is not a Serial connection".to_string(),
-                ))
+                ));
             }
         }
     } else {

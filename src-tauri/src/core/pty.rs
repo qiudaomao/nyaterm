@@ -11,12 +11,13 @@ use super::zmodem::{
     ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemEvent, ZmodemTransfer,
 };
 use crate::config::AiExecutionProfile;
+use crate::core::SessionOutputCoalescer;
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
-use crate::core::SessionOutputCoalescer;
 use crate::error::AppResult;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
+use std::path::Path;
 use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
@@ -24,21 +25,162 @@ use tokio::sync::mpsc;
 /// Per-connection local terminal config.
 pub struct LocalSessionConfig {
     pub shell_path: String,
+    pub shell_args: String,
     pub working_dir: Option<String>,
     pub name: String,
 }
 
-fn build_shell_command(shell_cmd: &str) -> (CommandBuilder, String) {
-    let parts: Vec<&str> = shell_cmd.split_whitespace().collect();
-    if parts.is_empty() {
-        platform_default_shell()
-    } else {
-        let mut builder = CommandBuilder::new(parts[0]);
-        if parts.len() > 1 {
-            builder.args(&parts[1..]);
-        }
-        (builder, parts[0].to_string())
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ShellCommandSpec {
+    program: String,
+    args: Vec<String>,
+}
+
+fn build_shell_command(
+    shell_path: &str,
+    shell_args: &str,
+) -> Result<(CommandBuilder, String), String> {
+    let spec = resolve_shell_command(shell_path, shell_args)?;
+    let mut builder = CommandBuilder::new(&spec.program);
+    if !spec.args.is_empty() {
+        builder.args(spec.args.iter().map(String::as_str));
     }
+    Ok((builder, spec.program))
+}
+
+fn resolve_shell_command(shell_path: &str, shell_args: &str) -> Result<ShellCommandSpec, String> {
+    let raw_program = shell_path.trim();
+    let program = trim_wrapping_quotes(raw_program);
+    if program.is_empty() {
+        let (_, shell_name) = platform_default_shell();
+        return Ok(ShellCommandSpec {
+            program: shell_name,
+            args: parse_shell_args(shell_args)?,
+        });
+    }
+
+    let args = parse_shell_args(shell_args)?;
+    if !args.is_empty() {
+        return Ok(ShellCommandSpec {
+            program: program.to_string(),
+            args,
+        });
+    }
+
+    if should_treat_as_literal_program(raw_program) {
+        return Ok(ShellCommandSpec {
+            program: program.to_string(),
+            args,
+        });
+    }
+
+    let mut legacy_parts = parse_shell_args(program)?;
+    if legacy_parts.is_empty() {
+        return Err("Shell path is required".to_string());
+    }
+    let legacy_program = legacy_parts.remove(0);
+    Ok(ShellCommandSpec {
+        program: legacy_program,
+        args: legacy_parts,
+    })
+}
+
+fn should_treat_as_literal_program(value: &str) -> bool {
+    !value.chars().any(char::is_whitespace)
+        || path_exists(value)
+        || looks_like_path(value)
+        || is_quoted(value)
+}
+
+fn path_exists(value: &str) -> bool {
+    Path::new(trim_wrapping_quotes(value)).exists()
+}
+
+fn looks_like_path(value: &str) -> bool {
+    value.contains('\\') || value.contains('/') || Path::new(value).is_absolute()
+}
+
+fn is_quoted(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 2
+        && ((bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\''))
+}
+
+fn trim_wrapping_quotes(value: &str) -> &str {
+    let trimmed = value.trim();
+    if is_quoted(trimmed) {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    }
+}
+
+pub(crate) fn parse_shell_args(input: &str) -> Result<Vec<String>, String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut chars = input.trim().chars().peekable();
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+
+    while let Some(ch) = chars.next() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+
+        if ch == '\\' {
+            let escapes_next = chars.peek().is_some_and(|next| match quote {
+                Some(active_quote) => *next == active_quote || *next == '\\',
+                None => next.is_whitespace() || *next == '"' || *next == '\'' || *next == '\\',
+            });
+            if escapes_next {
+                escaped = true;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+
+        if let Some(active_quote) = quote {
+            if ch == active_quote {
+                quote = None;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+            continue;
+        }
+
+        if ch.is_whitespace() {
+            if !current.is_empty() {
+                args.push(std::mem::take(&mut current));
+            }
+            while chars.peek().is_some_and(|next| next.is_whitespace()) {
+                let _ = chars.next();
+            }
+            continue;
+        }
+
+        current.push(ch);
+    }
+
+    if escaped {
+        current.push('\\');
+    }
+    if quote.is_some() {
+        return Err("Unclosed quote in shell arguments".to_string());
+    }
+    if !current.is_empty() {
+        args.push(current);
+    }
+
+    Ok(args)
 }
 
 fn platform_default_shell() -> (CommandBuilder, String) {
@@ -97,7 +239,10 @@ pub async fn create_local_session(
         .map_or("Local Terminal".to_string(), |c| c.name.clone());
 
     let (_, shell_name) = match &config {
-        Some(cfg) if !cfg.shell_path.trim().is_empty() => build_shell_command(&cfg.shell_path),
+        Some(cfg) if !cfg.shell_path.trim().is_empty() => {
+            build_shell_command(&cfg.shell_path, &cfg.shell_args)
+                .map_err(crate::error::AppError::Config)?
+        }
         _ => platform_default_shell(),
     };
     let ai_execution_profile = infer_local_ai_execution_profile(&shell_name);
@@ -171,12 +316,32 @@ fn pty_session_thread(
                 &format!("session-error-{}", session_id),
                 format!("Failed to open PTY: {}", e),
             );
+            let _ = app.emit(&format!("session-closed-{}", session_id), ());
+            rt_handle.block_on(async {
+                manager.remove_session(&session_id).await;
+            });
             return;
         }
     };
 
     let (mut cmd, _) = match &config {
-        Some(cfg) if !cfg.shell_path.trim().is_empty() => build_shell_command(&cfg.shell_path),
+        Some(cfg) if !cfg.shell_path.trim().is_empty() => {
+            match build_shell_command(&cfg.shell_path, &cfg.shell_args) {
+                Ok(command) => command,
+                Err(error) => {
+                    tracing::error!("Failed to build shell command: {}", error);
+                    let _ = app.emit(
+                        &format!("session-error-{}", session_id),
+                        format!("Failed to build shell command: {}", error),
+                    );
+                    let _ = app.emit(&format!("session-closed-{}", session_id), ());
+                    rt_handle.block_on(async {
+                        manager.remove_session(&session_id).await;
+                    });
+                    return;
+                }
+            }
+        }
         _ => platform_default_shell(),
     };
 
@@ -196,6 +361,10 @@ fn pty_session_thread(
                 &format!("session-error-{}", session_id),
                 format!("Failed to spawn shell: {}", e),
             );
+            let _ = app.emit(&format!("session-closed-{}", session_id), ());
+            rt_handle.block_on(async {
+                manager.remove_session(&session_id).await;
+            });
             return;
         }
     };
@@ -205,6 +374,14 @@ fn pty_session_thread(
         Ok(w) => w,
         Err(e) => {
             tracing::error!("Failed to take PTY writer: {}", e);
+            let _ = app.emit(
+                &format!("session-error-{}", session_id),
+                format!("Failed to take PTY writer: {}", e),
+            );
+            let _ = app.emit(&format!("session-closed-{}", session_id), ());
+            rt_handle.block_on(async {
+                manager.remove_session(&session_id).await;
+            });
             return;
         }
     };
@@ -213,6 +390,14 @@ fn pty_session_thread(
         Ok(r) => r,
         Err(e) => {
             tracing::error!("Failed to clone PTY reader: {}", e);
+            let _ = app.emit(
+                &format!("session-error-{}", session_id),
+                format!("Failed to clone PTY reader: {}", e),
+            );
+            let _ = app.emit(&format!("session-closed-{}", session_id), ());
+            rt_handle.block_on(async {
+                manager.remove_session(&session_id).await;
+            });
             return;
         }
     };
@@ -498,4 +683,41 @@ fn pty_session_thread(
         manager.remove_session(&session_id).await;
     });
     let _ = app.emit(&format!("session-closed-{}", session_id), ());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_shell_args, resolve_shell_command};
+
+    #[test]
+    fn shell_path_with_spaces_stays_single_program() {
+        let spec =
+            resolve_shell_command(r"D:\Soft wares\Git\bin\bash.exe", "").expect("command spec");
+
+        assert_eq!(spec.program, r"D:\Soft wares\Git\bin\bash.exe");
+        assert!(spec.args.is_empty());
+    }
+
+    #[test]
+    fn shell_args_are_split_separately_from_program() {
+        let spec = resolve_shell_command("pwsh.exe", "-NoLogo -NoExit").expect("command spec");
+
+        assert_eq!(spec.program, "pwsh.exe");
+        assert_eq!(spec.args, vec!["-NoLogo", "-NoExit"]);
+    }
+
+    #[test]
+    fn legacy_shell_path_command_with_args_is_still_supported() {
+        let spec = resolve_shell_command("pwsh.exe -NoLogo", "").expect("command spec");
+
+        assert_eq!(spec.program, "pwsh.exe");
+        assert_eq!(spec.args, vec!["-NoLogo"]);
+    }
+
+    #[test]
+    fn shell_args_support_quotes_and_windows_paths() {
+        let args = parse_shell_args(r#"-Command "echo hi" "C:\Program Files\Tool""#).expect("args");
+
+        assert_eq!(args, vec!["-Command", "echo hi", r"C:\Program Files\Tool"]);
+    }
 }

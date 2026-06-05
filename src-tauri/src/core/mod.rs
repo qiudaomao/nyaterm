@@ -11,7 +11,7 @@ pub mod history;
 pub mod importer;
 mod output;
 pub mod portable_snapshot;
-mod pty;
+pub(crate) mod pty;
 mod quick_commands;
 mod recording;
 pub mod serial;
@@ -26,12 +26,12 @@ pub mod zmodem;
 
 pub use cloud_sync::CloudSyncManager;
 pub(crate) use output::SessionOutputCoalescer;
-pub use pty::{create_local_session, LocalSessionConfig};
+pub use pty::{LocalSessionConfig, create_local_session};
 pub use quick_commands::{
     QuickCommandsImportResult, QuickCommandsImportSource, QuickCommandsStore,
 };
 pub use recording::RecordingManager;
-pub use serial::{create_serial_session, list_serial_ports, SerialConfig};
+pub use serial::{SerialConfig, create_serial_session, list_serial_ports};
 pub(crate) use session::update_cwd_if_changed;
 pub use session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,

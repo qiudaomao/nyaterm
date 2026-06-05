@@ -190,6 +190,7 @@ export interface SavedConnection {
   username?: string;
   /** Local terminal fields (present when type === "local_terminal"). */
   shell_path?: string;
+  shell_args?: string;
   working_dir?: string;
   /** Legacy saved value; runtime sessions now resolve the effective AI execution profile automatically. */
   ai_execution_profile?: AIExecutionProfile;

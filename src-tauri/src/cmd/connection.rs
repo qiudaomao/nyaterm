@@ -2,6 +2,7 @@ use crate::config::{self, Group, QuickCommandsConfig, SavedConnection, SavedPass
 use crate::core::{QuickCommandsImportResult, QuickCommandsImportSource, QuickCommandsStore};
 use crate::error::{AppError, AppResult};
 use crate::utils::crypto;
+use std::path::Path;
 use std::sync::Arc;
 use tauri::Emitter;
 
@@ -38,6 +39,7 @@ pub fn save_connection(
     let existing = cfg.connections.iter().find(|c| c.id == target_id);
 
     validate_proxy_jump_config(&connection, &cfg.connections)?;
+    validate_local_terminal_config(&connection)?;
 
     if let Some(ref mut auth) = connection.auth {
         // password_id: Some("") means explicitly cleared, None means preserve existing
@@ -72,6 +74,55 @@ pub fn save_connection(
     let _ = app.emit("connections-changed", ());
     schedule_cloud_sync_notify(app.clone());
     Ok(target_id)
+}
+
+fn validate_local_terminal_config(connection: &SavedConnection) -> AppResult<()> {
+    let config::ConnectionType::LocalTerminal {
+        shell_path,
+        shell_args,
+        ..
+    } = &connection.config
+    else {
+        return Ok(());
+    };
+
+    let trimmed = shell_path.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Config("Shell path is required".to_string()));
+    }
+
+    let path = Path::new(trim_wrapping_quotes(trimmed));
+    if should_validate_shell_path(trimmed) {
+        let metadata = std::fs::metadata(path)
+            .map_err(|e| AppError::Config(format!("Shell path is not a valid file: {e}")))?;
+        if metadata.is_dir() {
+            return Err(AppError::Config(
+                "Shell path must be a file, not a directory".to_string(),
+            ));
+        }
+    }
+
+    crate::core::pty::parse_shell_args(shell_args).map_err(AppError::Config)?;
+
+    Ok(())
+}
+
+fn should_validate_shell_path(value: &str) -> bool {
+    let path = Path::new(trim_wrapping_quotes(value));
+    path.is_absolute() || value.contains('\\') || value.contains('/')
+}
+
+fn trim_wrapping_quotes(value: &str) -> &str {
+    let trimmed = value.trim();
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2
+        && ((bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\''))
+    {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    }
 }
 
 fn validate_proxy_jump_config(
@@ -127,11 +178,15 @@ fn validate_proxy_jump_config(
 
 #[cfg(test)]
 mod tests {
-    use super::{delete_group_from_config, validate_proxy_jump_config};
+    use super::{
+        delete_group_from_config, validate_local_terminal_config, validate_proxy_jump_config,
+    };
     use crate::config::{
         AiExecutionProfile, ConnectionNetwork, ConnectionType, Group, SavedConnection,
         SessionsConfig,
     };
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn ssh_connection(id: &str, proxy_jump_id: Option<&str>) -> SavedConnection {
         SavedConnection {
@@ -177,6 +232,29 @@ mod tests {
                 proxy_id: None,
                 proxy_jump_id: Some(jump_id.to_string()),
             }),
+            post_login: None,
+            created_at_ms: None,
+            updated_at_ms: None,
+            last_used_at_ms: None,
+        }
+    }
+
+    fn local_terminal_connection(id: &str, shell_path: String) -> SavedConnection {
+        SavedConnection {
+            id: id.to_string(),
+            name: format!("Local {id}"),
+            config: ConnectionType::LocalTerminal {
+                shell_path,
+                shell_args: String::new(),
+                working_dir: None,
+                ai_execution_profile: AiExecutionProfile::Auto,
+            },
+            group_id: None,
+            description: None,
+            sort_order: 0,
+            icon: None,
+            auth: None,
+            network: None,
             post_login: None,
             created_at_ms: None,
             updated_at_ms: None,
@@ -246,6 +324,22 @@ mod tests {
         let jump = ssh_connection("jump", None);
 
         validate_proxy_jump_config(&connection, &[jump]).unwrap();
+    }
+
+    #[test]
+    fn rejects_directory_as_local_terminal_shell_path() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("nyaterm-shell-dir-{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let connection = local_terminal_connection("local-dir", dir.to_string_lossy().to_string());
+
+        let error = validate_local_terminal_config(&connection).unwrap_err();
+
+        assert!(error.to_string().contains("must be a file"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

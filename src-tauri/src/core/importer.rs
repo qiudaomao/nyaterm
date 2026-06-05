@@ -121,6 +121,8 @@ enum NyatermJsonSession {
         #[serde(default)]
         shell_path: String,
         #[serde(default)]
+        shell_args: String,
+        #[serde(default)]
         working_dir: Option<String>,
         #[serde(default)]
         description: Option<String>,
@@ -657,6 +659,7 @@ fn prepare_nyaterm_json_session(
             name,
             group_path,
             shell_path,
+            shell_args,
             working_dir,
             description,
             sort_order,
@@ -666,7 +669,8 @@ fn prepare_nyaterm_json_session(
             Ok(PreparedJsonConnection {
                 name: required_string(name, "name", "local_terminal session")?,
                 config: ConnectionType::LocalTerminal {
-                    shell_path,
+                    shell_path: required_string(shell_path, "shell_path", &context)?,
+                    shell_args,
                     working_dir: normalize_optional_string(working_dir),
                     ai_execution_profile: AiExecutionProfile::Auto,
                 },
@@ -1216,6 +1220,7 @@ mod tests {
       "name": "Local PowerShell",
       "type": "local_terminal",
       "shell_path": "pwsh.exe",
+      "shell_args": "-NoLogo",
       "working_dir": "C:\\Users\\me"
     }
   ]
@@ -1257,6 +1262,16 @@ mod tests {
         let key_auth = prepared.connections[2].auth.as_ref().expect("key auth");
         assert_eq!(key_auth.mode, "key");
         assert!(key_auth.key_id.is_some());
+
+        let local_config = &prepared.connections[5].config;
+        assert!(matches!(
+            local_config,
+            ConnectionType::LocalTerminal {
+                shell_path,
+                shell_args,
+                ..
+            } if shell_path == "pwsh.exe" && shell_args == "-NoLogo"
+        ));
     }
 
     #[test]
@@ -1294,9 +1309,11 @@ mod tests {
 "#;
 
         let error = parse_nyaterm_json_content(json).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("password_ref 'missing' was not found"));
+        assert!(
+            error
+                .to_string()
+                .contains("password_ref 'missing' was not found")
+        );
     }
 
     #[test]
@@ -1318,8 +1335,10 @@ mod tests {
 "#;
 
         let error = parse_nyaterm_json_content(json).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("port must be between 1 and 65535"));
+        assert!(
+            error
+                .to_string()
+                .contains("port must be between 1 and 65535")
+        );
     }
 }
