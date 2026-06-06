@@ -6,9 +6,25 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invoke } from "@/lib/invoke";
-import type { AgentStepPayload } from "@/types/global";
+import type { AgentStepPayload, RiskLevel } from "@/types/global";
 import { AnimatedStatusText } from "./AnimatedStatusText";
 import { MarkdownContent } from "./MarkdownContent";
+
+const riskColorClass = {
+  low: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600",
+  medium: "border-sky-500/40 bg-sky-500/10 text-sky-600",
+  high: "border-amber-500/40 bg-amber-500/10 text-amber-600",
+  critical: "border-destructive/40 bg-destructive/10 text-destructive",
+} as const;
+
+function riskLabelKey(risk: RiskLevel) {
+  return {
+    low: "ai.riskLow",
+    medium: "ai.riskMedium",
+    high: "ai.riskHigh",
+    critical: "ai.riskCritical",
+  }[risk];
+}
 
 export function AgentStepView({
   step,
@@ -27,6 +43,7 @@ export function AgentStepView({
   const isSuccess = step.status === "completed";
   const isFailed = step.status === "failed" || step.status === "rejected";
   const isRunning = step.status === "running";
+  const riskLevel = step.action.riskLevel ?? null;
 
   const borderColor = isSuccess
     ? "border-emerald-500"
@@ -71,6 +88,13 @@ export function AgentStepView({
         >
           <div className="flex items-center gap-1.5 border-b border-border/40 px-2.5 py-1 text-[0.625rem] text-muted-foreground">
             <span className="font-medium uppercase tracking-wider">shell</span>
+            {riskLevel ? (
+              <span
+                className={`ml-auto rounded-full border px-1.5 py-0.5 font-medium ${riskColorClass[riskLevel]}`}
+              >
+                {t(riskLabelKey(riskLevel))}
+              </span>
+            ) : null}
           </div>
 
           <SyntaxHighlighter
@@ -124,34 +148,52 @@ export function AgentStepView({
           ) : null}
 
           {step.status === "needs_approval" ? (
-            <div className="flex items-center gap-1.5 border-t border-border/40 px-2.5 py-1.5">
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() =>
-                  void invoke("respond_agent_step", {
-                    streamId: step.streamId,
-                    stepIndex: step.stepIndex,
-                    approved: false,
-                  })
-                }
-              >
-                <MdBlock />
-                {t("ai.rejectExecute")}
-              </Button>
-              <Button
-                size="xs"
-                onClick={() =>
-                  void invoke("respond_agent_step", {
-                    streamId: step.streamId,
-                    stepIndex: step.stepIndex,
-                    approved: true,
-                  })
-                }
-              >
-                <MdPlayArrow />
-                {t("ai.authorizeExecute")}
-              </Button>
+            <div className="space-y-2 border-t border-border/40 px-2.5 py-1.5">
+              <div className="space-y-1 text-[0.625rem] leading-4 text-muted-foreground">
+                {step.action.approvalReason ? <div>{step.action.approvalReason}</div> : null}
+                {step.action.riskReason ? <div>{step.action.riskReason}</div> : null}
+                {(step.action.modelRiskLevel || step.action.localRiskLevel) && (
+                  <div>
+                    {t("ai.riskReview", {
+                      model: step.action.modelRiskLevel
+                        ? t(riskLabelKey(step.action.modelRiskLevel))
+                        : "-",
+                      local: step.action.localRiskLevel
+                        ? t(riskLabelKey(step.action.localRiskLevel))
+                        : "-",
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() =>
+                    void invoke("respond_agent_step", {
+                      streamId: step.streamId,
+                      stepIndex: step.stepIndex,
+                      approved: false,
+                    })
+                  }
+                >
+                  <MdBlock />
+                  {t("ai.rejectExecute")}
+                </Button>
+                <Button
+                  size="xs"
+                  onClick={() =>
+                    void invoke("respond_agent_step", {
+                      streamId: step.streamId,
+                      stepIndex: step.stepIndex,
+                      approved: true,
+                    })
+                  }
+                >
+                  <MdPlayArrow />
+                  {t("ai.authorizeExecute")}
+                </Button>
+              </div>
             </div>
           ) : null}
         </div>

@@ -12,9 +12,9 @@ mod translation;
 
 pub use ai::{
     ai_model_id_for_credential, ai_model_id_for_provider, decrypt_ai_settings, encrypt_ai_settings,
-    mask_ai_settings, merge_masked_ai_settings, normalize_ai_settings, AiCustomActionConfig,
-    AiMode, AiModelConfigItem, AiModelSource, AiProviderCredential, AiProviderKind,
-    AiProviderProfile, AiSettings,
+    mask_ai_settings, merge_masked_ai_settings, normalize_ai_settings,
+    AgentCommandExecutionMode, AiCustomActionConfig, AiMode, AiModelConfigItem, AiModelSource,
+    AiProviderCredential, AiProviderKind, AiProviderProfile, AiSettings, RiskLevel,
 };
 pub use appearance::AppearanceSettings;
 pub use diagnostics::{DiagnosticsLogLevel, DiagnosticsSettings};

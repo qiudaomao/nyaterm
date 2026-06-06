@@ -27,6 +27,35 @@ pub enum AiMode {
     Agent,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl Default for RiskLevel {
+    fn default() -> Self {
+        Self::Medium
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentCommandExecutionMode {
+    ConfirmEach,
+    Smart,
+    Auto,
+}
+
+impl Default for AgentCommandExecutionMode {
+    fn default() -> Self {
+        Self::ConfirmEach
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AiModelSource {
@@ -126,10 +155,14 @@ pub struct AiSettings {
     pub agent_step_timeout_ms: Option<u64>,
     #[serde(default = "default_terminal_output_lines")]
     pub terminal_output_lines: u16,
+    #[serde(default)]
+    pub agent_command_execution_mode: AgentCommandExecutionMode,
+    #[serde(default = "default_agent_smart_auto_execute_max_risk")]
+    pub agent_smart_auto_execute_max_risk: RiskLevel,
 }
 
 fn default_schema_version() -> u32 {
-    1
+    3
 }
 
 fn default_true() -> bool {
@@ -154,6 +187,10 @@ fn default_model_source() -> AiModelSource {
 
 fn default_terminal_output_lines() -> u16 {
     10
+}
+
+fn default_agent_smart_auto_execute_max_risk() -> RiskLevel {
+    RiskLevel::Low
 }
 
 fn default_max_ai_file_size_bytes() -> u64 {
@@ -371,7 +408,7 @@ impl Default for AiSettings {
             .map(|item| item.id.clone());
 
         Self {
-            schema_version: 2,
+            schema_version: 3,
             enabled: true,
             context_line_limit: default_context_line_limit(),
             redaction_enabled: true,
@@ -390,6 +427,8 @@ impl Default for AiSettings {
             max_agent_steps: Some(10),
             agent_step_timeout_ms: Some(30_000),
             terminal_output_lines: default_terminal_output_lines(),
+            agent_command_execution_mode: AgentCommandExecutionMode::ConfirmEach,
+            agent_smart_auto_execute_max_risk: default_agent_smart_auto_execute_max_risk(),
         }
     }
 }
@@ -448,7 +487,7 @@ pub fn merge_masked_ai_settings(current: &AiSettings, mut next: AiSettings) -> A
 pub fn normalize_ai_settings(settings: &mut AiSettings) -> bool {
     let original = serde_json::to_string(settings).unwrap_or_default();
 
-    settings.schema_version = 2;
+    settings.schema_version = 3;
 
     if settings.provider_credentials.is_empty() {
         settings.provider_credentials = settings
@@ -597,7 +636,7 @@ mod tests {
     #[test]
     fn normalize_migrates_legacy_profiles_to_v2_settings() {
         let mut settings = AiSettings {
-            schema_version: 1,
+            schema_version: 2,
             provider_credentials: vec![],
             models: vec![],
             terminal_ai_actions: vec![],
@@ -609,7 +648,7 @@ mod tests {
         settings.active_profile_id = "deepseek".to_string();
 
         assert!(normalize_ai_settings(&mut settings));
-        assert_eq!(settings.schema_version, 2);
+        assert_eq!(settings.schema_version, 3);
         assert!(!settings.provider_credentials.is_empty());
         assert!(settings
             .models
@@ -622,5 +661,10 @@ mod tests {
         assert_eq!(settings.max_ai_file_size_bytes, 1_048_576);
         assert!(!settings.terminal_ai_actions.is_empty());
         assert!(!settings.file_ai_actions.is_empty());
+        assert_eq!(
+            settings.agent_command_execution_mode,
+            AgentCommandExecutionMode::ConfirmEach
+        );
+        assert_eq!(settings.agent_smart_auto_execute_max_risk, RiskLevel::Low);
     }
 }

@@ -556,6 +556,7 @@ export interface DiagnosticsSettings {
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type AIMode = "ask" | "agent";
+export type AIAgentCommandExecutionMode = "confirm_each" | "smart" | "auto";
 export type AIModelSource = "rust-genai" | "manual";
 
 export type AIProviderKind =
@@ -627,6 +628,8 @@ export interface AISettings {
   max_agent_steps?: number | null;
   agent_step_timeout_ms?: number | null;
   terminal_output_lines: number;
+  agent_command_execution_mode: AIAgentCommandExecutionMode;
+  agent_smart_auto_execute_max_risk: RiskLevel;
 }
 
 export interface AIContext {
@@ -714,6 +717,10 @@ export interface AgentStepAction {
   kind: AgentActionKind;
   command?: string | null;
   riskLevel?: RiskLevel | null;
+  modelRiskLevel?: RiskLevel | null;
+  localRiskLevel?: RiskLevel | null;
+  riskReason?: string | null;
+  approvalReason?: string | null;
   answer?: string | null;
 }
 

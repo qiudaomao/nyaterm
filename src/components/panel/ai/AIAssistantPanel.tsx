@@ -1,31 +1,26 @@
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuMessageSquarePlus, LuQuote } from "react-icons/lu";
 import {
   MdAutoAwesome,
+  MdAutoMode,
+  MdCheck,
   MdClose,
   MdContentCopy,
   MdDeleteOutline,
   MdErrorOutline,
   MdHistory,
   MdOutlineSettings,
+  MdRule,
   MdSearch,
   MdSend,
   MdStop,
+  MdWarningAmber,
 } from "react-icons/md";
 import { toast } from "sonner";
+import { AIAssistantDialogs } from "@/components/dialog/ai/AIAssistantDialogs";
 import PanelHeader from "@/components/layout/PanelHeader";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -56,6 +51,7 @@ import { collectSessionPanes } from "@/lib/workspaceTabs";
 import type {
   AgentStepPayload,
   AIAction,
+  AIAgentCommandExecutionMode,
   AICommandCard,
   AIContext,
   AIMessage,
@@ -116,7 +112,13 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   );
   const [agentStepsMap, setAgentStepsMap] = useState<Record<string, AgentStepPayload[]>>({});
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
+  const [showExecutionMenu, setShowExecutionMenu] = useState(false);
+  const [autoModeDialogOpen, setAutoModeDialogOpen] = useState(false);
+  const [pendingExecutionMode, setPendingExecutionMode] =
+    useState<AIAgentCommandExecutionMode | null>(null);
   const handledIntentIdRef = useRef<string | null>(null);
+  const executionMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const executionMenuRef = useRef<HTMLDivElement | null>(null);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
   const historyCardRef = useRef<HTMLDivElement | null>(null);
   const mentionPopoverRef = useRef<HTMLDivElement | null>(null);
@@ -130,6 +132,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   const selectedModel = useMemo(() => selectDefaultAIModel(aiSettings), [aiSettings]);
   const prismStyle = useMemo(() => buildPrismThemeFromColors(theme.colors), [theme.colors]);
   const mode = aiSettings.default_mode ?? "ask";
+  const agentExecutionMode = aiSettings.agent_command_execution_mode ?? "confirm_each";
 
   const allSessionPanes = useMemo(() => {
     const panes: SessionPane[] = [];
@@ -805,6 +808,73 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     setTargetPanes((prev) => prev.filter((p) => p.sessionId !== sessionId));
   }, []);
 
+  const updateAgentExecutionMode = useCallback(
+    (nextMode: AIAgentCommandExecutionMode) => {
+      updateAppSettings({
+        ai: { ...aiSettings, agent_command_execution_mode: nextMode },
+      });
+    },
+    [aiSettings, updateAppSettings],
+  );
+
+  const handleAgentExecutionModeChange = useCallback(
+    (value: string) => {
+      const nextMode = value as AIAgentCommandExecutionMode;
+      if (nextMode === "auto" && agentExecutionMode !== "auto") {
+        setPendingExecutionMode(nextMode);
+        setAutoModeDialogOpen(true);
+        return;
+      }
+      updateAgentExecutionMode(nextMode);
+    },
+    [agentExecutionMode, updateAgentExecutionMode],
+  );
+
+  const confirmAutoExecutionMode = useCallback(() => {
+    updateAgentExecutionMode(pendingExecutionMode ?? "auto");
+    setPendingExecutionMode(null);
+    setAutoModeDialogOpen(false);
+  }, [pendingExecutionMode, updateAgentExecutionMode]);
+
+  const renderExecutionModeItem = useCallback(
+    (
+      value: AIAgentCommandExecutionMode,
+      icon: ReactNode,
+      label: string,
+      desc: string,
+      danger = false,
+    ) => {
+      const selected = agentExecutionMode === value;
+      return (
+        <button
+          type="button"
+          key={value}
+          className={`flex w-full items-start gap-2 rounded px-2 py-2 text-left hover:bg-muted/60 ${
+            selected ? "bg-accent" : ""
+          } ${danger ? "text-amber-600 hover:text-amber-600" : ""}`}
+          onClick={() => {
+            handleAgentExecutionModeChange(value);
+            setShowExecutionMenu(false);
+          }}
+        >
+          <span
+            className={`mt-0.5 shrink-0 ${danger ? "text-amber-500" : "text-muted-foreground"}`}
+          >
+            {icon}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-medium text-foreground">{label}</span>
+            <span className="mt-0.5 block text-[0.6875rem] leading-4 text-muted-foreground">
+              {desc}
+            </span>
+          </span>
+          {selected ? <MdCheck className="mt-0.5 shrink-0 text-primary" /> : null}
+        </button>
+      );
+    },
+    [agentExecutionMode, handleAgentExecutionModeChange],
+  );
+
   return (
     <div
       className="nyaterm-wallpaper-transparent-surface relative flex h-full flex-col"
@@ -817,6 +887,14 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
             !historyButtonRef.current?.contains(target)
           ) {
             setShowHistory(false);
+          }
+        }
+        if (showExecutionMenu) {
+          if (
+            !executionMenuRef.current?.contains(target) &&
+            !executionMenuButtonRef.current?.contains(target)
+          ) {
+            setShowExecutionMenu(false);
           }
         }
         if (showMentionPopover && !mentionPopoverRef.current?.contains(target)) {
@@ -832,10 +910,41 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
+                  ref={executionMenuButtonRef}
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={loading}
+                  className={
+                    agentExecutionMode === "auto" ? "text-amber-600 hover:text-amber-600" : ""
+                  }
+                  aria-label={t("ai.agentCommandExecutionMode")}
+                  aria-expanded={showExecutionMenu}
+                  onClick={() => {
+                    setShowHistory(false);
+                    setShowExecutionMenu((value) => !value);
+                  }}
+                >
+                  {agentExecutionMode === "auto" ? (
+                    <MdWarningAmber />
+                  ) : agentExecutionMode === "smart" ? (
+                    <MdAutoMode />
+                  ) : (
+                    <MdRule />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">{t("ai.agentCommandExecutionMode")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
                   ref={historyButtonRef}
                   size="icon-sm"
                   variant="ghost"
-                  onClick={() => setShowHistory((value) => !value)}
+                  onClick={() => {
+                    setShowExecutionMenu(false);
+                    setShowHistory((value) => !value);
+                  }}
                   aria-expanded={showHistory}
                 >
                   <MdHistory />
@@ -862,6 +971,36 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
           </>
         }
       />
+
+      {showExecutionMenu ? (
+        <div
+          ref={executionMenuRef}
+          className="absolute right-2 top-10 z-30 w-64 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
+          style={{ borderColor: "var(--df-border)" }}
+        >
+          <div className="px-2 py-1.5 text-xs font-medium">{t("ai.agentCommandExecutionMode")}</div>
+          {renderExecutionModeItem(
+            "confirm_each",
+            <MdRule />,
+            t("ai.executionModeConfirmEach"),
+            t("ai.executionModeConfirmEachDesc"),
+          )}
+          {renderExecutionModeItem(
+            "smart",
+            <MdAutoMode />,
+            t("ai.executionModeSmart"),
+            t("ai.executionModeSmartDesc"),
+          )}
+          <div className="-mx-1 my-1 h-px bg-border" />
+          {renderExecutionModeItem(
+            "auto",
+            <MdWarningAmber />,
+            t("ai.executionModeAuto"),
+            t("ai.executionModeAutoDesc"),
+            true,
+          )}
+        </div>
+      ) : null}
 
       {showHistory ? (
         <div
@@ -1289,27 +1428,18 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         </div>
       </div>
 
-      <AlertDialog open={clearHistoryOpen} onOpenChange={setClearHistoryOpen}>
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("ai.clearHistoryTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("ai.clearHistoryDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={clearingHistory}>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={clearingHistory}
-              onClick={(event) => {
-                event.preventDefault();
-                void clearHistory();
-              }}
-            >
-              {t("ai.clearHistory")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <AIAssistantDialogs
+        clearHistoryOpen={clearHistoryOpen}
+        clearingHistory={clearingHistory}
+        autoModeDialogOpen={autoModeDialogOpen}
+        onClearHistoryOpenChange={setClearHistoryOpen}
+        onAutoModeDialogOpenChange={(open) => {
+          setAutoModeDialogOpen(open);
+          if (!open) setPendingExecutionMode(null);
+        }}
+        onClearHistory={() => void clearHistory()}
+        onConfirmAutoExecutionMode={confirmAutoExecutionMode}
+      />
     </div>
   );
 }

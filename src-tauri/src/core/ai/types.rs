@@ -1,21 +1,7 @@
-use crate::config::{AiMode, AiModelSource, AiProviderKind};
+use crate::config::{AiMode, AiModelSource, AiProviderKind, RiskLevel};
 use serde::{Deserialize, Serialize};
+use serde::de::Deserializer;
 use serde_json::Value;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "lowercase")]
-pub enum RiskLevel {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
-
-impl Default for RiskLevel {
-    fn default() -> Self {
-        Self::Medium
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +42,14 @@ pub struct AgentStepAction {
     pub command: Option<String>,
     #[serde(default)]
     pub risk_level: Option<RiskLevel>,
+    #[serde(default)]
+    pub model_risk_level: Option<RiskLevel>,
+    #[serde(default)]
+    pub local_risk_level: Option<RiskLevel>,
+    #[serde(default)]
+    pub risk_reason: Option<String>,
+    #[serde(default)]
+    pub approval_reason: Option<String>,
     #[serde(default)]
     pub answer: Option<String>,
 }
@@ -105,10 +99,30 @@ pub(super) struct AgentLlmResponse {
     pub action: String,
     #[serde(default)]
     pub command: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_risk_level")]
     pub risk_level: Option<RiskLevel>,
     #[serde(default)]
+    pub risk_reason: Option<String>,
+    #[serde(default)]
     pub answer: Option<String>,
+}
+
+fn deserialize_optional_risk_level<'de, D>(deserializer: D) -> Result<Option<RiskLevel>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    Ok(value.and_then(|raw| parse_risk_level_label(&raw)))
+}
+
+pub(super) fn parse_risk_level_label(value: &str) -> Option<RiskLevel> {
+    match value.trim().replace('-', "_").to_ascii_lowercase().as_str() {
+        "low" => Some(RiskLevel::Low),
+        "medium" | "moderate" => Some(RiskLevel::Medium),
+        "high" => Some(RiskLevel::High),
+        "critical" | "danger" | "dangerous" => Some(RiskLevel::Critical),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -357,4 +371,24 @@ pub(super) fn now_rfc3339() -> String {
 
 pub(super) fn uuid() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_agent_risk_level_case_insensitively() {
+        let raw = r#"{"thought":"x","action":"execute_command","command":"ls","riskLevel":"HIGH","riskReason":"x"}"#;
+        let parsed: AgentLlmResponse = serde_json::from_str(raw).unwrap();
+        assert_eq!(parsed.risk_level, Some(RiskLevel::High));
+        assert_eq!(parsed.risk_reason.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn invalid_agent_risk_level_does_not_fail_response_parse() {
+        let raw = r#"{"thought":"x","action":"execute_command","command":"ls","riskLevel":"spicy","riskReason":"x"}"#;
+        let parsed: AgentLlmResponse = serde_json::from_str(raw).unwrap();
+        assert_eq!(parsed.risk_level, None);
+    }
 }

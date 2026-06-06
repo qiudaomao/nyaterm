@@ -4,6 +4,7 @@ import { MdAdd, MdDelete, MdExpandLess, MdExpandMore, MdRefresh } from "react-ic
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useApp } from "@/context/AppContext";
 import {
@@ -29,6 +30,7 @@ import {
   SettingNumberInput,
   SettingRow,
   SettingSection,
+  SettingSelect,
   SettingSwitch,
 } from "./SettingFormItems";
 
@@ -113,6 +115,24 @@ export function AiGeneralTab() {
       </SettingSection>
 
       <SettingSection title={t("ai.agentSettings")}>
+        <SettingFieldGrid>
+          <SettingSelect
+            label={t("ai.smartAutoExecuteMaxRisk")}
+            desc={t("ai.smartAutoExecuteMaxRiskDesc")}
+            value={ai.agent_smart_auto_execute_max_risk ?? "low"}
+            onValueChange={(agent_smart_auto_execute_max_risk) =>
+              update({
+                agent_smart_auto_execute_max_risk:
+                  agent_smart_auto_execute_max_risk as AISettings["agent_smart_auto_execute_max_risk"],
+              })
+            }
+          >
+            <SelectItem value="low">{t("ai.riskLow")}</SelectItem>
+            <SelectItem value="medium">{t("ai.riskMedium")}</SelectItem>
+            <SelectItem value="high">{t("ai.riskHigh")}</SelectItem>
+            <SelectItem value="critical">{t("ai.riskCritical")}</SelectItem>
+          </SettingSelect>
+        </SettingFieldGrid>
         <SettingFieldGrid>
           <SettingNumberInput
             label={t("ai.agentMaxSteps")}

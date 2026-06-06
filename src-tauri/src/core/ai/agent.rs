@@ -7,12 +7,12 @@ use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
-use crate::config::{AiExecutionProfile, AiSettings};
+use crate::config::{AgentCommandExecutionMode, AiExecutionProfile, AiSettings, RiskLevel};
 use crate::core::capture;
 use crate::core::session::{SessionCommand, SessionManager};
 use crate::error::{AppError, AppResult};
 
-use super::history::{append_message, save_user_message};
+use super::history::{append_ai_audit, append_message, save_user_message};
 use super::model::{build_client, resolve_request_model};
 use super::parser::{extract_json_object, parse_model_output, trim_string_to_option};
 use super::prompt::{agent_system_prompt, build_agent_prompt, build_observation_message};
@@ -21,7 +21,7 @@ use super::stream::{active_streams, emit_stream_event, is_cancelled};
 use super::types::{
     now_rfc3339, uuid, AgentActionKind, AgentLlmResponse, AgentStepAction, AgentStepPayload,
     AgentStepStatus, AiCaptureEvent, AiChatRequest, AiMessage, AiMessageRole, AiStreamEventPayload,
-    CommandObservation,
+    AppendAiAuditRequest, CommandObservation,
 };
 
 // ---------------------------------------------------------------------------
@@ -328,6 +328,371 @@ fn safe_command_preview(command: &str) -> String {
     redact_sensitive_text(&truncate_for_log(command, 200))
 }
 
+#[derive(Debug, Clone)]
+struct RiskAssessment {
+    model_risk: RiskLevel,
+    local_risk: RiskLevel,
+    effective_risk: RiskLevel,
+    risk_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApprovalDecision {
+    Auto,
+    NeedsApproval,
+}
+
+fn max_risk(a: RiskLevel, b: RiskLevel) -> RiskLevel {
+    if a >= b {
+        a
+    } else {
+        b
+    }
+}
+
+fn risk_label(risk: &RiskLevel) -> &'static str {
+    match risk {
+        RiskLevel::Low => "low",
+        RiskLevel::Medium => "medium",
+        RiskLevel::High => "high",
+        RiskLevel::Critical => "critical",
+    }
+}
+
+fn normalize_command(command: &str) -> String {
+    command
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\n', " ")
+        .to_ascii_lowercase()
+}
+
+fn command_contains_any(command: &str, patterns: &[&str]) -> bool {
+    patterns.iter().any(|pattern| command.contains(pattern))
+}
+
+fn is_root_rm_command(command: &str) -> bool {
+    let tokens: Vec<&str> = command.split_whitespace().collect();
+    if tokens.first() != Some(&"rm") {
+        return false;
+    }
+    let has_recursive_force = tokens.iter().any(|token| {
+        token.starts_with('-') && token.contains('r') && token.contains('f')
+    });
+    has_recursive_force
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|token| matches!(*token, "/" | "/*" | "--no-preserve-root"))
+}
+
+fn is_dangerous_dd_command(command: &str) -> bool {
+    command.starts_with("dd ") && command.contains("of=/dev/")
+}
+
+fn assess_local_command_risk(command: &str) -> (RiskLevel, String) {
+    let normalized = normalize_command(command);
+    let compact = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    if compact.is_empty() {
+        return (RiskLevel::Medium, "empty command".to_string());
+    }
+
+    if is_root_rm_command(&compact) || is_dangerous_dd_command(&compact) {
+        return (
+            RiskLevel::Critical,
+            "matches irreversible or system-disruptive command pattern".to_string(),
+        );
+    }
+
+    let critical_patterns = [
+        "mkfs",
+        "wipefs",
+        ":(){",
+        "shutdown",
+        "poweroff",
+        "reboot",
+        "halt",
+        "systemctl stop ssh",
+        "systemctl stop sshd",
+        "service ssh stop",
+        "service sshd stop",
+    ];
+    if command_contains_any(&compact, &critical_patterns) {
+        return (
+            RiskLevel::Critical,
+            "matches irreversible or system-disruptive command pattern".to_string(),
+        );
+    }
+
+    let high_patterns = [
+        "rm -r",
+        "rm -f",
+        " rmdir ",
+        " chmod -r",
+        " chown -r",
+        "systemctl restart",
+        "systemctl stop",
+        "service ",
+        "apt install",
+        "apt remove",
+        "apt purge",
+        "yum install",
+        "yum remove",
+        "dnf install",
+        "dnf remove",
+        "pacman -s",
+        "pacman -r",
+        "brew install",
+        "brew uninstall",
+        "npm install -g",
+        "pip install",
+        "docker rm",
+        "docker rmi",
+        "docker system prune",
+        "kubectl delete",
+        "kubectl drain",
+        "kubectl apply",
+        "kubectl replace",
+        "git reset --hard",
+        "git clean -fd",
+    ];
+    if compact.starts_with("sudo ") || command_contains_any(&compact, &high_patterns) {
+        return (
+            RiskLevel::High,
+            "matches privileged, destructive, restart, package, container, or cluster mutation pattern"
+                .to_string(),
+        );
+    }
+
+    let medium_patterns = [
+        " > ",
+        ">>",
+        " tee ",
+        " touch ",
+        " mkdir ",
+        " cp ",
+        " mv ",
+        " chmod ",
+        " chown ",
+        " setfacl ",
+        " export ",
+        "git checkout",
+        "git switch",
+        "git pull",
+        "git merge",
+        "npm run",
+        "make install",
+    ];
+    if command_contains_any(&format!(" {compact} "), &medium_patterns) {
+        return (
+            RiskLevel::Medium,
+            "matches local write or state-changing command pattern".to_string(),
+        );
+    }
+
+    let readonly_prefixes = [
+        "ls", "pwd", "whoami", "id", "uname", "cat", "less", "head", "tail", "grep", "rg",
+        "find", "df", "du", "free", "top", "ps", "ss", "netstat", "ip ", "journalctl",
+        "systemctl status", "docker ps", "docker logs", "kubectl get", "kubectl describe",
+        "git status", "git log", "git diff",
+    ];
+    if readonly_prefixes
+        .iter()
+        .any(|prefix| compact == prefix.trim() || compact.starts_with(&format!("{prefix} ")))
+    {
+        return (RiskLevel::Low, "matches read-only diagnostic pattern".to_string());
+    }
+
+    (
+        RiskLevel::Medium,
+        "no explicit read-only pattern matched; defaulting to medium".to_string(),
+    )
+}
+
+fn assess_agent_command_risk(parsed: &AgentLlmResponse, command: &str) -> RiskAssessment {
+    let model_risk = parsed.risk_level.clone().unwrap_or(RiskLevel::Medium);
+    let (local_risk, local_reason) = assess_local_command_risk(command);
+    let effective_risk = max_risk(model_risk.clone(), local_risk.clone());
+    let risk_reason = parsed
+        .risk_reason
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format!("AI: {}; local: {}", value.trim(), local_reason))
+        .or_else(|| Some(format!("local: {local_reason}")));
+
+    RiskAssessment {
+        model_risk,
+        local_risk,
+        effective_risk,
+        risk_reason,
+    }
+}
+
+fn decide_agent_command_execution(
+    settings: &AiSettings,
+    assessment: &RiskAssessment,
+) -> (ApprovalDecision, Option<String>) {
+    match settings.agent_command_execution_mode {
+        AgentCommandExecutionMode::ConfirmEach => (
+            ApprovalDecision::NeedsApproval,
+            Some("execution policy requires confirmation for every command".to_string()),
+        ),
+        AgentCommandExecutionMode::Auto => (ApprovalDecision::Auto, None),
+        AgentCommandExecutionMode::Smart => {
+            if assessment.effective_risk == RiskLevel::Critical {
+                return (
+                    ApprovalDecision::NeedsApproval,
+                    Some("critical risk always requires manual confirmation in smart mode".to_string()),
+                );
+            }
+            if assessment.effective_risk <= settings.agent_smart_auto_execute_max_risk {
+                (ApprovalDecision::Auto, None)
+            } else {
+                (
+                    ApprovalDecision::NeedsApproval,
+                    Some(format!(
+                        "effective risk {} exceeds smart auto-execute threshold {}",
+                        risk_label(&assessment.effective_risk),
+                        risk_label(&settings.agent_smart_auto_execute_max_risk)
+                    )),
+                )
+            }
+        }
+    }
+}
+
+fn build_execute_action(
+    command: &str,
+    assessment: &RiskAssessment,
+    approval_reason: Option<String>,
+) -> AgentStepAction {
+    AgentStepAction {
+        kind: AgentActionKind::ExecuteCommand,
+        command: Some(command.to_string()),
+        risk_level: Some(assessment.effective_risk.clone()),
+        model_risk_level: Some(assessment.model_risk.clone()),
+        local_risk_level: Some(assessment.local_risk.clone()),
+        risk_reason: assessment.risk_reason.clone(),
+        approval_reason,
+        answer: None,
+    }
+}
+
+fn build_final_action(answer: String) -> AgentStepAction {
+    AgentStepAction {
+        kind: AgentActionKind::FinalAnswer,
+        command: None,
+        risk_level: None,
+        model_risk_level: None,
+        local_risk_level: None,
+        risk_reason: None,
+        approval_reason: None,
+        answer: Some(answer),
+    }
+}
+
+fn append_agent_command_audit(
+    app: &AppHandle,
+    request: &AiChatRequest,
+    action: &str,
+    command: &str,
+    risk_level: RiskLevel,
+    executed: bool,
+    blocked: bool,
+) {
+    let _ = append_ai_audit(
+        app,
+        AppendAiAuditRequest {
+            connection_id: request.connection_id.clone(),
+            action: action.to_string(),
+            user_input: Some(request.user_input.clone()),
+            generated_command: Some(command.to_string()),
+            risk_level: Some(risk_level),
+            inserted_to_terminal: false,
+            executed,
+            blocked,
+        },
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parsed_response(risk: Option<RiskLevel>) -> AgentLlmResponse {
+        AgentLlmResponse {
+            thought: "next".to_string(),
+            action: "execute_command".to_string(),
+            command: Some("ls".to_string()),
+            risk_level: risk,
+            risk_reason: Some("model reason".to_string()),
+            answer: None,
+        }
+    }
+
+    #[test]
+    fn local_risk_rules_cover_expected_levels() {
+        assert_eq!(assess_local_command_risk("ls -la").0, RiskLevel::Low);
+        assert_eq!(assess_local_command_risk("touch app.log").0, RiskLevel::Medium);
+        assert_eq!(assess_local_command_risk("sudo apt install nginx").0, RiskLevel::High);
+        assert_eq!(assess_local_command_risk("rm -rf /tmp/build-cache").0, RiskLevel::High);
+        assert_eq!(assess_local_command_risk("rm -rf /").0, RiskLevel::Critical);
+    }
+
+    #[test]
+    fn smart_policy_auto_executes_within_threshold() {
+        let mut settings = AiSettings::default();
+        settings.agent_command_execution_mode = AgentCommandExecutionMode::Smart;
+        settings.agent_smart_auto_execute_max_risk = RiskLevel::Low;
+        let assessment = assess_agent_command_risk(&parsed_response(Some(RiskLevel::Low)), "ls");
+        assert_eq!(
+            decide_agent_command_execution(&settings, &assessment).0,
+            ApprovalDecision::Auto
+        );
+    }
+
+    #[test]
+    fn smart_policy_requires_approval_above_threshold_and_for_critical() {
+        let mut settings = AiSettings::default();
+        settings.agent_command_execution_mode = AgentCommandExecutionMode::Smart;
+        settings.agent_smart_auto_execute_max_risk = RiskLevel::High;
+
+        let medium_threshold = assess_agent_command_risk(
+            &parsed_response(Some(RiskLevel::High)),
+            "rm -rf /tmp/build-cache",
+        );
+        assert_eq!(
+            decide_agent_command_execution(&settings, &medium_threshold).0,
+            ApprovalDecision::Auto
+        );
+
+        let critical = assess_agent_command_risk(&parsed_response(Some(RiskLevel::Low)), "rm -rf /");
+        assert_eq!(
+            decide_agent_command_execution(&settings, &critical).0,
+            ApprovalDecision::NeedsApproval
+        );
+    }
+
+    #[test]
+    fn confirm_and_auto_policy_decisions_are_explicit() {
+        let assessment = assess_agent_command_risk(&parsed_response(None), "ls");
+
+        let mut settings = AiSettings::default();
+        settings.agent_command_execution_mode = AgentCommandExecutionMode::ConfirmEach;
+        assert_eq!(
+            decide_agent_command_execution(&settings, &assessment).0,
+            ApprovalDecision::NeedsApproval
+        );
+
+        settings.agent_command_execution_mode = AgentCommandExecutionMode::Auto;
+        assert_eq!(
+            decide_agent_command_execution(&settings, &assessment).0,
+            ApprovalDecision::Auto
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn run_agent_stream(
     app: AppHandle,
@@ -580,12 +945,7 @@ pub(super) async fn run_agent_stream(
                     session_id: Some(session_id.clone()),
                     step_index,
                     thought: parsed.thought,
-                    action: AgentStepAction {
-                        kind: AgentActionKind::FinalAnswer,
-                        command: None,
-                        risk_level: None,
-                        answer: Some(answer.clone()),
-                    },
+                    action: build_final_action(answer.clone()),
                     observation: None,
                     status: AgentStepStatus::Completed,
                     error: None,
@@ -609,70 +969,85 @@ pub(super) async fn run_agent_stream(
                     }
                 };
 
+                let assessment = assess_agent_command_risk(&parsed, &command);
+                let (decision, approval_reason) =
+                    decide_agent_command_execution(&settings, &assessment);
+
                 tracing::info!(
                     stream_id = %stream_id,
                     session_id = %session_id,
                     step_index,
+                    mode = ?settings.agent_command_execution_mode,
+                    model_risk = ?assessment.model_risk,
+                    local_risk = ?assessment.local_risk,
+                    effective_risk = ?assessment.effective_risk,
+                    needs_approval = decision == ApprovalDecision::NeedsApproval,
                     command_preview = %safe_command_preview(&command),
-                    "AI agent proposed command, awaiting user approval"
+                    "AI agent proposed command"
                 );
 
-                let approval_step = AgentStepPayload {
-                    stream_id: stream_id.clone(),
-                    session_id: Some(session_id.clone()),
-                    step_index,
-                    thought: parsed.thought.clone(),
-                    action: AgentStepAction {
-                        kind: AgentActionKind::ExecuteCommand,
-                        command: Some(command.clone()),
-                        risk_level: None,
-                        answer: None,
-                    },
-                    observation: None,
-                    status: AgentStepStatus::NeedsApproval,
-                    error: None,
-                };
-                emit_agent_step(&app, &stream_id, approval_step.clone());
-                all_steps.push(approval_step);
-
-                let approval_key = format!("{}-{}", stream_id, step_index);
-                let approval_rx = approval_manager.register(approval_key).await;
-
-                let approved = tokio::select! {
-                    _ = &mut cancel_rx => {
-                        emit_agent_error(&app, &stream_id, &session_id, "AI stream cancelled");
-                        return;
-                    }
-                    result = approval_rx => result.unwrap_or(false),
-                };
-
-                if !approved {
-                    let step = AgentStepPayload {
+                if decision == ApprovalDecision::NeedsApproval {
+                    let approval_step = AgentStepPayload {
                         stream_id: stream_id.clone(),
                         session_id: Some(session_id.clone()),
                         step_index,
-                        thought: parsed.thought,
-                        action: AgentStepAction {
-                            kind: AgentActionKind::ExecuteCommand,
-                            command: Some(command.clone()),
-                            risk_level: None,
-                            answer: None,
-                        },
+                        thought: parsed.thought.clone(),
+                        action: build_execute_action(
+                            &command,
+                            &assessment,
+                            approval_reason.clone(),
+                        ),
                         observation: None,
-                        status: AgentStepStatus::Rejected,
+                        status: AgentStepStatus::NeedsApproval,
                         error: None,
                     };
-                    emit_agent_step(&app, &stream_id, step.clone());
-                    if let Some(last) = all_steps.last_mut() {
-                        *last = step;
-                    }
+                    emit_agent_step(&app, &stream_id, approval_step.clone());
+                    all_steps.push(approval_step);
 
-                    let skipped_msg = format!(
-                        "用户拒绝执行命令 `{}`。请换用其他方案或给出 final_answer。",
-                        command
-                    );
-                    conversation.push(ChatMessage::user(skipped_msg));
-                    continue;
+                    let approval_key = format!("{}-{}", stream_id, step_index);
+                    let approval_rx = approval_manager.register(approval_key).await;
+
+                    let approved = tokio::select! {
+                        _ = &mut cancel_rx => {
+                            emit_agent_error(&app, &stream_id, &session_id, "AI stream cancelled");
+                            return;
+                        }
+                        result = approval_rx => result.unwrap_or(false),
+                    };
+
+                    if !approved {
+                        let step = AgentStepPayload {
+                            stream_id: stream_id.clone(),
+                            session_id: Some(session_id.clone()),
+                            step_index,
+                            thought: parsed.thought,
+                            action: build_execute_action(&command, &assessment, approval_reason),
+                            observation: None,
+                            status: AgentStepStatus::Rejected,
+                            error: None,
+                        };
+                        emit_agent_step(&app, &stream_id, step.clone());
+                        if let Some(last) = all_steps.last_mut() {
+                            *last = step;
+                        }
+
+                        append_agent_command_audit(
+                            &app,
+                            &request,
+                            "ai.agent_reject_execute",
+                            &command,
+                            assessment.effective_risk,
+                            false,
+                            true,
+                        );
+
+                        let skipped_msg = format!(
+                            "用户拒绝执行命令 `{}`。请换用其他方案或给出 final_answer。",
+                            command
+                        );
+                        conversation.push(ChatMessage::user(skipped_msg));
+                        continue;
+                    }
                 }
 
                 let running_step = AgentStepPayload {
@@ -680,17 +1055,24 @@ pub(super) async fn run_agent_stream(
                     session_id: Some(session_id.clone()),
                     step_index,
                     thought: parsed.thought.clone(),
-                    action: AgentStepAction {
-                        kind: AgentActionKind::ExecuteCommand,
-                        command: Some(command.clone()),
-                        risk_level: None,
-                        answer: None,
-                    },
+                    action: build_execute_action(&command, &assessment, None),
                     observation: None,
                     status: AgentStepStatus::Running,
                     error: None,
                 };
                 emit_agent_step(&app, &stream_id, running_step);
+                if decision == ApprovalDecision::Auto {
+                    all_steps.push(AgentStepPayload {
+                        stream_id: stream_id.clone(),
+                        session_id: Some(session_id.clone()),
+                        step_index,
+                        thought: parsed.thought.clone(),
+                        action: build_execute_action(&command, &assessment, None),
+                        observation: None,
+                        status: AgentStepStatus::Running,
+                        error: None,
+                    });
+                }
 
                 let obs = match execute_command_on_session(
                     &app,
@@ -710,12 +1092,7 @@ pub(super) async fn run_agent_stream(
                             session_id: Some(session_id.clone()),
                             step_index,
                             thought: parsed.thought,
-                            action: AgentStepAction {
-                                kind: AgentActionKind::ExecuteCommand,
-                                command: Some(command.clone()),
-                                risk_level: None,
-                                answer: None,
-                            },
+                            action: build_execute_action(&command, &assessment, None),
                             observation: None,
                             status: AgentStepStatus::Failed,
                             error: Some(e.to_string()),
@@ -732,6 +1109,16 @@ pub(super) async fn run_agent_stream(
                             error = %e,
                             command_preview = %safe_command_preview(&command),
                             "AI agent command execution failed"
+                        );
+
+                        append_agent_command_audit(
+                            &app,
+                            &request,
+                            "ai.agent_execute_failed",
+                            &command,
+                            assessment.effective_risk.clone(),
+                            false,
+                            false,
                         );
 
                         let err_msg = format!("命令执行失败：{}。请分析原因并给出下一步。", e);
@@ -756,12 +1143,7 @@ pub(super) async fn run_agent_stream(
                     session_id: Some(session_id.clone()),
                     step_index,
                     thought: parsed.thought,
-                    action: AgentStepAction {
-                        kind: AgentActionKind::ExecuteCommand,
-                        command: Some(command.clone()),
-                        risk_level: None,
-                        answer: None,
-                    },
+                    action: build_execute_action(&command, &assessment, None),
                     observation: Some(obs.clone()),
                     status: AgentStepStatus::Completed,
                     error: None,
@@ -770,6 +1152,20 @@ pub(super) async fn run_agent_stream(
                 if let Some(last) = all_steps.last_mut() {
                     *last = completed_step;
                 }
+
+                append_agent_command_audit(
+                    &app,
+                    &request,
+                    if decision == ApprovalDecision::Auto {
+                        "ai.agent_auto_execute"
+                    } else {
+                        "ai.agent_authorized_execute"
+                    },
+                    &command,
+                    assessment.effective_risk,
+                    true,
+                    false,
+                );
 
                 let obs_msg =
                     build_observation_message(&obs, &command, &request.options.language);

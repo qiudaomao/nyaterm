@@ -544,7 +544,7 @@ function credentialFromProfile(profile: AIProviderProfile): AIProviderCredential
 }
 
 export const DEFAULT_AI_SETTINGS: AISettings = {
-  schema_version: 2,
+  schema_version: 3,
   enabled: false,
   context_line_limit: 200,
   redaction_enabled: true,
@@ -563,6 +563,8 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   max_agent_steps: 10,
   agent_step_timeout_ms: 30000,
   terminal_output_lines: 10,
+  agent_command_execution_mode: "confirm_each",
+  agent_smart_auto_execute_max_risk: "low",
 };
 
 function normalizeLocaleTag(value?: string | null): string | null {
