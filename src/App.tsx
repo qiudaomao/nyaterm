@@ -1035,6 +1035,52 @@ function App() {
     ],
   );
 
+  const handleMultiplexSshSession = useCallback(
+    async (tab: Tab) => {
+      const pane = getActivePane(tab);
+      if (!pane || pane.type !== "SSH" || pane.connecting || pane.connectError) return;
+
+      let tabId: string | undefined;
+
+      try {
+        tabId = addPendingTab(
+          pane.name,
+          pane.type,
+          pane.connectionId,
+          { customName: tab.customName, tabColor: tab.tabColor },
+          { afterTabId: tab.id },
+        );
+        setTerminalWindows((current) =>
+          current && tabId ? insertTabAfterInLeaf(current, tab.id, tabId, tabId) : current,
+        );
+
+        const sessionId = await invoke<string>("create_multiplexed_ssh_session", {
+          sourceSessionId: pane.sessionId,
+        });
+        updateTabSession(tabId, sessionId);
+        if (pane.connectionId) {
+          recordRecentConnection(pane.connectionId);
+        }
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        logger.error({
+          domain: "session.lifecycle",
+          event: "session.multiplex_failed",
+          message: "Failed to create multiplexed SSH session",
+          ids: pane.connectionId
+            ? { connection_id: pane.connectionId, session_id: pane.sessionId }
+            : { session_id: pane.sessionId },
+          error,
+        });
+        if (tabId) {
+          markTabConnectionFailed(tabId, errorMessage);
+        }
+        toast.error(t("tabCtx.multiplexSshFailed"));
+      }
+    },
+    [addPendingTab, markTabConnectionFailed, recordRecentConnection, t, updateTabSession],
+  );
+
   const handleReconnectSession = useCallback(
     async (tab: Tab) => {
       const pane = getActivePane(tab);
@@ -1747,6 +1793,7 @@ function App() {
           onConnectConnection: handleConnectConnectionFromLeaf,
           onTabClose: handleCloseWorkspaceTab,
           onDuplicateSession: handleDuplicateSession,
+          onMultiplexSshSession: handleMultiplexSshSession,
           onReconnectSession: handleReconnectSession,
           onDisconnectSession: handleDisconnectSession,
           onSplitSession: handleSplitSession,

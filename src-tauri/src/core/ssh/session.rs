@@ -234,3 +234,115 @@ pub async fn create_ssh_session(
     tracing::info!(session_id = %session_id, "SSH session created");
     Ok(session_id)
 }
+
+/// Opens a new PTY shell channel on an existing authenticated SSH connection.
+pub async fn create_multiplexed_ssh_session(
+    app: AppHandle,
+    manager: Arc<SessionManager>,
+    source_session_id: &str,
+) -> AppResult<String> {
+    let (config, ssh_connection, owner_window_label) = {
+        let sessions = manager.sessions.lock().await;
+        let source = sessions.get(source_session_id).ok_or_else(|| {
+            AppError::SessionNotFound(format!("Session '{}' not found", source_session_id))
+        })?;
+
+        if source.info.session_type != SessionType::SSH {
+            return Err(AppError::Config(
+                "Source session is not an SSH session".to_string(),
+            ));
+        }
+
+        let config = source
+            .ssh_config
+            .as_ref()
+            .and_then(|cfg| cfg.downcast_ref::<SshConfig>())
+            .cloned()
+            .ok_or_else(|| AppError::Config("Failed to get SSH config".to_string()))?;
+
+        let ssh_connection = source
+            .ssh_handle
+            .as_ref()
+            .ok_or_else(|| AppError::Config("Source session has no SSH handle".to_string()))?
+            .clone()
+            .downcast::<SshConnectionHandles>()
+            .map_err(|_| AppError::Config("Failed to get SSH handle".to_string()))?;
+
+        (
+            config,
+            ssh_connection,
+            source.info.owner_window_label.clone(),
+        )
+    };
+
+    tracing::info!(
+        source_session_id,
+        host = %config.host,
+        port = config.port,
+        user = %config.username,
+        "Creating multiplexed SSH session"
+    );
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<SessionCommand>();
+
+    let handle_mtx = ssh_connection.target_handle();
+    let mut handle = handle_mtx.lock().await;
+    let (channel, injection_script, ready_marker) =
+        open_shell_channel(&mut handle, &session_id).await?;
+    drop(handle);
+    let injection_active = injection_script.is_some();
+
+    let session_info = SessionInfo {
+        id: session_id.clone(),
+        name: config.name.clone(),
+        session_type: SessionType::SSH,
+        connected: true,
+        owner_window_label,
+        ai_execution_profile: AiExecutionProfile::Posix,
+        injection_active,
+    };
+
+    let cwd: SharedCwd = Arc::new(tokio::sync::Mutex::new(None));
+    let ssh_config_arc: Arc<dyn std::any::Any + Send + Sync> = Arc::new(config.clone());
+    let ssh_handle_arc: Arc<dyn std::any::Any + Send + Sync> = ssh_connection.clone();
+
+    let session_handle = SessionHandle {
+        info: session_info,
+        cmd_tx,
+        ssh_config: Some(ssh_config_arc),
+        ssh_handle: Some(ssh_handle_arc),
+        cwd: cwd.clone(),
+        remote_fs: None,
+    };
+    manager.add_session(session_handle).await;
+
+    let io_session_id = session_id.clone();
+    let io_manager = manager.clone();
+    let io_handle = ssh_connection.clone();
+    let io_connection_id = config.connection_id.clone();
+    let post_login = config.post_login.clone();
+    tokio::spawn(async move {
+        ssh_io_loop(
+            app,
+            io_session_id,
+            io_manager,
+            channel,
+            io_handle,
+            cmd_rx,
+            cwd,
+            io_connection_id,
+            injection_script,
+            ready_marker,
+            post_login,
+        )
+        .await;
+    });
+
+    tracing::info!(
+        session_id = %session_id,
+        source_session_id,
+        "Multiplexed SSH session created"
+    );
+    Ok(session_id)
+}

@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
-const OUTPUT_FLUSH_INTERVAL_MS: u64 = 16;
+const OUTPUT_FLUSH_INTERVAL_MS: u64 = 4;
 const OUTPUT_FLUSH_THRESHOLD_BYTES: usize = 64 * 1024;
 
 type OutputSink = dyn Fn(String) + Send + Sync + 'static;
@@ -165,7 +165,7 @@ fn take_pending(state: &mut OutputState) -> Option<String> {
 mod tests {
     use super::SessionOutputCoalescer;
     use std::sync::{Arc, Mutex};
-    use tokio::time::{sleep, Duration};
+    use tokio::time::{Duration, sleep};
 
     #[tokio::test]
     async fn timer_flush_batches_pending_output() {
@@ -179,7 +179,7 @@ mod tests {
         output.push("hello");
         output.push(" world");
 
-        sleep(Duration::from_millis(40)).await;
+        sleep(Duration::from_millis(20)).await;
 
         assert_eq!(emitted.lock().unwrap().as_slice(), ["hello world"]);
     }
@@ -208,7 +208,7 @@ mod tests {
         });
 
         output.push("before attach");
-        sleep(Duration::from_millis(40)).await;
+        sleep(Duration::from_millis(20)).await;
         assert!(emitted.lock().unwrap().is_empty());
 
         output.attach();

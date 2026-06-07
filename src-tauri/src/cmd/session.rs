@@ -33,6 +33,15 @@ pub async fn create_ssh_session(
 }
 
 #[tauri::command]
+pub async fn create_multiplexed_ssh_session(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<SessionManager>>,
+    source_session_id: String,
+) -> AppResult<String> {
+    ssh::create_multiplexed_ssh_session(app, state.inner().clone(), &source_session_id).await
+}
+
+#[tauri::command]
 pub async fn create_local_session(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,

@@ -20,6 +20,7 @@ interface TabWindowsWorkspaceProps {
   onConnectConnection: (leafId: string, connection: SavedConnection) => void | Promise<void>;
   onTabClose: (tab: Tab) => void | Promise<void>;
   onDuplicateSession: (tab: Tab) => void | Promise<void>;
+  onMultiplexSshSession: (tab: Tab) => void | Promise<void>;
   onReconnectSession: (tab: Tab) => void | Promise<void>;
   onDisconnectSession: (tab: Tab) => void | Promise<void>;
   onSplitSession: (tab: Tab, direction: PaneSplitDirection) => void | Promise<void>;
@@ -48,6 +49,7 @@ function SplitWindow({
   onConnectConnection,
   onTabClose,
   onDuplicateSession,
+  onMultiplexSshSession,
   onReconnectSession,
   onDisconnectSession,
   onSplitSession,
@@ -97,6 +99,7 @@ function SplitWindow({
           onConnectConnection={onConnectConnection}
           onTabClose={onTabClose}
           onDuplicateSession={onDuplicateSession}
+          onMultiplexSshSession={onMultiplexSshSession}
           onReconnectSession={onReconnectSession}
           onDisconnectSession={onDisconnectSession}
           onSplitSession={onSplitSession}
@@ -127,6 +130,7 @@ function SplitWindow({
           onConnectConnection={onConnectConnection}
           onTabClose={onTabClose}
           onDuplicateSession={onDuplicateSession}
+          onMultiplexSshSession={onMultiplexSshSession}
           onReconnectSession={onReconnectSession}
           onDisconnectSession={onDisconnectSession}
           onSplitSession={onSplitSession}
@@ -159,6 +163,7 @@ function LeafWindow({
   onConnectConnection,
   onTabClose,
   onDuplicateSession,
+  onMultiplexSshSession,
   onReconnectSession,
   onDisconnectSession,
   onSplitSession,
@@ -211,6 +216,7 @@ function LeafWindow({
         onAddTab={() => onAddTab(leaf.id)}
         onConnectConnection={(connection) => onConnectConnection(leaf.id, connection)}
         onDuplicateSession={onDuplicateSession}
+        onMultiplexSshSession={onMultiplexSshSession}
         onReconnectSession={onReconnectSession}
         onDisconnectSession={onDisconnectSession}
         onSplitSession={onSplitSession}
@@ -258,6 +264,7 @@ function WindowNodeView({
   onConnectConnection,
   onTabClose,
   onDuplicateSession,
+  onMultiplexSshSession,
   onReconnectSession,
   onDisconnectSession,
   onSplitSession,
@@ -289,6 +296,7 @@ function WindowNodeView({
         onConnectConnection={onConnectConnection}
         onTabClose={onTabClose}
         onDuplicateSession={onDuplicateSession}
+        onMultiplexSshSession={onMultiplexSshSession}
         onReconnectSession={onReconnectSession}
         onDisconnectSession={onDisconnectSession}
         onSplitSession={onSplitSession}
@@ -320,6 +328,7 @@ function WindowNodeView({
       onConnectConnection={onConnectConnection}
       onTabClose={onTabClose}
       onDuplicateSession={onDuplicateSession}
+      onMultiplexSshSession={onMultiplexSshSession}
       onReconnectSession={onReconnectSession}
       onDisconnectSession={onDisconnectSession}
       onSplitSession={onSplitSession}

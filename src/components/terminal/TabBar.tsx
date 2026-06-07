@@ -49,6 +49,7 @@ interface TabBarProps {
   onAddTab: () => void;
   onConnectConnection: (connection: SavedConnection) => void | Promise<void>;
   onDuplicateSession: (tab: Tab) => void | Promise<void>;
+  onMultiplexSshSession: (tab: Tab) => void | Promise<void>;
   onReconnectSession: (tab: Tab) => void | Promise<void>;
   onDisconnectSession: (tab: Tab) => void | Promise<void>;
   onSplitSession: (tab: Tab, direction: PaneSplitDirection) => void | Promise<void>;
@@ -179,6 +180,7 @@ function TabBar({
   onAddTab,
   onConnectConnection,
   onDuplicateSession,
+  onMultiplexSshSession,
   onReconnectSession,
   onDisconnectSession,
   onSplitSession,
@@ -622,6 +624,7 @@ function TabBar({
           tab={tab}
           tabs={tabs}
           onDuplicateSession={onDuplicateSession}
+          onMultiplexSshSession={onMultiplexSshSession}
           onReconnectSession={onReconnectSession}
           onDisconnectSession={onDisconnectSession}
           onSplitSession={onSplitSession}

@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MdAutoAwesome,
+  MdCallSplit,
   MdClose,
   MdCloseFullscreen,
   MdColorLens,
@@ -62,6 +63,7 @@ interface TabContextMenuProps {
   tab: Tab;
   tabs: Tab[];
   onDuplicateSession: (tab: Tab) => void | Promise<void>;
+  onMultiplexSshSession: (tab: Tab) => void | Promise<void>;
   onReconnectSession: (tab: Tab) => void | Promise<void>;
   onDisconnectSession: (tab: Tab) => void | Promise<void>;
   onSplitSession: (tab: Tab, direction: PaneSplitDirection) => void | Promise<void>;
@@ -80,6 +82,7 @@ export default function TabContextMenu({
   tab,
   tabs,
   onDuplicateSession,
+  onMultiplexSshSession,
   onReconnectSession,
   onDisconnectSession,
   onSplitSession,
@@ -102,6 +105,12 @@ export default function TabContextMenu({
   const canSpawnSession =
     !!activePane && (activePane.type === "Local" || !!activePane.connectionId);
   const canReconnect = !!activePane && !activePane.connecting && canSpawnSession;
+  const canMultiplexSsh =
+    !!activePane &&
+    activePane.type === "SSH" &&
+    !activePane.connecting &&
+    !activePane.connectError &&
+    !!activePane.sessionId;
   const canDisconnect = !!activePane && !activePane.connecting && !activePane.connectError;
   const canSplit = canSpawnSession;
   const canUseAI = !!activePane && !activePane.connecting && !activePane.connectError;
@@ -227,6 +236,14 @@ export default function TabContextMenu({
           <ContextMenuItem disabled={!canSpawnSession} onClick={() => void onDuplicateSession(tab)}>
             <MdPlayArrow className={iconClass} />
             {t("tabCtx.duplicate")}
+          </ContextMenuItem>
+
+          <ContextMenuItem
+            disabled={!canMultiplexSsh}
+            onClick={() => void onMultiplexSshSession(tab)}
+          >
+            <MdCallSplit className={iconClass} />
+            {t("tabCtx.multiplexSsh")}
           </ContextMenuItem>
 
           <ContextMenuItem disabled={!canReconnect} onClick={() => void onReconnectSession(tab)}>

@@ -48,14 +48,36 @@ fn build_shell_command(
     Ok((builder, spec.program))
 }
 
+fn default_local_shell_args(program: &str) -> Vec<String> {
+    if cfg!(windows) {
+        return vec![];
+    }
+
+    let shell_name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+
+    match shell_name.as_str() {
+        "bash" | "zsh" | "fish" => vec!["--login".to_string(), "-i".to_string()],
+        _ => vec![],
+    }
+}
+
 fn resolve_shell_command(shell_path: &str, shell_args: &str) -> Result<ShellCommandSpec, String> {
     let raw_program = shell_path.trim();
     let program = trim_wrapping_quotes(raw_program);
     if program.is_empty() {
         let (_, shell_name) = platform_default_shell();
+        let args = parse_shell_args(shell_args)?;
         return Ok(ShellCommandSpec {
+            args: if args.is_empty() {
+                default_local_shell_args(&shell_name)
+            } else {
+                args
+            },
             program: shell_name,
-            args: parse_shell_args(shell_args)?,
         });
     }
 
@@ -70,7 +92,7 @@ fn resolve_shell_command(shell_path: &str, shell_args: &str) -> Result<ShellComm
     if should_treat_as_literal_program(raw_program) {
         return Ok(ShellCommandSpec {
             program: program.to_string(),
-            args,
+            args: default_local_shell_args(program),
         });
     }
 
@@ -194,7 +216,32 @@ fn platform_default_shell() -> (CommandBuilder, String) {
     #[cfg(not(target_os = "windows"))]
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-        (CommandBuilder::new(&shell), shell)
+        let mut builder = CommandBuilder::new(&shell);
+        let default_args = default_local_shell_args(&shell);
+        if !default_args.is_empty() {
+            builder.args(default_args.iter().map(String::as_str));
+        }
+        (builder, shell)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_macos_interactive_path(cmd: &mut CommandBuilder) {
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let mut paths: Vec<String> = current_path
+        .split(':')
+        .filter(|part| !part.is_empty())
+        .map(ToString::to_string)
+        .collect();
+
+    for path in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"] {
+        if !paths.iter().any(|existing| existing == path) && Path::new(path).exists() {
+            paths.push(path.to_string());
+        }
+    }
+
+    if !paths.is_empty() {
+        cmd.env("PATH", paths.join(":"));
     }
 }
 
@@ -270,7 +317,17 @@ fn local_backspace_compat_prelude(
     }
 
     match shell_kind {
-        ShellKind::Bash | ShellKind::Fish | ShellKind::PosixSh => {
+        ShellKind::Bash => Some(
+            concat!(
+                "stty erase '^?' 2>/dev/null || true\n",
+                "if [ -z \"${NYATERM_BASHRC_SOURCED:-}\" ] && [ -r \"$HOME/.bashrc\" ]; then\n",
+                "  export NYATERM_BASHRC_SOURCED=1\n",
+                "  . \"$HOME/.bashrc\"\n",
+                "fi\n",
+            )
+            .to_string(),
+        ),
+        ShellKind::Fish | ShellKind::PosixSh => {
             Some("stty erase '^?' 2>/dev/null || true\n".to_string())
         }
         ShellKind::Zsh => Some(
@@ -454,6 +511,9 @@ fn pty_session_thread(
             }
         }
     }
+
+    #[cfg(target_os = "macos")]
+    ensure_macos_interactive_path(&mut cmd);
 
     let mut _child = match pair.slave.spawn_command(cmd) {
         Ok(c) => c,
@@ -813,6 +873,26 @@ mod tests {
     }
 
     #[test]
+    fn unix_bash_defaults_to_login_interactive_when_args_are_empty() {
+        let spec = resolve_shell_command("/bin/bash", "").expect("command spec");
+
+        assert_eq!(spec.program, "/bin/bash");
+        if cfg!(windows) {
+            assert!(spec.args.is_empty());
+        } else {
+            assert_eq!(spec.args, vec!["--login", "-i"]);
+        }
+    }
+
+    #[test]
+    fn explicit_shell_args_override_unix_interactive_defaults() {
+        let spec = resolve_shell_command("/bin/bash", "--noprofile --norc").expect("command spec");
+
+        assert_eq!(spec.program, "/bin/bash");
+        assert_eq!(spec.args, vec!["--noprofile", "--norc"]);
+    }
+
+    #[test]
     fn legacy_shell_path_command_with_args_is_still_supported() {
         let spec = resolve_shell_command("pwsh.exe -NoLogo", "").expect("command spec");
 
@@ -887,6 +967,23 @@ mod tests {
             assert!(!script.contains("bindkey -M viins"));
             assert!(script.contains("NyaTermReady:session-1"));
         }
+    }
+
+    #[test]
+    fn bash_startup_sources_user_bashrc_before_prompt_hook() {
+        let marker = ready_marker();
+        let startup = build_local_startup_script_for_platform("/bin/bash", &marker, true);
+        let script = startup.script.expect("startup script");
+
+        assert!(script.contains("NYATERM_BASHRC_SOURCED"));
+        assert!(script.contains(". \"$HOME/.bashrc\""));
+
+        let stty_pos = script.find("stty erase '^?'").expect("stty prelude");
+        let bashrc_pos = script.find(". \"$HOME/.bashrc\"").expect("bashrc source");
+        let prompt_hook_pos = script.find("PROMPT_COMMAND").expect("prompt hook");
+
+        assert!(stty_pos < bashrc_pos);
+        assert!(bashrc_pos < prompt_hook_pos);
     }
 
     #[test]

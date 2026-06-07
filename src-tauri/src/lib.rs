@@ -108,6 +108,7 @@ pub fn run() {
             cmd::cloud_sync::list_remote_backups,
             cmd::cloud_sync::restore_remote_backup,
             cmd::session::create_ssh_session,
+            cmd::session::create_multiplexed_ssh_session,
             cmd::session::create_local_session,
             cmd::session::create_telnet_session,
             cmd::session::create_serial_session,
@@ -204,6 +205,12 @@ pub fn run() {
             cmd::otp::generate_otp_code,
             cmd::otp::import_otp_from_qr,
         ])
-        .run(context)
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if matches!(_event, tauri::RunEvent::Reopen { .. }) {
+                app::show_main_window(_app);
+            }
+        });
 }
