@@ -68,6 +68,7 @@ import {
   findSessionPaneById,
   findTabBySessionId,
   getActivePane,
+  getTabDisplayName,
 } from "./lib/workspaceTabs";
 import type {
   AppSettings,
@@ -484,6 +485,8 @@ function App() {
   }, [handleOpenPanel]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  const activeTabName = activeTab ? getTabDisplayName(activeTab).trim() : "";
+  const windowTitle = activeTabName ? `${activeTabName} - NyaTerm` : "NyaTerm";
   const activePane = activeTab ? getActivePane(activeTab) : null;
   const activeConnection = activePane?.connectionId
     ? (savedConnections.find((connection) => connection.id === activePane.connectionId) ?? null)
@@ -497,6 +500,21 @@ function App() {
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => {
+        if (cancelled) return;
+        return getCurrentWindow().setTitle(windowTitle);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [windowTitle]);
 
   const handleNewSession = useCallback((parentGroupId?: string) => {
     openNewSession(
