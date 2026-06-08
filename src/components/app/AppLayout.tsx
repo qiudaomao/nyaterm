@@ -149,6 +149,7 @@ export default function AppLayout({
     leftActivityBar.items.length > 0 || (leftActivityBar.bottomItems?.length ?? 0) > 0;
   const hasRightActivityItems =
     rightActivityBar.items.length > 0 || (rightActivityBar.bottomItems?.length ?? 0) > 0;
+  const rightPanelOpen = hasRightActivityItems && Boolean(uiConfig.active_right_panel);
   const leftMobileOpen = hasLeftActivityItems && mobile.leftOpen;
   const rightMobileOpen = hasRightActivityItems && mobile.rightOpen;
 
@@ -332,30 +333,33 @@ export default function AppLayout({
             )}
           </section>
 
-          {hasRightActivityItems && uiConfig.active_right_panel && (
+          {hasRightActivityItems && (
             <>
-              <ResizeHandle
-                direction="horizontal"
-                onResize={onRightResize}
-                className={isMacOS ? "" : "hidden md:block"}
-              />
+              {rightPanelOpen && (
+                <ResizeHandle
+                  direction="horizontal"
+                  onResize={onRightResize}
+                  className={isMacOS ? "" : "hidden md:block"}
+                />
+              )}
               <aside
                 style={{
-                  width: uiConfig.right_width,
+                  width: rightPanelOpen ? uiConfig.right_width : 0,
                   backgroundColor: "var(--df-bg-panel)",
                   borderColor: "var(--df-border)",
                 }}
                 className={
                   isMacOS
-                    ? "relative flex flex-col border-l"
+                    ? `relative flex flex-col overflow-hidden ${rightPanelOpen ? "border-l" : "hidden"}`
                     : `
-                    fixed inset-y-0 right-10 z-50 flex flex-col shadow-xl transition-transform duration-200 border-l
+                    fixed inset-y-0 right-10 z-50 flex flex-col overflow-hidden shadow-xl transition-transform duration-200 border-l
                     md:relative md:right-0 md:translate-x-0 md:z-0 md:shadow-none
                     ${
-                      rightMobileOpen
+                      rightPanelOpen && rightMobileOpen
                         ? "translate-x-0"
                         : "translate-x-[calc(100%+2.5rem)] md:translate-x-0"
                     }
+                    ${rightPanelOpen ? "" : "hidden"}
                   `
                 }
               >

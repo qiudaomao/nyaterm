@@ -124,6 +124,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   const mentionPopoverRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const streamUnlistenRef = useRef<UnlistenFn | null>(null);
+  const activeStreamIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const cancelledRef = useRef(false);
@@ -187,6 +188,26 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     streamUnlistenRef.current?.();
     streamUnlistenRef.current = null;
   }, []);
+
+  const resetActiveStreamState = useCallback(() => {
+    activeStreamIdRef.current = null;
+    cleanupStreamListener();
+    setLoading(false);
+    setStreamId(null);
+    setStreamingAssistantId(null);
+  }, [cleanupStreamListener]);
+
+  const finishStreamState = useCallback(
+    (finishedStreamId: string) => {
+      if (activeStreamIdRef.current !== finishedStreamId) return;
+      activeStreamIdRef.current = null;
+      cleanupStreamListener();
+      setLoading(false);
+      setStreamId(null);
+      setStreamingAssistantId(null);
+    },
+    [cleanupStreamListener],
+  );
 
   useEffect(() => {
     return () => {
@@ -402,6 +423,8 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       const userMessage = createLocalMessage("user", userInput, currentSessionId ?? "local");
       const assistantId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const requestStreamId = `ai-stream-${crypto.randomUUID()}`;
+      activeStreamIdRef.current = requestStreamId;
+      setStreamId(requestStreamId);
       setMessages((prev) => [
         ...prev,
         userMessage,
@@ -472,10 +495,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
             }
 
             if (payload.type === "done") {
-              cleanupStreamListener();
-              setLoading(false);
-              setStreamId(null);
-              setStreamingAssistantId(null);
+              finishStreamState(requestStreamId);
               const newMsgId = payload.message?.id;
               if (payload.message) {
                 setMessages((prev) =>
@@ -496,10 +516,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
 
             if (payload.type === "error") {
               const wasCancelled = cancelledRef.current;
-              cleanupStreamListener();
-              setLoading(false);
-              setStreamId(null);
-              setStreamingAssistantId(null);
+              finishStreamState(requestStreamId);
               if (!wasCancelled) {
                 setMessages((prev) =>
                   prev.map((message) =>
@@ -516,10 +533,16 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
             }
           },
         );
+        if (cancelledRef.current || activeStreamIdRef.current !== requestStreamId) {
+          unlisten();
+          return;
+        }
         streamUnlistenRef.current = unlisten;
-        setStreamId(requestStreamId);
 
         const context = await buildMergedContext(panes, selectedText);
+        if (cancelledRef.current || activeStreamIdRef.current !== requestStreamId) {
+          return;
+        }
         const primaryConn = panes[0].connectionId
           ? (savedConnections.find((c) => c.id === panes[0].connectionId) ?? null)
           : activeConnection;
@@ -544,14 +567,19 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
             },
           },
         });
+        if (cancelledRef.current || activeStreamIdRef.current !== requestStreamId) {
+          void invoke("cancel_ai_chat_stream", { streamId: result.streamId }).catch(() => {});
+          return;
+        }
         setCurrentSessionId(result.sessionId);
+        activeStreamIdRef.current = result.streamId;
         setStreamId(result.streamId);
         appendAudit({ action: `ai.${action}`, userInput });
       } catch (error) {
-        cleanupStreamListener();
-        setLoading(false);
-        setStreamId(null);
-        setStreamingAssistantId(null);
+        if (activeStreamIdRef.current === requestStreamId) {
+          void invoke("cancel_ai_chat_stream", { streamId: requestStreamId }).catch(() => {});
+          resetActiveStreamState();
+        }
         if (!cancelledRef.current) {
           setMessages((prev) =>
             prev.map((message) =>
@@ -573,8 +601,10 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       cleanupStreamListener,
       currentSessionId,
       effectivePanes,
+      finishStreamState,
       loadSessions,
       mode,
+      resetActiveStreamState,
       savedConnections,
       selectedModel,
       t,
@@ -599,14 +629,12 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   }, [input, loading, quotedText, startChat]);
 
   const cancelStream = useCallback(() => {
-    if (!streamId) return;
+    const activeStreamId = activeStreamIdRef.current ?? streamId;
+    if (!activeStreamId) return;
     cancelledRef.current = true;
-    void invoke("cancel_ai_chat_stream", { streamId }).catch(() => {});
-    cleanupStreamListener();
-    setLoading(false);
-    setStreamId(null);
-    setStreamingAssistantId(null);
-  }, [cleanupStreamListener, streamId]);
+    void invoke("cancel_ai_chat_stream", { streamId: activeStreamId }).catch(() => {});
+    resetActiveStreamState();
+  }, [resetActiveStreamState, streamId]);
 
   const insertCommand = useCallback(
     (card: AICommandCard) => {
