@@ -90,12 +90,7 @@ export default function TerminalContextMenu({
     const terminal = terminalRef.current;
     if (!terminal) return;
 
-    const selection = terminal.getSelection();
-    const hasSelection = selection.length > 0;
-
-    // When right_click_paste is on and nothing is selected, paste directly
-    // and prevent the Radix ContextMenu from opening.
-    if (interaction.right_click_paste && !hasSelection) {
+    if (interaction.right_click_paste) {
       e.preventDefault();
       e.stopPropagation();
       (async () => {
@@ -105,11 +100,14 @@ export default function TerminalContextMenu({
         } catch {
           /* clipboard access denied */
         }
+        terminal.clearSelection();
         terminal.focus();
       })();
       return;
     }
 
+    const selection = terminal.getSelection();
+    const hasSelection = selection.length > 0;
     setCtxSelection({ text: selection, hasSelection });
   };
 
