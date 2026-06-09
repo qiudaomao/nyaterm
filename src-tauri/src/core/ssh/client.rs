@@ -1,13 +1,13 @@
 use crate::error::{AppError, AppResult};
 use russh::client;
 use russh::keys::{Algorithm, EcdsaCurve, HashAlg, PublicKeyBase64};
-use russh::{cipher, kex, mac, Preferred};
+use russh::{Preferred, cipher, kex, mac};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{Mutex, oneshot};
 
 /// Connection parameters for SSH (host, port, user, auth method).
 #[derive(Debug, Clone, Deserialize)]
@@ -227,16 +227,18 @@ fn preferred_algorithms() -> Preferred {
         Algorithm::Ecdsa {
             curve: EcdsaCurve::NistP384,
         },
-        Algorithm::Ecdsa {
-            curve: EcdsaCurve::NistP521,
-        },
         Algorithm::Rsa {
             hash: Some(HashAlg::Sha512),
         },
         Algorithm::Rsa {
             hash: Some(HashAlg::Sha256),
         },
+        // Some network devices advertise malformed P-521 ECDSA host keys; prefer
+        // plain ssh-rsa first so negotiation can reach authentication.
         Algorithm::Rsa { hash: None },
+        Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP521,
+        },
         Algorithm::Dsa,
     ]);
 
@@ -508,8 +510,8 @@ pub(super) fn build_client_config(app: &AppHandle) -> client::Config {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_known_host_entry, preferred_algorithms, KnownHostCheck};
-    use russh::keys::Algorithm;
+    use super::{KnownHostCheck, check_known_host_entry, preferred_algorithms};
+    use russh::keys::{Algorithm, EcdsaCurve};
     use russh::{cipher, kex, mac};
 
     #[test]
@@ -546,6 +548,25 @@ example.com ssh-rsa AAAARSA
         assert!(preferred.mac.contains(&mac::HMAC_SHA1));
         assert!(preferred.key.contains(&Algorithm::Dsa));
         assert_eq!(preferred.key.last(), Some(&Algorithm::Dsa));
+
+        let rsa_sha1_index = preferred
+            .key
+            .iter()
+            .position(|algorithm| matches!(algorithm, Algorithm::Rsa { hash: None }))
+            .expect("plain ssh-rsa is enabled");
+        let ecdsa_p521_index = preferred
+            .key
+            .iter()
+            .position(|algorithm| {
+                matches!(
+                    algorithm,
+                    Algorithm::Ecdsa {
+                        curve: EcdsaCurve::NistP521
+                    }
+                )
+            })
+            .expect("P-521 ECDSA is enabled");
+        assert!(rsa_sha1_index < ecdsa_p521_index);
     }
 }
 
