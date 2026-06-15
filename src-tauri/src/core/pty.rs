@@ -8,8 +8,8 @@ use super::session::{
 };
 use super::update_cwd_if_changed;
 use super::zmodem::{
-    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemDirection, ZmodemEvent,
-    ZmodemTransfer, start_zmodem_transfer,
+    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemDirection, ZmodemEvent, ZmodemTransfer,
+    start_zmodem_transfer,
 };
 use crate::config::AiExecutionProfile;
 use crate::core::SessionOutputCoalescer;
@@ -19,6 +19,8 @@ use crate::error::AppResult;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::path::Path;
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
@@ -85,14 +87,14 @@ fn resolve_shell_command(shell_path: &str, shell_args: &str) -> Result<ShellComm
     let args = parse_shell_args(shell_args)?;
     if !args.is_empty() {
         return Ok(ShellCommandSpec {
-            program: program.to_string(),
+            program: resolve_program_for_spawn(program),
             args,
         });
     }
 
     if should_treat_as_literal_program(raw_program) {
         return Ok(ShellCommandSpec {
-            program: program.to_string(),
+            program: resolve_program_for_spawn(program),
             args: default_local_shell_args(program),
         });
     }
@@ -103,9 +105,152 @@ fn resolve_shell_command(shell_path: &str, shell_args: &str) -> Result<ShellComm
     }
     let legacy_program = legacy_parts.remove(0);
     Ok(ShellCommandSpec {
-        program: legacy_program,
+        program: resolve_program_for_spawn(&legacy_program),
         args: legacy_parts,
     })
+}
+
+fn resolve_program_for_spawn(program: &str) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        resolve_windows_program_for_spawn(program).unwrap_or_else(|| program.to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        program.to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_program_for_spawn(program: &str) -> Option<String> {
+    let program = trim_wrapping_quotes(program).trim();
+    if program.is_empty() || looks_like_path(program) {
+        return None;
+    }
+
+    resolve_windows_builtin_shell(program).or_else(|| find_windows_program_on_search_path(program))
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_builtin_shell(program: &str) -> Option<String> {
+    let lower = program.to_ascii_lowercase();
+    match lower.as_str() {
+        "cmd" | "cmd.exe" => {
+            let mut candidates = Vec::new();
+            if let Some(comspec) = std::env::var_os("COMSPEC").map(PathBuf::from) {
+                candidates.push(comspec);
+            }
+            for system_dir in windows_system_dirs() {
+                candidates.push(system_dir.join("cmd.exe"));
+            }
+            first_existing_file(candidates)
+        }
+        "powershell" | "powershell.exe" => {
+            let mut candidates = Vec::new();
+            for system_dir in windows_system_dirs() {
+                candidates.push(
+                    system_dir
+                        .join("WindowsPowerShell")
+                        .join("v1.0")
+                        .join("powershell.exe"),
+                );
+            }
+            first_existing_file(candidates)
+        }
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn find_windows_program_on_search_path(program: &str) -> Option<String> {
+    let names = windows_program_candidate_names(program);
+    let mut dirs = windows_default_search_dirs();
+    if let Some(path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path));
+    }
+
+    for dir in dirs {
+        for name in &names {
+            if let Some(path) = first_existing_file([dir.join(name)]) {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn windows_program_candidate_names(program: &str) -> Vec<String> {
+    if Path::new(program).extension().is_some() {
+        return vec![program.to_string()];
+    }
+
+    let mut names = vec![format!("{program}.exe")];
+    if let Some(pathext) = std::env::var_os("PATHEXT") {
+        for ext in pathext.to_string_lossy().split(';') {
+            let ext = ext.trim();
+            if ext.is_empty() {
+                continue;
+            }
+            let normalized_ext = if ext.starts_with('.') {
+                ext.to_string()
+            } else {
+                format!(".{ext}")
+            };
+            let candidate = format!("{program}{normalized_ext}");
+            if !names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(&candidate))
+            {
+                names.push(candidate);
+            }
+        }
+    }
+    names
+}
+
+#[cfg(target_os = "windows")]
+fn windows_default_search_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    dirs.extend(windows_system_dirs());
+    if let Some(windows_dir) = windows_dir() {
+        dirs.push(windows_dir);
+    }
+    dirs
+}
+
+#[cfg(target_os = "windows")]
+fn windows_system_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(windows_dir) = windows_dir() {
+        dirs.push(windows_dir.join("System32"));
+        dirs.push(windows_dir.join("Sysnative"));
+        dirs.push(windows_dir.join("SysWOW64"));
+    }
+    dirs
+}
+
+#[cfg(target_os = "windows")]
+fn windows_dir() -> Option<PathBuf> {
+    std::env::var_os("SystemRoot")
+        .or_else(|| std::env::var_os("WINDIR"))
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+        .or_else(|| {
+            let fallback = PathBuf::from(r"C:\Windows");
+            fallback.is_dir().then_some(fallback)
+        })
+}
+
+#[cfg(target_os = "windows")]
+fn first_existing_file<I>(paths: I) -> Option<String>
+where
+    I: IntoIterator<Item = PathBuf>,
+{
+    paths
+        .into_iter()
+        .find(|path| path.is_file())
+        .map(|path| path.to_string_lossy().to_string())
 }
 
 fn should_treat_as_literal_program(value: &str) -> bool {
@@ -209,10 +354,8 @@ pub(crate) fn parse_shell_args(input: &str) -> Result<Vec<String>, String> {
 fn platform_default_shell() -> (CommandBuilder, String) {
     #[cfg(target_os = "windows")]
     {
-        (
-            CommandBuilder::new("powershell.exe"),
-            "powershell.exe".to_string(),
-        )
+        let shell = resolve_program_for_spawn("powershell.exe");
+        (CommandBuilder::new(&shell), shell)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -457,7 +600,22 @@ fn pty_session_thread(
     if let Some(ref cfg) = config {
         if let Some(ref dir) = cfg.working_dir {
             if !dir.is_empty() {
-                cmd.cwd(dir);
+                let working_dir = Path::new(dir);
+                if working_dir.is_dir() {
+                    cmd.cwd(dir);
+                } else {
+                    tracing::warn!(
+                        working_dir = %dir,
+                        "Configured local terminal working directory does not exist; using default working directory"
+                    );
+                    let _ = app.emit(
+                        &format!("session-warning-{}", session_id),
+                        format!(
+                            "Configured working directory '{}' does not exist; using the default working directory.",
+                            dir
+                        ),
+                    );
+                }
             }
         }
     }
@@ -599,9 +757,7 @@ fn pty_session_thread(
                                 }
                                 let prepared_upload = if direction == ZmodemDirection::Upload {
                                     rt_for_reader.block_on(async {
-                                        manager_reader
-                                            .take_pending_zmodem_upload(&sid_read)
-                                            .await
+                                        manager_reader.take_pending_zmodem_upload(&sid_read).await
                                     })
                                 } else {
                                     None
@@ -882,7 +1038,11 @@ mod tests {
     fn shell_args_are_split_separately_from_program() {
         let spec = resolve_shell_command("pwsh.exe", "-NoLogo -NoExit").expect("command spec");
 
-        assert_eq!(spec.program, "pwsh.exe");
+        assert!(
+            spec.program.ends_with("pwsh.exe"),
+            "program was {}",
+            spec.program
+        );
         assert_eq!(spec.args, vec!["-NoLogo", "-NoExit"]);
     }
 
@@ -910,8 +1070,34 @@ mod tests {
     fn legacy_shell_path_command_with_args_is_still_supported() {
         let spec = resolve_shell_command("pwsh.exe -NoLogo", "").expect("command spec");
 
-        assert_eq!(spec.program, "pwsh.exe");
+        assert!(
+            spec.program.ends_with("pwsh.exe"),
+            "program was {}",
+            spec.program
+        );
         assert_eq!(spec.args, vec!["-NoLogo"]);
+    }
+
+    #[test]
+    fn windows_builtin_shell_names_resolve_to_spawnable_programs() {
+        if !cfg!(windows) {
+            return;
+        }
+
+        for shell in ["cmd.exe", "powershell.exe"] {
+            let spec = resolve_shell_command(shell, "").expect("command spec");
+
+            assert!(
+                spec.program.contains('\\') || spec.program.contains('/'),
+                "{shell} should resolve to an absolute executable path, got {}",
+                spec.program
+            );
+            assert!(
+                spec.program.to_ascii_lowercase().ends_with(shell),
+                "{shell} resolved to unexpected program {}",
+                spec.program
+            );
+        }
     }
 
     #[test]
