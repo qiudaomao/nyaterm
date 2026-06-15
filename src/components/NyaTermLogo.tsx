@@ -19,6 +19,7 @@ export default function NyaTermLogo({ className, ...props }: NyaTermLogoProps) {
       className={className}
       {...props}
     >
+      <title id="nyaterm-logo-title">NyaTerm</title>
       <defs>
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="var(--grad-from, var(--df-primary, #06b6d4))" />

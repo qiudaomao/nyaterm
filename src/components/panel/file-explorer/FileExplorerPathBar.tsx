@@ -185,6 +185,7 @@ export function FileExplorerPathBar({
 
       {showHistory && (
         <div
+          role="listbox"
           className="terminal-scroll absolute inset-x-0 top-full z-30 mt-px overflow-y-auto rounded-b-md border shadow-lg"
           style={{
             backgroundColor: "var(--df-bg-panel)",
