@@ -205,12 +205,12 @@ export function resolveKeys(id: string, overrides: Record<string, string>): stri
 
 /**
  * Parse a react-hotkeys-hook key string into a display-friendly format.
- * Takes the first combo (before comma) and formats modifier names for the current platform.
+ * Chooses the platform-preferred combo and formats modifier names for display.
  */
 export function formatKeysForDisplay(keys: string): string {
-  const first = keys.split(",")[0].trim();
+  const preferred = pickDisplayCombo(keys);
 
-  return first
+  return preferred
     .split("+")
     .map((k) => formatSingleKey(k.trim()))
     .join("+");
@@ -218,8 +218,7 @@ export function formatKeysForDisplay(keys: string): string {
 
 /** Format the tab index shortcut as its generated range, e.g. `Ctrl+1-9`. */
 export function formatIndexedKeysForDisplay(keys: string): string {
-  const first = keys.split(",")[0].trim();
-  return formatKeysForDisplay(first.replace(/\+1$/i, "+1-9"));
+  return formatKeysForDisplay(pickDisplayCombo(keys).replace(/\+1$/i, "+1-9"));
 }
 
 /** Expand a tab index shortcut template into concrete key combinations for a numbered tab. */
@@ -267,9 +266,28 @@ function isModifierOnlyCombo(combo: string): boolean {
     .every((key) => ["ctrl", "meta", "shift", "alt"].includes(key));
 }
 
+function pickDisplayCombo(keys: string): string {
+  const combos = keys
+    .split(",")
+    .map((combo) => combo.trim())
+    .filter(Boolean);
+  if (combos.length === 0) return "";
+  if (combos.length === 1) return combos[0];
+
+  const preferredModifier = IS_MAC ? "meta" : "ctrl";
+  const preferred = combos.find((combo) =>
+    combo
+      .split("+")
+      .map((key) => key.trim().toLowerCase())
+      .includes(preferredModifier),
+  );
+  return preferred ?? combos[0];
+}
+
 function formatSingleKey(key: string): string {
   const lower = key.toLowerCase();
-  if (lower === "ctrl" || lower === "meta") return MOD;
+  if (lower === "ctrl") return "Ctrl";
+  if (lower === "meta") return IS_MAC ? "\u2318" : "Meta";
   if (lower === "shift") return "Shift";
   if (lower === "alt") return "Alt";
   if (lower === "comma") return ",";
@@ -292,12 +310,12 @@ function formatSingleKey(key: string): string {
 /**
  * Convert a KeyboardEvent into a hotkey string suitable for react-hotkeys-hook registration.
  * Uses `e.code` (physical key) for reliable locale-independent capture, then converts
- * back to the react-hotkeys-hook key name format.
- * Returns both ctrl and meta variants for cross-platform support when a modifier is used.
+ * back to the react-hotkeys-hook key name format while preserving exact modifiers.
  */
 export function keyEventToHotkeyString(e: KeyboardEvent): string {
   const parts: string[] = [];
-  const hasCtrlOrMeta = e.ctrlKey || e.metaKey;
+  if (e.ctrlKey) parts.push("ctrl");
+  if (e.metaKey) parts.push("meta");
   if (e.shiftKey) parts.push("shift");
   if (e.altKey) parts.push("alt");
 
@@ -305,11 +323,6 @@ export function keyEventToHotkeyString(e: KeyboardEvent): string {
   if (!keyName) return "";
   parts.push(keyName);
 
-  if (hasCtrlOrMeta) {
-    const ctrlCombo = ["ctrl", ...parts].join("+");
-    const metaCombo = ["meta", ...parts].join("+");
-    return `${ctrlCombo}, ${metaCombo}`;
-  }
   return parts.join("+");
 }
 
@@ -320,11 +333,10 @@ export function keyEventToIndexedHotkeyString(e: KeyboardEvent): string {
   if (!/^(Control|Meta|Alt|Shift)(Left|Right)?$/.test(e.code)) return "";
 
   const parts: string[] = [];
+  if (e.ctrlKey) parts.push("ctrl");
+  if (e.metaKey) parts.push("meta");
   if (e.shiftKey) parts.push("shift");
   if (e.altKey) parts.push("alt");
-  if (e.ctrlKey || e.metaKey) {
-    return `${["ctrl", ...parts].join("+")}, ${["meta", ...parts].join("+")}`;
-  }
   return parts.join("+");
 }
 
