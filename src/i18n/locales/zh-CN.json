@@ -573,7 +573,7 @@
     "connectionPickerPlaceholder": "选择一个连接",
     "connectionRequired": "请选择一个连接。",
     "deleteGroup": "删除分类",
-    "deleteGroupConfirm": "确定删除「{{name}}」吗？其中 {{count}} 个条目会移动到未分类。",
+    "deleteGroupConfirm": "确定删除「{{name}}」及其中 {{count}} 个条目吗？此操作不可撤销。",
     "dynamicTunnel": "动态",
     "editProxy": "编辑代理",
     "editTunnel": "编辑隧道",

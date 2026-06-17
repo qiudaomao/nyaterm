@@ -573,7 +573,7 @@
     "connectionPickerPlaceholder": "Choose connection",
     "connectionRequired": "Choose a connection.",
     "deleteGroup": "Delete Group",
-    "deleteGroupConfirm": "Delete \"{{name}}\"? {{count}} item(s) will move to Ungrouped.",
+    "deleteGroupConfirm": "Delete \"{{name}}\" and its {{count}} item(s)? This cannot be undone.",
     "dynamicTunnel": "Dynamic",
     "editProxy": "Edit Proxy",
     "editTunnel": "Edit Tunnel",
