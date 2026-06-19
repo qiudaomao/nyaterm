@@ -15,6 +15,9 @@ import { getErrorMessage } from "@/lib/errors";
 import {
   DEFAULT_COMMAND_SUGGESTION_MAX_CHARS,
   DEFAULT_COMMAND_SUGGESTION_MIN_CHARS,
+  DEFAULT_TAB_DOUBLE_CLICK_ACTION,
+  DEFAULT_TAB_MIDDLE_CLICK_ACTION,
+  DEFAULT_TAB_RIGHT_CLICK_ACTION,
 } from "@/lib/interactionSettings";
 import {
   collectSessionPanes,
@@ -258,6 +261,9 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     command_suggestion_max_chars: DEFAULT_COMMAND_SUGGESTION_MAX_CHARS,
     word_separators: " ()[]{}\"':=,;|&<>",
     default_encoding: "UTF-8",
+    tab_double_click_action: DEFAULT_TAB_DOUBLE_CLICK_ACTION,
+    tab_middle_click_action: DEFAULT_TAB_MIDDLE_CLICK_ACTION,
+    tab_right_click_action: DEFAULT_TAB_RIGHT_CLICK_ACTION,
   },
   transfer: {
     editor_type: "external",

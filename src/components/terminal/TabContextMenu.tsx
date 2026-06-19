@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MdAutoAwesome,
@@ -18,19 +18,9 @@ import {
 } from "react-icons/md";
 import { TbArrowBarToRight, TbCircleDotFilled } from "react-icons/tb";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useApp } from "@/context/AppContext";
 import { openAIAssistant } from "@/lib/aiEvents";
-import { getActivePane, getTabDisplayName } from "@/lib/workspaceTabs";
+import { getActivePane } from "@/lib/workspaceTabs";
 import type { PaneSplitDirection, Tab } from "@/types/global";
 import {
   ContextMenu,
@@ -75,6 +65,10 @@ interface TabContextMenuProps {
   onCloseRight: (tabId: string) => void | Promise<void>;
   onSessionInfo: (tab: Tab) => void | Promise<void>;
   onActivateTab: (tabId: string) => void;
+  canCopyIp: boolean;
+  onRenameTab: (tab: Tab) => void;
+  onCopyTabName: (tab: Tab) => void | Promise<void>;
+  onCopyServerIp: (tab: Tab) => void | Promise<void>;
 }
 
 export default function TabContextMenu({
@@ -94,14 +88,15 @@ export default function TabContextMenu({
   onCloseRight,
   onSessionInfo,
   onActivateTab,
+  canCopyIp,
+  onRenameTab,
+  onCopyTabName,
+  onCopyServerIp,
 }: TabContextMenuProps) {
   const { t } = useTranslation();
-  const { updateTab, savedConnections } = useApp();
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [renameValue, setRenameValue] = useState("");
+  const { updateTab } = useApp();
 
   const activePane = getActivePane(tab);
-  const displayName = getTabDisplayName(tab);
   const tabIndex = tabs.findIndex((item) => item.id === tab.id);
   const canSpawnSession =
     !!activePane && (activePane.type === "Local" || !!activePane.connectionId);
@@ -131,54 +126,6 @@ export default function TabContextMenu({
     [t, tab.id, updateTab],
   );
 
-  const handleRenameOpen = useCallback(() => {
-    setRenameValue(displayName);
-    setRenameOpen(true);
-  }, [displayName]);
-
-  const handleRenameSubmit = useCallback(async () => {
-    const trimmed = renameValue.trim();
-    if (!trimmed) {
-      toast.error(t("tabCtx.renameEmpty"));
-      return;
-    }
-    if (trimmed.length > 64) {
-      return;
-    }
-
-    try {
-      await updateTab(tab.id, { customName: trimmed }, { immediatePersist: true });
-      setRenameOpen(false);
-    } catch {
-      toast.error(t("tabCtx.renameFailed"));
-    }
-  }, [renameValue, t, tab.id, updateTab]);
-
-  const handleCopyName = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(displayName);
-      toast.success(t("tabCtx.nameCopied"));
-    } catch {
-      toast.error(t("tabCtx.copyFailed"));
-    }
-  }, [displayName, t]);
-
-  const conn = activePane?.connectionId
-    ? savedConnections.find((c) => c.id === activePane.connectionId)
-    : undefined;
-  const host = conn?.host;
-  const canCopyIp = !!host;
-
-  const handleCopyIp = useCallback(async () => {
-    if (!host) return;
-    try {
-      await navigator.clipboard.writeText(host);
-      toast.success(t("tabCtx.ipCopied"));
-    } catch {
-      toast.error(t("tabCtx.copyFailed"));
-    }
-  }, [host, t]);
-
   const handleOpenAI = useCallback(
     (action: "explain_output" | "analyze_error") => {
       onActivateTab(tab.id);
@@ -188,202 +135,159 @@ export default function TabContextMenu({
   );
 
   return (
-    <>
-      <ContextMenu>
-        {tooltipContent ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6} showArrow className="max-w-xs">
-              {tooltipContent}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-        )}
-        <ContextMenuContent className="min-w-[220px]">
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <MdColorLens className={iconClass} />
-              {t("tabCtx.setColor")}
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <div className="grid grid-cols-6 gap-1 p-2">
-                {TAB_PRESET_COLORS.map((color) => (
-                  <button
-                    key={color.value}
-                    className="h-5 w-5 rounded-full border border-transparent transition-transform hover:scale-125 focus:outline-none"
-                    style={{
-                      backgroundColor: color.value,
-                      boxShadow:
-                        tab.tabColor === color.value
-                          ? `0 0 0 2px var(--df-bg), 0 0 0 4px ${color.value}`
-                          : undefined,
-                    }}
-                    title={color.name}
-                    onClick={() => void handleSetColor(color.value)}
-                  />
-                ))}
-              </div>
-              {tab.tabColor && (
-                <>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={() => void handleSetColor(undefined)}>
-                    <MdClose className={iconClass} />
-                    {t("tabCtx.resetColor")}
-                  </ContextMenuItem>
-                </>
-              )}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
+    <ContextMenu>
+      {tooltipContent ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6} showArrow className="max-w-xs">
+            {tooltipContent}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      )}
+      <ContextMenuContent className="min-w-[220px]">
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <MdColorLens className={iconClass} />
+            {t("tabCtx.setColor")}
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <div className="grid grid-cols-6 gap-1 p-2">
+              {TAB_PRESET_COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  className="h-5 w-5 rounded-full border border-transparent transition-transform hover:scale-125 focus:outline-none"
+                  style={{
+                    backgroundColor: color.value,
+                    boxShadow:
+                      tab.tabColor === color.value
+                        ? `0 0 0 2px var(--df-bg), 0 0 0 4px ${color.value}`
+                        : undefined,
+                  }}
+                  title={color.name}
+                  onClick={() => void handleSetColor(color.value)}
+                />
+              ))}
+            </div>
+            {tab.tabColor && (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => void handleSetColor(undefined)}>
+                  <MdClose className={iconClass} />
+                  {t("tabCtx.resetColor")}
+                </ContextMenuItem>
+              </>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
 
-          <ContextMenuItem onClick={handleRenameOpen}>
-            <MdDriveFileRenameOutline className={iconClass} />
-            {t("tabCtx.rename")}
-          </ContextMenuItem>
+        <ContextMenuItem onClick={() => onRenameTab(tab)}>
+          <MdDriveFileRenameOutline className={iconClass} />
+          {t("tabCtx.rename")}
+        </ContextMenuItem>
 
-          <ContextMenuItem onClick={() => void handleCopyName()}>
-            <MdContentCopy className={iconClass} />
-            {t("tabCtx.copyName")}
-          </ContextMenuItem>
+        <ContextMenuItem onClick={() => void onCopyTabName(tab)}>
+          <MdContentCopy className={iconClass} />
+          {t("tabCtx.copyName")}
+        </ContextMenuItem>
 
-          <ContextMenuItem disabled={!canCopyIp} onClick={() => void handleCopyIp()}>
-            <MdContentCopy className={iconClass} />
-            {t("tabCtx.copyIp")}
-          </ContextMenuItem>
+        <ContextMenuItem disabled={!canCopyIp} onClick={() => void onCopyServerIp(tab)}>
+          <MdContentCopy className={iconClass} />
+          {t("tabCtx.copyIp")}
+        </ContextMenuItem>
 
-          <ContextMenuSeparator />
+        <ContextMenuSeparator />
 
-          <ContextMenuItem disabled={!canSpawnSession} onClick={() => void onDuplicateSession(tab)}>
-            <MdPlayArrow className={iconClass} />
-            {t("tabCtx.duplicate")}
-          </ContextMenuItem>
+        <ContextMenuItem disabled={!canSpawnSession} onClick={() => void onDuplicateSession(tab)}>
+          <MdPlayArrow className={iconClass} />
+          {t("tabCtx.duplicate")}
+        </ContextMenuItem>
 
-          <ContextMenuItem
-            disabled={!canMultiplexSsh}
-            onClick={() => void onMultiplexSshSession(tab)}
-          >
-            <MdCallSplit className={iconClass} />
-            {t("tabCtx.multiplexSsh")}
-          </ContextMenuItem>
+        <ContextMenuItem
+          disabled={!canMultiplexSsh}
+          onClick={() => void onMultiplexSshSession(tab)}
+        >
+          <MdCallSplit className={iconClass} />
+          {t("tabCtx.multiplexSsh")}
+        </ContextMenuItem>
 
-          <ContextMenuItem disabled={!canReconnect} onClick={() => void onReconnectSession(tab)}>
-            <MdRefresh className={iconClass} />
-            {t("tabCtx.reconnect")}
-          </ContextMenuItem>
+        <ContextMenuItem disabled={!canReconnect} onClick={() => void onReconnectSession(tab)}>
+          <MdRefresh className={iconClass} />
+          {t("tabCtx.reconnect")}
+        </ContextMenuItem>
 
-          <ContextMenuItem disabled={!canDisconnect} onClick={() => void onDisconnectSession(tab)}>
-            <MdLinkOff className={iconClass} />
-            {t("tabCtx.disconnect")}
-          </ContextMenuItem>
+        <ContextMenuItem disabled={!canDisconnect} onClick={() => void onDisconnectSession(tab)}>
+          <MdLinkOff className={iconClass} />
+          {t("tabCtx.disconnect")}
+        </ContextMenuItem>
 
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <MdAutoAwesome className={iconClass} />
-              {t("ai.title")}
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuItem disabled={!canUseAI} onClick={() => handleOpenAI("explain_output")}>
-                {t("ai.explainRecent")}
-              </ContextMenuItem>
-              <ContextMenuItem disabled={!canUseAI} onClick={() => handleOpenAI("analyze_error")}>
-                {t("ai.analyzeError")}
-              </ContextMenuItem>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-
-          <ContextMenuSeparator />
-
-          <ContextMenuItem
-            disabled={!canSplit}
-            onClick={() => void onSplitSession(tab, "horizontal")}
-          >
-            <MdHorizontalSplit className={iconClass} />
-            {t("tabCtx.splitHorizontal")}
-          </ContextMenuItem>
-
-          <ContextMenuItem
-            disabled={!canSplit}
-            onClick={() => void onSplitSession(tab, "vertical")}
-          >
-            <MdVerticalSplit className={iconClass} />
-            {t("tabCtx.splitVertical")}
-          </ContextMenuItem>
-
-          {onUnsplit && (
-            <ContextMenuItem onClick={onUnsplit}>
-              <MdMerge className={iconClass} />
-              {t("tabCtx.unsplit")}
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <MdAutoAwesome className={iconClass} />
+            {t("ai.title")}
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem disabled={!canUseAI} onClick={() => handleOpenAI("explain_output")}>
+              {t("ai.explainRecent")}
             </ContextMenuItem>
-          )}
+            <ContextMenuItem disabled={!canUseAI} onClick={() => handleOpenAI("analyze_error")}>
+              {t("ai.analyzeError")}
+            </ContextMenuItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
 
-          <ContextMenuSeparator />
+        <ContextMenuSeparator />
 
-          <ContextMenuItem disabled={!activePane} onClick={() => void onCloseSession(tab)}>
-            <MdClose className={iconClass} />
-            {t("tabCtx.close")}
+        <ContextMenuItem
+          disabled={!canSplit}
+          onClick={() => void onSplitSession(tab, "horizontal")}
+        >
+          <MdHorizontalSplit className={iconClass} />
+          {t("tabCtx.splitHorizontal")}
+        </ContextMenuItem>
+
+        <ContextMenuItem disabled={!canSplit} onClick={() => void onSplitSession(tab, "vertical")}>
+          <MdVerticalSplit className={iconClass} />
+          {t("tabCtx.splitVertical")}
+        </ContextMenuItem>
+
+        {onUnsplit && (
+          <ContextMenuItem onClick={onUnsplit}>
+            <MdMerge className={iconClass} />
+            {t("tabCtx.unsplit")}
           </ContextMenuItem>
+        )}
 
-          <ContextMenuItem onClick={() => void onCloseAll()}>
-            <MdCloseFullscreen className={iconClass} />
-            {t("tabCtx.closeAll")}
-          </ContextMenuItem>
+        <ContextMenuSeparator />
 
-          <ContextMenuItem
-            disabled={!canCloseInactive}
-            onClick={() => void onCloseInactive(tab.id)}
-          >
-            <TbCircleDotFilled className={iconClass} />
-            {t("tabCtx.closeInactive")}
-          </ContextMenuItem>
+        <ContextMenuItem disabled={!activePane} onClick={() => void onCloseSession(tab)}>
+          <MdClose className={iconClass} />
+          {t("tabCtx.close")}
+        </ContextMenuItem>
 
-          <ContextMenuItem disabled={!canCloseRight} onClick={() => void onCloseRight(tab.id)}>
-            <TbArrowBarToRight className={iconClass} />
-            {t("tabCtx.closeRight")}
-          </ContextMenuItem>
+        <ContextMenuItem onClick={() => void onCloseAll()}>
+          <MdCloseFullscreen className={iconClass} />
+          {t("tabCtx.closeAll")}
+        </ContextMenuItem>
 
-          <ContextMenuItem disabled={!canSessionInfo} onClick={() => void onSessionInfo(tab)}>
-            <MdInfoOutline className={iconClass} />
-            {t("tabCtx.sessionInfo")}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+        <ContextMenuItem disabled={!canCloseInactive} onClick={() => void onCloseInactive(tab.id)}>
+          <TbCircleDotFilled className={iconClass} />
+          {t("tabCtx.closeInactive")}
+        </ContextMenuItem>
 
-      <Dialog open={renameOpen} onOpenChange={(open) => !open && setRenameOpen(false)}>
-        <DialogContent showCloseButton={false} className="max-w-xs">
-          <DialogHeader>
-            <DialogTitle className="text-sm">{t("tabCtx.renameTitle")}</DialogTitle>
-            <DialogDescription className="sr-only">{t("tabCtx.renameTitle")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Input
-              className="text-sm"
-              value={renameValue}
-              onChange={(event) => setRenameValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  void handleRenameSubmit();
-                }
-              }}
-              maxLength={64}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setRenameOpen(false)}>
-              {t("dialog.cancel")}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void handleRenameSubmit()}
-              disabled={!renameValue.trim()}
-            >
-              {t("dialog.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        <ContextMenuItem disabled={!canCloseRight} onClick={() => void onCloseRight(tab.id)}>
+          <TbArrowBarToRight className={iconClass} />
+          {t("tabCtx.closeRight")}
+        </ContextMenuItem>
+
+        <ContextMenuItem disabled={!canSessionInfo} onClick={() => void onSessionInfo(tab)}>
+          <MdInfoOutline className={iconClass} />
+          {t("tabCtx.sessionInfo")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

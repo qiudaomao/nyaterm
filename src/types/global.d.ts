@@ -806,6 +806,9 @@ export interface InteractionSettings {
   command_suggestion_max_chars: number;
   word_separators: string;
   default_encoding: string;
+  tab_double_click_action: import("@/lib/interactionSettings").TabMouseAction;
+  tab_middle_click_action: import("@/lib/interactionSettings").TabMouseAction;
+  tab_right_click_action: import("@/lib/interactionSettings").TabMouseAction;
 }
 
 export interface AppSettings {

@@ -1,6 +1,7 @@
 import { emit } from "@tauri-apps/api/event";
 import {
   type DragEvent,
+  type MouseEvent,
   memo,
   useCallback,
   useLayoutEffect,
@@ -24,6 +25,18 @@ import {
   MdTerminal,
 } from "react-icons/md";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import type { TabMouseAction } from "@/lib/interactionSettings";
+import { normalizeTabMouseAction } from "@/lib/interactionSettings";
 import { getActiveGroupForSession, isSessionPausedInGroup } from "@/lib/syncInputGroups";
 import { getActivePane, getTabDisplayName } from "@/lib/workspaceTabs";
 import type { Group, PaneSplitDirection, SavedConnection, Tab } from "@/types/global";
@@ -124,6 +137,50 @@ function compareSortOrder(left: { sort_order?: number }, right: { sort_order?: n
   return (left.sort_order ?? 0) - (right.sort_order ?? 0);
 }
 
+function canSpawnSessionFromTab(tab: Tab): boolean {
+  const pane = getActivePane(tab);
+  return !!pane && (pane.type === "Local" || !!pane.connectionId);
+}
+
+function getTabConnection(tab: Tab, savedConnections: SavedConnection[]) {
+  const pane = getActivePane(tab);
+  return pane?.connectionId
+    ? savedConnections.find((connection) => connection.id === pane.connectionId)
+    : undefined;
+}
+
+function isSshTab(tab: Tab, savedConnections: SavedConnection[]): boolean {
+  const pane = getActivePane(tab);
+  const connection = getTabConnection(tab, savedConnections);
+  return pane?.type === "SSH" && connection?.type === "ssh";
+}
+
+function getTabServerIp(tab: Tab, savedConnections: SavedConnection[]): string | null {
+  if (!isSshTab(tab, savedConnections)) return null;
+  return getTabConnection(tab, savedConnections)?.host || null;
+}
+
+function canMultiplexTab(tab: Tab, savedConnections: SavedConnection[]): boolean {
+  const pane = getActivePane(tab);
+  return (
+    !!pane &&
+    isSshTab(tab, savedConnections) &&
+    !pane.connecting &&
+    !pane.connectError &&
+    !!pane.sessionId
+  );
+}
+
+function canReconnectTab(tab: Tab): boolean {
+  const pane = getActivePane(tab);
+  return !!pane && !pane.connecting && canSpawnSessionFromTab(tab);
+}
+
+function canDisconnectTab(tab: Tab): boolean {
+  const pane = getActivePane(tab);
+  return !!pane && !pane.connecting && !pane.connectError;
+}
+
 function SyncIndicator({
   tab,
   syncGroups,
@@ -184,9 +241,12 @@ function TabBar({
   onMoveTabHere,
 }: TabBarProps) {
   const { t } = useTranslation();
-  const { appSettings, savedConnections, savedGroups, syncGroups, broadcastToAll } = useApp();
+  const { appSettings, savedConnections, savedGroups, syncGroups, broadcastToAll, updateTab } =
+    useApp();
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [renameTab, setRenameTab] = useState<Tab | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const pendingOpenTabFocusRef = useRef<Tab | null>(null);
   const tabStripRef = useRef<HTMLDivElement | null>(null);
   const tabButtonRefs = useRef(new Map<string, HTMLDivElement>());
@@ -407,6 +467,135 @@ function TabBar({
     [updateTabStripScrollState],
   );
 
+  const handleRenameTab = useCallback((tab: Tab) => {
+    setRenameValue(getTabDisplayName(tab));
+    setRenameTab(tab);
+  }, []);
+
+  const handleRenameSubmit = useCallback(async () => {
+    if (!renameTab) return;
+
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      toast.error(t("tabCtx.renameEmpty"));
+      return;
+    }
+    if (trimmed.length > 64) return;
+
+    try {
+      await updateTab(renameTab.id, { customName: trimmed }, { immediatePersist: true });
+      setRenameTab(null);
+    } catch {
+      toast.error(t("tabCtx.renameFailed"));
+    }
+  }, [renameTab, renameValue, t, updateTab]);
+
+  const handleCopyTabName = useCallback(
+    async (tab: Tab) => {
+      try {
+        await navigator.clipboard.writeText(getTabDisplayName(tab));
+        toast.success(t("tabCtx.nameCopied"));
+      } catch {
+        toast.error(t("tabCtx.copyFailed"));
+      }
+    },
+    [t],
+  );
+
+  const handleCopyServerIp = useCallback(
+    async (tab: Tab) => {
+      const host = getTabServerIp(tab, savedConnections);
+      if (!host) return;
+
+      try {
+        await navigator.clipboard.writeText(host);
+        toast.success(t("tabCtx.ipCopied"));
+      } catch {
+        toast.error(t("tabCtx.copyFailed"));
+      }
+    },
+    [savedConnections, t],
+  );
+
+  const isTabMouseActionEnabled = useCallback(
+    (tab: Tab, action: TabMouseAction) => {
+      switch (action) {
+        case "none":
+          return false;
+        case "rename_tab":
+        case "copy_tab_name":
+          return true;
+        case "copy_server_ip":
+          return !!getTabServerIp(tab, savedConnections);
+        case "duplicate_session":
+          return canSpawnSessionFromTab(tab);
+        case "multiplex_ssh":
+          return canMultiplexTab(tab, savedConnections);
+        case "reconnect_session":
+          return canReconnectTab(tab);
+        case "disconnect_session":
+          return canDisconnectTab(tab);
+      }
+    },
+    [savedConnections],
+  );
+
+  const runTabMouseAction = useCallback(
+    (tab: Tab, action: TabMouseAction) => {
+      if (!isTabMouseActionEnabled(tab, action)) return false;
+
+      onTabChange(tab.id);
+
+      switch (action) {
+        case "none":
+          return false;
+        case "rename_tab":
+          handleRenameTab(tab);
+          return true;
+        case "copy_tab_name":
+          void handleCopyTabName(tab);
+          return true;
+        case "copy_server_ip":
+          void handleCopyServerIp(tab);
+          return true;
+        case "duplicate_session":
+          void onDuplicateSession(tab);
+          return true;
+        case "multiplex_ssh":
+          void onMultiplexSshSession(tab);
+          return true;
+        case "reconnect_session":
+          void onReconnectSession(tab);
+          return true;
+        case "disconnect_session":
+          void onDisconnectSession(tab);
+          return true;
+      }
+    },
+    [
+      handleCopyServerIp,
+      handleCopyTabName,
+      handleRenameTab,
+      isTabMouseActionEnabled,
+      onDisconnectSession,
+      onDuplicateSession,
+      onMultiplexSshSession,
+      onReconnectSession,
+      onTabChange,
+    ],
+  );
+
+  const handleConfiguredTabMouseAction = useCallback(
+    (event: MouseEvent<HTMLDivElement>, tab: Tab, action: TabMouseAction) => {
+      if (action === "none") return false;
+
+      event.preventDefault();
+      event.stopPropagation();
+      return runTabMouseAction(tab, action);
+    },
+    [runTabMouseAction],
+  );
+
   const getInsertionIndex = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
     const rect = event.currentTarget.getBoundingClientRect();
     return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
@@ -606,11 +795,18 @@ function TabBar({
     const showUnreadIndicator = !isFocused && unreadTabIds?.has(tab.id);
     const displayName = getTabDisplayName(tab);
     const accentColor = tab.tabColor;
-    const pane = getActivePane(tab);
-    const conn = pane?.connectionId
-      ? savedConnections.find((connection) => connection.id === pane.connectionId)
-      : undefined;
-    const host = conn?.host;
+    const conn = getTabConnection(tab, savedConnections);
+    const canCopyIp = !!getTabServerIp(tab, savedConnections);
+    const host = canCopyIp ? conn?.host : undefined;
+    const doubleClickAction = normalizeTabMouseAction(
+      appSettings.interaction.tab_double_click_action,
+    );
+    const middleClickAction = normalizeTabMouseAction(
+      appSettings.interaction.tab_middle_click_action,
+    );
+    const rightClickAction = normalizeTabMouseAction(
+      appSettings.interaction.tab_right_click_action,
+    );
     const sshAddress =
       conn?.username && conn.host && conn.port
         ? `ssh -p ${conn.port} ${conn.username}@${conn.host}`
@@ -667,7 +863,28 @@ function TabBar({
           color: isActive ? "var(--df-text)" : "var(--df-text-muted)",
         }}
         onClick={() => onTabChange(tab.id)}
-        onContextMenu={() => onTabChange(tab.id)}
+        onDoubleClick={(event) => {
+          handleConfiguredTabMouseAction(event, tab, doubleClickAction);
+        }}
+        onMouseDown={(event) => {
+          if (event.button === 1 && middleClickAction !== "none") {
+            handleConfiguredTabMouseAction(event, tab, middleClickAction);
+          }
+        }}
+        onAuxClick={(event) => {
+          if (event.button === 1 && middleClickAction !== "none") {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onContextMenu={(event) => {
+          if (rightClickAction === "none") {
+            onTabChange(tab.id);
+            return;
+          }
+
+          handleConfiguredTabMouseAction(event, tab, rightClickAction);
+        }}
         onDragStart={(event) => handleDragStart(event, tab.id)}
         onDragEnd={(event) => {
           handleDragEnd(event);
@@ -765,6 +982,10 @@ function TabBar({
           onCloseRight={onCloseRight}
           onSessionInfo={onSessionInfo}
           onActivateTab={onTabChange}
+          canCopyIp={canCopyIp}
+          onRenameTab={handleRenameTab}
+          onCopyTabName={handleCopyTabName}
+          onCopyServerIp={handleCopyServerIp}
         >
           {tabButton}
         </TabContextMenu>
@@ -856,157 +1077,194 @@ function TabBar({
   );
 
   return (
-    <div
-      className="flex h-9 shrink-0"
-      style={{
-        backgroundColor: "var(--df-bg-panel)",
-        boxShadow: "inset 0 -1px 0 var(--df-border)",
-      }}
-    >
+    <>
       <div
-        ref={tabStripRef}
-        className="tab-strip-scroll relative flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
-        onScroll={handleTabStripScroll}
-        onWheel={handleTabStripWheel}
+        className="flex h-9 shrink-0"
+        style={{
+          backgroundColor: "var(--df-bg-panel)",
+          boxShadow: "inset 0 -1px 0 var(--df-border)",
+        }}
       >
-        {tabs.map((tab) =>
-          renderTabItem(
-            tab,
-            tabs.findIndex((item) => item.id === tab.id),
-          ),
+        <div
+          ref={tabStripRef}
+          className="tab-strip-scroll relative flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+          onScroll={handleTabStripScroll}
+          onWheel={handleTabStripWheel}
+        >
+          {tabs.map((tab) =>
+            renderTabItem(
+              tab,
+              tabs.findIndex((item) => item.id === tab.id),
+            ),
+          )}
+
+          <div
+            className="relative flex min-w-6 flex-1 shrink-0"
+            onDragOver={(event) => {
+              if (!draggedTabId && !event.dataTransfer.types.includes("application/nyaterm-tab"))
+                return;
+              event.preventDefault();
+              setDropIndex(tabs.length);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              handleDropAtIndex(tabs.length, event);
+            }}
+          >
+            {(draggedTabId || dropIndex !== null) && dropIndex === tabs.length && (
+              <div
+                className="pointer-events-none absolute inset-y-1 left-0 z-20 w-0.5 rounded-full"
+                style={{ backgroundColor: "var(--df-primary)" }}
+              />
+            )}
+          </div>
+        </div>
+
+        {tabStripScroll.hasOverflow && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-full w-8 shrink-0 items-center justify-center border-l transition-colors df-hover"
+                    style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
+                    aria-label={t("terminal.openTabs")}
+                  >
+                    <MdExpandMore className="text-base" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6} showArrow>
+                {t("terminal.openTabs")}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              className="w-64 max-w-[calc(100vw-1rem)]"
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const pendingTab = pendingOpenTabFocusRef.current;
+                pendingOpenTabFocusRef.current = null;
+                if (pendingTab) {
+                  focusOpenTabTerminal(pendingTab);
+                }
+              }}
+            >
+              <DropdownMenuLabel className="text-muted-foreground">
+                {t("terminal.openTabs")}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {openTabsMenuItems.map(({ tab, index }) => renderOpenTabMenuItem(tab, index))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
-        <div
-          className="relative flex min-w-6 flex-1 shrink-0"
-          onDragOver={(event) => {
-            if (!draggedTabId && !event.dataTransfer.types.includes("application/nyaterm-tab"))
-              return;
-            event.preventDefault();
-            setDropIndex(tabs.length);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            handleDropAtIndex(tabs.length, event);
-          }}
-        >
-          {(draggedTabId || dropIndex !== null) && dropIndex === tabs.length && (
-            <div
-              className="pointer-events-none absolute inset-y-1 left-0 z-20 w-0.5 rounded-full"
-              style={{ backgroundColor: "var(--df-primary)" }}
-            />
-          )}
-        </div>
-      </div>
-
-      {tabStripScroll.hasOverflow && (
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
                 <button
-                  type="button"
-                  className="flex h-full w-8 shrink-0 items-center justify-center border-l transition-colors df-hover"
+                  className="flex h-full w-9 shrink-0 items-center justify-center border-l transition-colors df-hover"
                   style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
-                  aria-label={t("terminal.openTabs")}
+                  aria-label={t("terminal.newSession")}
                 >
-                  <MdExpandMore className="text-base" />
+                  <MdAdd className="text-base" />
                 </button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={6} showArrow>
-              {t("terminal.openTabs")}
+              {t("terminal.newSession")}
             </TooltipContent>
           </Tooltip>
-          <DropdownMenuContent
-            align="end"
-            className="w-64 max-w-[calc(100vw-1rem)]"
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              const pendingTab = pendingOpenTabFocusRef.current;
-              pendingOpenTabFocusRef.current = null;
-              if (pendingTab) {
-                focusOpenTabTerminal(pendingTab);
-              }
-            }}
-          >
-            <DropdownMenuLabel className="text-muted-foreground">
-              {t("terminal.openTabs")}
-            </DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="min-w-[260px] max-w-[360px]">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={() => onAddTab()}>
+                <MdAdd className="text-sm text-muted-foreground" />
+                {t("terminal.newSession")}
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <MdDns className="text-sm text-muted-foreground" />
+                  {t("terminal.allSessions")}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-[260px] max-w-[360px] max-h-[70vh] overflow-y-auto">
+                  {connectionTree.roots.length === 0 && connectionTree.ungrouped.length === 0 ? (
+                    renderEmptyMenuItem(t("terminal.noSavedSessions"))
+                  ) : (
+                    <>
+                      {connectionTree.roots.map(renderGroupNode)}
+                      {connectionTree.roots.length > 0 && connectionTree.ungrouped.length > 0 && (
+                        <DropdownMenuSeparator />
+                      )}
+                      {connectionTree.ungrouped.map((connection) =>
+                        renderConnectionMenuItem(connection),
+                      )}
+                    </>
+                  )}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuGroup>
+
             <DropdownMenuSeparator />
-            {openTabsMenuItems.map(({ tab, index }) => renderOpenTabMenuItem(tab, index))}
+            <DropdownMenuLabel className="text-muted-foreground">
+              {t("terminal.shellSessions")}
+            </DropdownMenuLabel>
+            {shellConnections.length > 0
+              ? shellConnections.map((connection) => renderConnectionMenuItem(connection))
+              : renderEmptyMenuItem(t("terminal.noShellSessions"))}
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <MdHistory className="text-sm" />
+                {t("terminal.recentSessions")}
+              </span>
+            </DropdownMenuLabel>
+            {recentConnections.length > 0
+              ? recentConnections.map((connection) =>
+                  renderConnectionMenuItem(connection, getRecentConnectionLabel(connection)),
+                )
+              : renderEmptyMenuItem(t("terminal.noRecentSessions"))}
           </DropdownMenuContent>
         </DropdownMenu>
-      )}
+      </div>
 
-      <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="flex h-full w-9 shrink-0 items-center justify-center border-l transition-colors df-hover"
-                style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
-                aria-label={t("terminal.newSession")}
-              >
-                <MdAdd className="text-base" />
-              </button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6} showArrow>
-            {t("terminal.newSession")}
-          </TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="end" className="min-w-[260px] max-w-[360px]">
-          <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={() => onAddTab()}>
-              <MdAdd className="text-sm text-muted-foreground" />
-              {t("terminal.newSession")}
-            </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <MdDns className="text-sm text-muted-foreground" />
-                {t("terminal.allSessions")}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="min-w-[260px] max-w-[360px] max-h-[70vh] overflow-y-auto">
-                {connectionTree.roots.length === 0 && connectionTree.ungrouped.length === 0 ? (
-                  renderEmptyMenuItem(t("terminal.noSavedSessions"))
-                ) : (
-                  <>
-                    {connectionTree.roots.map(renderGroupNode)}
-                    {connectionTree.roots.length > 0 && connectionTree.ungrouped.length > 0 && (
-                      <DropdownMenuSeparator />
-                    )}
-                    {connectionTree.ungrouped.map((connection) =>
-                      renderConnectionMenuItem(connection),
-                    )}
-                  </>
-                )}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </DropdownMenuGroup>
-
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-muted-foreground">
-            {t("terminal.shellSessions")}
-          </DropdownMenuLabel>
-          {shellConnections.length > 0
-            ? shellConnections.map((connection) => renderConnectionMenuItem(connection))
-            : renderEmptyMenuItem(t("terminal.noShellSessions"))}
-
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-muted-foreground">
-            <span className="inline-flex items-center gap-2">
-              <MdHistory className="text-sm" />
-              {t("terminal.recentSessions")}
-            </span>
-          </DropdownMenuLabel>
-          {recentConnections.length > 0
-            ? recentConnections.map((connection) =>
-                renderConnectionMenuItem(connection, getRecentConnectionLabel(connection)),
-              )
-            : renderEmptyMenuItem(t("terminal.noRecentSessions"))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+      <Dialog open={!!renameTab} onOpenChange={(open) => !open && setRenameTab(null)}>
+        <DialogContent showCloseButton={false} className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-sm">{t("tabCtx.renameTitle")}</DialogTitle>
+            <DialogDescription className="sr-only">{t("tabCtx.renameTitle")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Input
+              className="text-sm"
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void handleRenameSubmit();
+                }
+              }}
+              maxLength={64}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setRenameTab(null)}>
+              {t("dialog.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleRenameSubmit()}
+              disabled={!renameValue.trim()}
+            >
+              {t("dialog.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
