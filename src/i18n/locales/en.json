@@ -1654,7 +1654,12 @@
     "shellSessions": "Shell Sessions",
     "showHiddenSessions": "Show Hidden Sessions",
     "showMultiLinePasteDialog": "Multi-line paste prompt",
-    "showMultiLinePasteDialogDesc": "Show a processing window when pasting multi-line text, with options to paste directly, send line by line, or cancel."
+    "showMultiLinePasteDialogDesc": "Show a processing window when pasting multi-line text, with options to paste directly, send line by line, or cancel.",
+    "tabDockMerge": "Drop to merge",
+    "tabDockSplitBottom": "Split Bottom",
+    "tabDockSplitLeft": "Split Left",
+    "tabDockSplitRight": "Split Right",
+    "tabDockSplitTop": "Split Top"
   },
   "terminalCtx": {
     "clearAll": "Clear All",

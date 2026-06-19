@@ -1654,7 +1654,12 @@
     "shellSessions": "Shell会话",
     "showHiddenSessions": "显示被隐藏的会话",
     "showMultiLinePasteDialog": "多行粘贴提示",
-    "showMultiLinePasteDialogDesc": "粘贴多行文本时显示处理窗口，可选择直接粘贴、按行发送或取消。"
+    "showMultiLinePasteDialogDesc": "粘贴多行文本时显示处理窗口，可选择直接粘贴、按行发送或取消。",
+    "tabDockMerge": "拖动以合并",
+    "tabDockSplitBottom": "向下拆分",
+    "tabDockSplitLeft": "向左拆分",
+    "tabDockSplitRight": "向右拆分",
+    "tabDockSplitTop": "向上拆分"
   },
   "terminalCtx": {
     "clearAll": "全部清除",
