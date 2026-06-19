@@ -32,6 +32,8 @@ pub struct AppearanceSettings {
     pub ui_font_size: f64,
     #[serde(default)]
     pub terminal_theme: Option<String>,
+    #[serde(default = "default_minimum_contrast_ratio")]
+    pub minimum_contrast_ratio: f64,
     #[serde(default = "default_false")]
     pub panel_multi_open: bool,
 }
@@ -63,6 +65,9 @@ fn default_cursor_style() -> String {
 fn default_ui_font_size() -> f64 {
     16.0
 }
+fn default_minimum_contrast_ratio() -> f64 {
+    1.0
+}
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -80,6 +85,7 @@ impl Default for AppearanceSettings {
             cursor_blink: true,
             ui_font_size: default_ui_font_size(),
             terminal_theme: None,
+            minimum_contrast_ratio: default_minimum_contrast_ratio(),
             panel_multi_open: false,
         }
     }

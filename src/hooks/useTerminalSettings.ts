@@ -95,13 +95,15 @@ export function useTerminalSettings(
       options.fontSize = appearance.font_size;
       options.cursorBlink = appearance.cursor_blink;
       options.cursorStyle = appearance.cursor_style as "block" | "underline" | "bar";
+      options.minimumContrastRatio = appearance.minimum_contrast_ratio;
+      scheduleTextureRefresh();
 
       // Auto-fit on font size change
       if (fitAddonRef.current) {
         requestAnimationFrame(() => fitAddonRef.current?.fit());
       }
     }
-  }, [appearance, terminalRef, fitAddonRef]);
+  }, [appearance, terminalRef, fitAddonRef, scheduleTextureRefresh]);
 
   // React to terminal core settings changes: scrollback
   useEffect(() => {

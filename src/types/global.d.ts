@@ -453,6 +453,7 @@ export interface AppearanceSettings {
   cursor_blink: boolean;
   ui_font_size: number;
   terminal_theme: string | null;
+  minimum_contrast_ratio: number;
   /** Allow opening multiple side panels at once, stacked vertically. */
   panel_multi_open: boolean;
 }

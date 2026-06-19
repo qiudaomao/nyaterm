@@ -59,6 +59,7 @@ const TERMINAL_BUILT_IN_FONTS = new Set(
   PACKAGE_FONT_INFOS.filter((font) => font.monospace).map((font) => font.family.toLowerCase()),
 );
 const BACKGROUND_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "bmp"];
+const MINIMUM_CONTRAST_OPTIONS = [1, 3, 4.5, 7, 21] as const;
 let cachedSystemFontInfos: FontInfo[] | null = null;
 let systemFontInfosRequest: Promise<FontInfo[]> | null = null;
 
@@ -508,6 +509,23 @@ export function AppearanceTab() {
           {themeList.map((tm) => (
             <SelectItem key={tm.id} value={tm.id}>
               {tm.name}
+            </SelectItem>
+          ))}
+        </SettingSelect>
+
+        <SettingSelect
+          label={t("settings.minimumContrastRatio")}
+          desc={t("settings.minimumContrastRatioDesc")}
+          value={String(appearance.minimum_contrast_ratio ?? 1)}
+          onValueChange={(v) =>
+            updateAppearance({
+              minimum_contrast_ratio: Number(v),
+            })
+          }
+        >
+          {MINIMUM_CONTRAST_OPTIONS.map((ratio) => (
+            <SelectItem key={ratio} value={String(ratio)}>
+              {t(`settings.minimumContrastRatio_${String(ratio).replace(".", "_")}`)}
             </SelectItem>
           ))}
         </SettingSelect>

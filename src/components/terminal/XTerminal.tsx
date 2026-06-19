@@ -378,6 +378,7 @@ export default function XTerminal({
       cursorStyle: appearance.cursor_style as "block" | "underline" | "bar",
       fontSize: appearance.font_size,
       fontFamily: appearance.font_family,
+      minimumContrastRatio: appearance.minimum_contrast_ratio,
       wordSeparator: interaction.word_separators,
       theme: { ...terminalThemeColors },
       allowTransparency: terminalTransparencyEnabled,

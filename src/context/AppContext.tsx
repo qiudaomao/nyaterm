@@ -198,6 +198,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     cursor_blink: true,
     ui_font_size: 16,
     terminal_theme: null,
+    minimum_contrast_ratio: 1,
     panel_multi_open: false,
   },
   proxy: {

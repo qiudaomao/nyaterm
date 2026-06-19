@@ -35,6 +35,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     cursor_style: "block",
     cursor_blink: true,
     ui_font_size: 16,
+    minimum_contrast_ratio: 1,
     panel_multi_open: false,
   },
   proxy: { enabled: false, protocol: "socks5", host: "127.0.0.1", port: 1080 },
