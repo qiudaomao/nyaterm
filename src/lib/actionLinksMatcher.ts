@@ -295,6 +295,53 @@ export function createHostPortMatcher(options: HostPortMatcherOptions = {}): Act
 
   const finalizedActions = finalizeDefaultAction(actions, options.defaultAction);
 
+  const SOURCE_LOCATION_EXTENSIONS = new Set([
+    "py",
+    "js",
+    "jsx",
+    "ts",
+    "tsx",
+    "mjs",
+    "cjs",
+    "java",
+    "kt",
+    "kts",
+    "go",
+    "rs",
+    "rb",
+    "php",
+    "c",
+    "cc",
+    "cpp",
+    "cxx",
+    "h",
+    "hpp",
+    "cs",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "ps1",
+    "bat",
+    "cmd",
+    "log",
+    "txt",
+    "md",
+    "json",
+    "yaml",
+    "yml",
+    "xml",
+    "toml",
+    "ini",
+  ]);
+
+  function looksLikeFileHost(host: string): boolean {
+    const parts = host.toLowerCase().split(".");
+    const ext = parts[parts.length - 1];
+
+    return !!ext && SOURCE_LOCATION_EXTENSIONS.has(ext);
+  }
+
   return createRegexMatcher({
     id: "builtin-host-port",
     label: options.label ?? "Host:Port",
@@ -302,7 +349,14 @@ export function createHostPortMatcher(options: HostPortMatcherOptions = {}): Act
     priority: options.priority ?? 110,
     regex:
       /\b((?:localhost|(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63})):(\d{1,5})\b/g,
-    validate: (text) => isValidHostPort(text),
+    validate: (text, match) => {
+      if (!isValidHostPort(text)) return false;
+
+      const host = match[1] ?? text.split(":")[0] ?? "";
+      if (looksLikeFileHost(host)) return false;
+
+      return true;
+    },
     mapData: (_text, match) => ({
       host: match[1] ?? "",
       port: match[2] ?? "",
