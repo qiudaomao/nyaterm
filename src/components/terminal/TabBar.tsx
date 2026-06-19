@@ -251,6 +251,7 @@ function TabBar({
   const tabStripRef = useRef<HTMLDivElement | null>(null);
   const tabButtonRefs = useRef(new Map<string, HTMLDivElement>());
   const draggedTabIdRef = useRef<string | null>(null);
+  const droppedTabRef = useRef(false);
   const tabStripAnimatingRef = useRef(false);
   const tabStripScrollAnimationRef = useRef<(() => void) | null>(null);
   const [tabStripScroll, setTabStripScroll] = useState({
@@ -603,6 +604,7 @@ function TabBar({
 
   const resetDragState = useCallback(() => {
     draggedTabIdRef.current = null;
+    droppedTabRef.current = false;
     setDraggedTabId(null);
     setDropIndex(null);
   }, []);
@@ -637,6 +639,7 @@ function TabBar({
       const effectiveTabId = draggedTabIdRef.current || draggedTabId || externalTabId;
       if (!effectiveTabId) return;
 
+      droppedTabRef.current = true;
       const fromIndex = tabs.findIndex((tab) => tab.id === effectiveTabId);
       if (fromIndex === -1) {
         if (onMoveTabHere) {
@@ -664,19 +667,31 @@ function TabBar({
     event.dataTransfer.setData("text/plain", tabId);
     event.dataTransfer.setData("application/nyaterm-tab", tabId);
     draggedTabIdRef.current = tabId;
+    droppedTabRef.current = false;
     setDraggedTabId(tabId);
     setDropIndex(tabs.findIndex((tab) => tab.id === tabId));
   };
 
   const handleDragEnd = (event: DragEvent<HTMLDivElement>) => {
+    if (droppedTabRef.current) {
+      resetDragState();
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
+      });
+      return;
+    }
+
     const fallbackTabId = draggedTabIdRef.current;
     const strip = tabStripRef.current;
     if (fallbackTabId && strip && event.clientX !== 0) {
       const rect = strip.getBoundingClientRect();
       const horizontalTolerance = 48;
+      const verticalTolerance = 16;
       const isNearTabStrip =
         event.clientX >= rect.left - horizontalTolerance &&
-        event.clientX <= rect.right + horizontalTolerance;
+        event.clientX <= rect.right + horizontalTolerance &&
+        event.clientY >= rect.top - verticalTolerance &&
+        event.clientY <= rect.bottom + verticalTolerance;
       if (isNearTabStrip) {
         handleDropAtIndex(getInsertionIndexFromClientX(event.clientX));
         return;

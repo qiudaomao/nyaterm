@@ -17,6 +17,7 @@ export interface TerminalWindowSplit {
 }
 
 export type TerminalWindowNode = TerminalWindowLeaf | TerminalWindowSplit;
+export type SplitEdgeDirection = "left" | "right" | "top" | "bottom";
 
 let terminalWindowIdCounter = 0;
 
@@ -374,6 +375,42 @@ export function moveTabBetweenLeaves(
   });
 
   return next;
+}
+
+export function splitLeafWithTab(
+  node: TerminalWindowNode,
+  tabId: string,
+  targetLeafId: string,
+  edge: SplitEdgeDirection,
+): TerminalWindowNode | null {
+  const sourceLeaf = findTerminalWindowLeafByTabId(node, tabId);
+  const targetLeaf = findTerminalWindowLeafById(node, targetLeafId);
+  if (!sourceLeaf || !targetLeaf) return node;
+
+  if (sourceLeaf.id === targetLeafId && sourceLeaf.tabIds.length <= 1) {
+    return node;
+  }
+
+  const next = removeTabFromTerminalWindows(node, tabId);
+  if (!next) return null;
+
+  const direction: PaneSplitDirection =
+    edge === "left" || edge === "right" ? "vertical" : "horizontal";
+  const tabLeaf = createTerminalWindowLeaf([tabId], tabId);
+
+  return updateLeafById(next, targetLeafId, (leaf) => {
+    const target = normalizeLeaf(leaf);
+    const tabFirst = edge === "left" || edge === "top";
+
+    return {
+      id: createTerminalWindowId("window-split"),
+      kind: "split",
+      direction,
+      ratio: 0.5,
+      first: tabFirst ? tabLeaf : target,
+      second: tabFirst ? target : tabLeaf,
+    };
+  });
 }
 
 export function flattenTerminalWindows(
