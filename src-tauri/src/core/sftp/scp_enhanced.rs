@@ -31,6 +31,23 @@ impl ScpEnhancedBackend {
                 "SCP Enhanced: required commands not available on remote host".to_string(),
             ));
         }
+
+        let find_result =
+            exec_command_on(ssh_handle, "LC_ALL=C find . -maxdepth 0 -printf 'x\\0y'").await?;
+        if find_result.exit_code != 0 || !find_result.stdout.starts_with(b"x\0y") {
+            return Err(AppError::Channel(
+                "SCP Enhanced: remote find does not support GNU -printf with NUL output"
+                    .to_string(),
+            ));
+        }
+
+        let stat_result = exec_command_on(ssh_handle, "LC_ALL=C stat -c 'x\\0y' .").await?;
+        if stat_result.exit_code != 0 || !stat_result.stdout.starts_with(b"x\0y") {
+            return Err(AppError::Channel(
+                "SCP Enhanced: remote stat does not support GNU -c with NUL output".to_string(),
+            ));
+        }
+
         Ok(())
     }
 
