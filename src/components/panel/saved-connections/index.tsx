@@ -1,4 +1,4 @@
-import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BiExport, BiImport } from "react-icons/bi";
 import {
@@ -39,9 +39,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context/AppContext";
 import { useConfigTransfer } from "@/hooks/useConfigTransfer";
+import { resolveShortcutKeys } from "@/hooks/useShortcutMap";
 import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { logger } from "@/lib/logger";
+import { matchesKeyEvent } from "@/lib/shortcutRegistry";
 import type { NewSessionTarget } from "@/lib/windowManager";
 import type { Group, SavedConnection } from "@/types/global";
 import ConnectionItem from "./ConnectionItem";
@@ -102,6 +104,7 @@ export default function SavedConnections({
   } = useApp();
   const { t } = useTranslation();
   const { handleExport, passwordAlert } = useConfigTransfer();
+  const panelRootRef = useRef<HTMLDivElement | null>(null);
 
   // ── UI state ──────────────────────────────────────────────────────────────
   // Tracks in-flight connections to prevent duplicate invocations (not shown in UI)
@@ -500,6 +503,54 @@ export default function SavedConnections({
       toast.error(String(e));
     }
   };
+
+  const handleCopyConnections = useCallback(
+    async (connections: SavedConnection[]) => {
+      if (connections.length === 0) return;
+
+      try {
+        await Promise.all(
+          connections.map((connection) =>
+            invoke("save_connection", {
+              connection: {
+                ...connection,
+                id: "",
+                name: `${connection.name} (copy)`,
+                password: undefined,
+              },
+            }),
+          ),
+        );
+        refreshConnections();
+      } catch (e) {
+        toast.error(String(e));
+      }
+    },
+    [refreshConnections],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!panelRootRef.current) return;
+
+      if (
+        !matchesKeyEvent(
+          resolveShortcutKeys("savedConnections.copySelected", appSettings.keybindings),
+          event,
+        )
+      ) {
+        return;
+      }
+
+      if (selectedConnections.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void handleCopyConnections(selectedConnections);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [appSettings.keybindings, handleCopyConnections, selectedConnections]);
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -995,7 +1046,7 @@ export default function SavedConnections({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SavedConnectionsContext.Provider value={ctxValue}>
-      <div className="h-full flex flex-col overflow-hidden">
+      <div ref={panelRootRef} className="h-full flex flex-col overflow-hidden">
         <PanelHeader
           title={t("panel.savedConnections")}
           actions={
