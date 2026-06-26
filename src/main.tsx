@@ -13,6 +13,7 @@ import { Toaster } from "./components/ui/sonner";
 import "./index.css";
 import { applyThemeToDOM, THEME_CACHE_KEY, ThemeProvider } from "./context/ThemeContext";
 import { DEFAULT_THEME_ID, themes } from "./lib/themes";
+import { installWebviewReloadGuard } from "./lib/webviewReloadGuard";
 
 // Apply cached theme synchronously before React renders to avoid flash
 try {
@@ -21,6 +22,7 @@ try {
   applyThemeToDOM(theme.colors);
 } catch {}
 
+installWebviewReloadGuard();
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 const params = new URLSearchParams(window.location.search);

@@ -2226,7 +2226,7 @@ export default function XTerminal({
           onPasteClipboard={pasteClipboard}
         >
           <div className={`h-full w-full ${showContentPadding ? "pl-2" : ""}`}>
-            <div ref={containerRef} className="h-full w-full" />
+            <div ref={containerRef} data-terminal-root="true" className="h-full w-full" />
           </div>
         </TerminalContextMenu>
 
