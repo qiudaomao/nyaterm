@@ -13,10 +13,9 @@ title: 赞助
 
 可以通过微信或支付宝赞助项目：
 
-<p>
-  <img src="/img/WeChatPay.jpg" alt="微信赞助收款码" width="260" />
-  <img src="/img/AliPay.jpg" alt="支付宝赞助收款码" width="260" />
-</p>
+![微信赞助收款码](../static/img/WeChatPay.jpg)
+
+![支付宝赞助收款码](../static/img/AliPay.jpg)
 
 ## 其他支持方式
 

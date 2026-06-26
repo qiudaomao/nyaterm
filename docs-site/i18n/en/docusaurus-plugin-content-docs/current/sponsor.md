@@ -13,10 +13,9 @@ Sponsorship is completely optional and does not affect open-source access to Nya
 
 WeChat Pay and Alipay are available for sponsorship:
 
-<p>
-  <img src="/img/WeChatPay.jpg" alt="WeChat Pay sponsorship QR code" width="260" />
-  <img src="/img/AliPay.jpg" alt="Alipay sponsorship QR code" width="260" />
-</p>
+![WeChat Pay sponsorship QR code](../../../../static/img/WeChatPay.jpg)
+
+![Alipay sponsorship QR code](../../../../static/img/AliPay.jpg)
 
 ## Other Ways To Support
 
