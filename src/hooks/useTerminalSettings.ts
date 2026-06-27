@@ -100,6 +100,8 @@ export function useTerminalSettings(
         appearance.font_size,
         terminalSettings.font_size_delta,
       );
+      options.fontWeight = appearance.font_weight;
+      options.fontWeightBold = appearance.font_weight_bold;
       options.cursorBlink = appearance.cursor_blink;
       options.cursorStyle = appearance.cursor_style as "block" | "underline" | "bar";
       options.minimumContrastRatio = appearance.minimum_contrast_ratio;

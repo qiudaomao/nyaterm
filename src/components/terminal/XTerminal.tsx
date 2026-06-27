@@ -485,6 +485,8 @@ export default function XTerminal({
       cursorStyle: appearance.cursor_style as "block" | "underline" | "bar",
       fontSize: resolveTerminalFontSize(appearance.font_size, terminalSettings.font_size_delta),
       fontFamily: appearance.font_family,
+      fontWeight: appearance.font_weight,
+      fontWeightBold: appearance.font_weight_bold,
       minimumContrastRatio: appearance.minimum_contrast_ratio,
       wordSeparator: interaction.word_separators,
       macOptionIsMeta: interaction.alt_as_meta,

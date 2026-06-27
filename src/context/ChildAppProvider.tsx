@@ -33,6 +33,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     font_family: 'JetBrains Mono, Consolas, "Cascadia Mono", monospace',
     ui_font_family: 'JetBrains Mono, "Noto Sans SC Variable", Inter, sans-serif',
     font_size: DEFAULT_TERMINAL_FONT_SIZE,
+    font_weight: 400,
+    font_weight_bold: 700,
     ligatures: false,
     background_opacity: 1.0,
     background_image_path: null,

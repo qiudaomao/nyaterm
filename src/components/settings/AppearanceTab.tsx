@@ -60,6 +60,7 @@ const TERMINAL_BUILT_IN_FONTS = new Set(
 );
 const BACKGROUND_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "bmp"];
 const MINIMUM_CONTRAST_OPTIONS = [1, 3, 4.5, 7, 21] as const;
+const TERMINAL_FONT_WEIGHT_OPTIONS = [300, 400, 500, 600, 700, 800] as const;
 let cachedSystemFontInfos: FontInfo[] | null = null;
 let systemFontInfosRequest: Promise<FontInfo[]> | null = null;
 
@@ -397,7 +398,11 @@ function FontStackSection({
                     </SelectItem>
                   )}
                   {options.map((option) => (
-                    <SelectItem key={option} value={option}>
+                    <SelectItem
+                      key={option}
+                      value={option}
+                      style={{ fontFamily: previewFontFamily(option, previewFallback) }}
+                    >
                       {option}{" "}
                       {builtInFonts.has(option.toLowerCase()) && `(${t("settings.fontBuiltIn")})`}
                     </SelectItem>
@@ -588,6 +593,32 @@ export function AppearanceTab() {
               })
             }
           />
+          <SettingSelect
+            label={t("settings.terminalFontWeight")}
+            desc={t("settings.terminalFontWeightDesc")}
+            value={String(appearance.font_weight ?? 400)}
+            controlClassName="max-w-sm"
+            onValueChange={(v) => updateAppearance({ font_weight: Number(v) })}
+          >
+            {TERMINAL_FONT_WEIGHT_OPTIONS.map((weight) => (
+              <SelectItem key={weight} value={String(weight)}>
+                {t(`settings.fontWeight_${weight}`)}
+              </SelectItem>
+            ))}
+          </SettingSelect>
+          <SettingSelect
+            label={t("settings.terminalFontWeightBold")}
+            desc={t("settings.terminalFontWeightBoldDesc")}
+            value={String(appearance.font_weight_bold ?? 700)}
+            controlClassName="max-w-sm"
+            onValueChange={(v) => updateAppearance({ font_weight_bold: Number(v) })}
+          >
+            {TERMINAL_FONT_WEIGHT_OPTIONS.map((weight) => (
+              <SelectItem key={weight} value={String(weight)}>
+                {t(`settings.fontWeight_${weight}`)}
+              </SelectItem>
+            ))}
+          </SettingSelect>
           <SettingNumberInput
             label={t("settings.uiFontSize")}
             min={12}

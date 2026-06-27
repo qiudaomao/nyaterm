@@ -14,6 +14,10 @@ pub struct AppearanceSettings {
     pub ui_font_family: String,
     #[serde(default = "default_font_size")]
     pub font_size: f64,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: u16,
+    #[serde(default = "default_font_weight_bold")]
+    pub font_weight_bold: u16,
     #[serde(default = "default_false")]
     pub ligatures: bool,
     #[serde(default = "default_opacity")]
@@ -50,6 +54,12 @@ fn default_ui_font() -> String {
 fn default_font_size() -> f64 {
     16.0
 }
+fn default_font_weight() -> u16 {
+    400
+}
+fn default_font_weight_bold() -> u16 {
+    700
+}
 fn default_opacity() -> f64 {
     1.0
 }
@@ -76,6 +86,8 @@ impl Default for AppearanceSettings {
             font_family: default_font(),
             ui_font_family: default_ui_font(),
             font_size: default_font_size(),
+            font_weight: default_font_weight(),
+            font_weight_bold: default_font_weight_bold(),
             ligatures: false,
             background_opacity: default_opacity(),
             background_image_path: None,

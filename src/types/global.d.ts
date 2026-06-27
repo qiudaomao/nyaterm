@@ -460,6 +460,8 @@ export interface AppearanceSettings {
   font_family: string;
   ui_font_family: string;
   font_size: number;
+  font_weight: number;
+  font_weight_bold: number;
   ligatures: boolean;
   background_opacity: number;
   background_image_path: string | null;

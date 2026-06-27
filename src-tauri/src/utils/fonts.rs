@@ -1,6 +1,4 @@
-use font_kit::family_name::FamilyName;
 use font_kit::font::Font;
-use font_kit::properties::Properties;
 use font_kit::source::SystemSource;
 use serde::Serialize;
 
@@ -81,16 +79,18 @@ fn is_generic_monospace_family(family: &str) -> bool {
 }
 
 fn is_system_font_family_monospace_with_source(source: &SystemSource, family: &str) -> bool {
-    let Ok(handle) =
-        source.select_best_match(&[FamilyName::Title(family.to_string())], &Properties::new())
-    else {
+    let Ok(family_handle) = source.select_family_by_name(family) else {
         return false;
     };
 
-    let Ok(font) = Font::from_handle(&handle) else {
-        return false;
-    };
+    family_handle
+        .fonts()
+        .iter()
+        .filter_map(|handle| Font::from_handle(handle).ok())
+        .any(|font| is_font_monospace(&font))
+}
 
+fn is_font_monospace(font: &Font) -> bool {
     font.is_monospace() || has_equal_sample_advances(&font)
 }
 
