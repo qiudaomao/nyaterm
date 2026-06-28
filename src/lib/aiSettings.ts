@@ -336,7 +336,7 @@ export const BUILTIN_PROVIDERS: Partial<Record<AIProviderKind, BuiltinProviderIn
   },
   mimo: {
     label: "Mimo",
-    defaultBaseUrl: "https://api.mimo.ai/v1/",
+    defaultBaseUrl: "https://api.xiaomimimo.com/v1/",
     models: [
       "mimo-v2-pro",
       "mimo-v2-flash",
@@ -471,7 +471,7 @@ const DEFAULT_PROVIDER_PROFILES: AIProviderProfile[] = [
     name: "Mimo",
     provider_kind: "mimo",
     model: "mimo-v2.5-pro",
-    base_url: "https://api.mimo.ai/v1/",
+    base_url: "https://api.xiaomimimo.com/v1/",
     api_key: null,
     enabled: false,
   },

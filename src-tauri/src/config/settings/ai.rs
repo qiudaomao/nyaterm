@@ -280,7 +280,7 @@ fn default_provider_profiles() -> Vec<AiProviderProfile> {
             name: "Mimo".to_string(),
             provider_kind: AiProviderKind::Mimo,
             model: "mimo-v2.5-pro".to_string(),
-            base_url: Some("https://api.mimo.ai/v1/".to_string()),
+            base_url: Some("https://api.xiaomimimo.com/v1/".to_string()),
             api_key: None,
             enabled: false,
         },
