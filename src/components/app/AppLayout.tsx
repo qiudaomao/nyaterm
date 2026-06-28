@@ -10,6 +10,8 @@ import type { HostKeyVerifyRequest } from "@/components/dialog/connections/HostK
 import { HostKeyVerifyDialog } from "@/components/dialog/connections/HostKeyVerifyDialog";
 import type { OtpRequest } from "@/components/dialog/connections/OtpDialog";
 import { OtpDialog } from "@/components/dialog/connections/OtpDialog";
+import type { SshAuthRequest } from "@/components/dialog/connections/SshAuthDialog";
+import { SshAuthDialog } from "@/components/dialog/connections/SshAuthDialog";
 import { TransferDuplicateDialog } from "@/components/dialog/file-explorer/TransferDuplicateDialog";
 import SyncGroupDialog from "@/components/dialog/terminal/SyncGroupDialog";
 import ActivityBar from "@/components/layout/ActivityBar";
@@ -104,6 +106,8 @@ interface AppLayoutProps {
     onQuitConfirm: () => void;
     otpRequest: OtpRequest | null;
     onOtpDone: (requestId: string) => void;
+    sshAuthRequest: SshAuthRequest | null;
+    onSshAuthDone: (requestId: string) => void;
     hostKeyVerifyRequest: HostKeyVerifyRequest | null;
     onHostKeyVerifyDone: () => void;
     modalChildWindowCount: number;
@@ -458,6 +462,7 @@ export default function AppLayout({
         />
 
         <OtpDialog request={dialogs.otpRequest} onDone={dialogs.onOtpDone} />
+        <SshAuthDialog request={dialogs.sshAuthRequest} onDone={dialogs.onSshAuthDone} />
         <HostKeyVerifyDialog
           request={dialogs.hostKeyVerifyRequest}
           onDone={dialogs.onHostKeyVerifyDone}

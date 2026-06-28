@@ -54,9 +54,11 @@ pub enum SshAuth {
     #[serde(rename = "none")]
     None,
     #[serde(rename = "password")]
-    Password { password: String },
+    Password { password: Option<String> },
     #[serde(rename = "key")]
     Key {
+        #[serde(default)]
+        key_id: Option<String>,
         key_data: String,
         #[serde(default)]
         cert_data: Option<String>,

@@ -43,6 +43,7 @@ import type { OtpEntry, ProxyConfig, SavedPassword, SshKey } from "@/types/globa
 
 const MASKED_PASSWORD_PLACEHOLDER = "••••••••";
 export type SshAuthMode = "none" | "password" | "key";
+type PasswordSource = "ask" | "direct" | "saved";
 
 interface SshFormProps {
   host: string;
@@ -271,8 +272,8 @@ export function SshForm({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showDirectPassword, setShowDirectPassword] = useState(false);
   const [directPasswordLoading, setDirectPasswordLoading] = useState(false);
-  const [passwordSource, setPasswordSource] = useState<"direct" | "saved">(
-    passwordId ? "saved" : "direct",
+  const [passwordSource, setPasswordSource] = useState<PasswordSource>(
+    passwordId ? "saved" : password || hasPassword ? "direct" : "ask",
   );
 
   const loadSshKeys = useCallback(async () => {
@@ -302,8 +303,10 @@ export function SshForm({
   useEffect(() => {
     if (passwordId) {
       setPasswordSource("saved");
+    } else if (password || hasPassword) {
+      setPasswordSource("direct");
     }
-  }, [passwordId]);
+  }, [hasPassword, password, passwordId]);
 
   useEffect(() => {
     let unlisten: () => void;
@@ -458,18 +461,25 @@ export function SshForm({
             <Tabs
               value={passwordSource}
               onValueChange={(value) => {
-                const nextSource = value as "direct" | "saved";
+                const nextSource = value as PasswordSource;
                 setPasswordSource(nextSource);
                 if (nextSource === "direct") {
                   setPasswordId("");
+                } else if (nextSource === "saved") {
+                  setPassword("");
+                  setHasPassword(false);
                 } else {
+                  setPasswordId("");
                   setPassword("");
                   setHasPassword(false);
                 }
               }}
               className="mt-1 w-full"
             >
-              <TabsList className="grid h-8 w-full grid-cols-2 pointer-events-auto">
+              <TabsList className="grid h-8 w-full grid-cols-3 pointer-events-auto">
+                <TabsTrigger value="ask" className="text-xs">
+                  {t("dialog.askWhenConnecting")}
+                </TabsTrigger>
                 <TabsTrigger value="direct" className="text-xs">
                   {t("dialog.directPassword")}
                 </TabsTrigger>
@@ -478,10 +488,15 @@ export function SshForm({
                 </TabsTrigger>
               </TabsList>
 
+              <TabsContent value="ask" className="mt-3 border-0 outline-none">
+                <div className="rounded-md border border-dashed bg-accent/25 px-3 py-2 text-[0.6875rem] leading-relaxed text-muted-foreground">
+                  {t("dialog.askPasswordDescription")}
+                </div>
+              </TabsContent>
+
               <TabsContent value="direct" className="mt-3 border-0 outline-none">
                 <Label className="text-xs font-medium text-foreground/80">
                   {t("dialog.password")}
-                  <RequiredMark />
                 </Label>
                 <div className="relative mt-1">
                   <Input

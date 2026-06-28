@@ -20,7 +20,9 @@ use std::sync::Arc;
 use crate::cmd::app::AppLockState;
 use crate::core::ai::AgentApprovalManager;
 use crate::core::sftp::TransferDuplicateManager;
-use crate::core::ssh::{HostKeyVerifyManager, PendingAuthManager, TunnelManager};
+use crate::core::ssh::{
+    HostKeyVerifyManager, PendingAuthManager, PendingSshAuthManager, TunnelManager,
+};
 use crate::core::{CloudSyncManager, QuickCommandsStore, RecordingManager, SessionManager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +34,7 @@ pub fn run() {
     let tunnel_manager = Arc::new(TunnelManager::new());
     let recording_manager = Arc::new(RecordingManager::new());
     let pending_auth_manager = Arc::new(PendingAuthManager::new());
+    let pending_ssh_auth_manager = Arc::new(PendingSshAuthManager::new());
     let host_key_verify_manager = Arc::new(HostKeyVerifyManager::new());
     let quick_commands_store = Arc::new(QuickCommandsStore::new());
     let cloud_sync_manager = Arc::new(CloudSyncManager::new());
@@ -62,6 +65,7 @@ pub fn run() {
         .manage(tunnel_manager.clone())
         .manage(recording_manager.clone())
         .manage(pending_auth_manager.clone())
+        .manage(pending_ssh_auth_manager.clone())
         .manage(host_key_verify_manager.clone())
         .manage(quick_commands_store.clone())
         .manage(cloud_sync_manager.clone())
@@ -144,6 +148,8 @@ pub fn run() {
             cmd::session::set_recording_memory_limit,
             cmd::session::submit_otp_response,
             cmd::session::cancel_otp_request,
+            cmd::session::submit_ssh_auth_response,
+            cmd::session::cancel_ssh_auth_request,
             cmd::session::respond_host_key_verify,
             cmd::session::zmodem_accept_download,
             cmd::session::zmodem_accept_upload,

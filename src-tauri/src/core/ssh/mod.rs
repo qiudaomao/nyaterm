@@ -11,7 +11,7 @@ mod session;
 mod tunnel;
 pub(crate) mod x11_forwarding;
 
-pub use auth::PendingAuthManager;
+pub use auth::{PendingAuthManager, PendingSshAuthManager, SshAuthResponse};
 pub(crate) use auth::load_saved_ssh_config;
 pub use client::HostKeyVerifyManager;
 pub(crate) use client::{

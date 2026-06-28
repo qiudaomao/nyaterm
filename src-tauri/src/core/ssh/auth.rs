@@ -1,9 +1,9 @@
 use super::client::{SshAuth, SshConfig, SshHandler, SshPostLoginConfig};
 use crate::error::{AppError, AppResult};
 use crate::observability::{self, StructuredLog, StructuredLogLevel};
-use russh::MethodKind;
+use russh::{MethodKind, MethodSet};
 use russh::client::{self, KeyboardInteractiveAuthResponse};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
@@ -37,6 +37,56 @@ impl PendingAuthManager {
     }
 }
 
+/// Manages pending runtime SSH credential requests awaiting user input.
+pub struct PendingSshAuthManager {
+    pending: Mutex<HashMap<String, oneshot::Sender<Option<SshAuthResponse>>>>,
+}
+
+impl PendingSshAuthManager {
+    pub fn new() -> Self {
+        Self {
+            pending: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub async fn register(&self, request_id: String) -> oneshot::Receiver<Option<SshAuthResponse>> {
+        let (tx, rx) = oneshot::channel();
+        self.pending.lock().await.insert(request_id, tx);
+        rx
+    }
+
+    pub async fn respond(&self, request_id: &str, response: Option<SshAuthResponse>) -> bool {
+        if let Some(tx) = self.pending.lock().await.remove(request_id) {
+            tx.send(response).is_ok()
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshAuthResponse {
+    #[serde(default)]
+    pub method: Option<String>,
+    #[serde(default)]
+    pub secret: Option<String>,
+    #[serde(default)]
+    pub key_id: Option<String>,
+    #[serde(default)]
+    pub save: Option<SshAuthSaveRequest>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshAuthSaveRequest {
+    pub kind: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub password_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct OtpPrompt {
     prompt: String,
@@ -54,6 +104,93 @@ struct OtpRequestPayload {
     prompts: Vec<OtpPrompt>,
     otp_entry_id: Option<String>,
     target_window_label: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SshAuthPromptReason {
+    MissingPassword,
+    PasswordRejected,
+    KeyPassphraseRequired,
+    KeyRejectedPasswordFallback,
+    PublickeyRejected,
+    PublickeyRequired,
+}
+
+impl SshAuthPromptReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::MissingPassword => "missing_password",
+            Self::PasswordRejected => "password_rejected",
+            Self::KeyPassphraseRequired => "key_passphrase_required",
+            Self::KeyRejectedPasswordFallback => "key_rejected_password_fallback",
+            Self::PublickeyRejected => "publickey_rejected",
+            Self::PublickeyRequired => "publickey_required",
+        }
+    }
+
+    fn prompt_kind(self) -> &'static str {
+        match self {
+            Self::KeyPassphraseRequired => "passphrase",
+            Self::PublickeyRejected | Self::PublickeyRequired => "publickey",
+            _ => "password",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SshAuthRequestPayload {
+    request_id: String,
+    connection_id: Option<String>,
+    connection_name: String,
+    host: String,
+    port: u16,
+    username: String,
+    reason: String,
+    prompt_kind: String,
+    available_methods: Vec<String>,
+    current_auth_mode: String,
+    attempt: u32,
+    can_save: bool,
+    password_id: Option<String>,
+    target_window_label: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeSecret {
+    value: String,
+    save: Option<RuntimeSecretSave>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeKeyPassphrase {
+    key_id: String,
+    secret: RuntimeSecret,
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeSecretSave {
+    ConnectionInline,
+    SavedPassword { id: Option<String>, name: String },
+    KeyPassphrase,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SshRuntimeAuthUpdates {
+    password: Option<RuntimeSecret>,
+    key_passphrase: Option<RuntimeKeyPassphrase>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimePasswordAuthOutcome {
+    password: Option<RuntimeSecret>,
+    key_passphrase: Option<RuntimeKeyPassphrase>,
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeAuthSelection {
+    Password(RuntimeSecret),
+    Key(String),
 }
 
 fn build_ids(connection_id: Option<&str>, request_id: Option<&str>) -> Option<Value> {
@@ -97,6 +234,99 @@ fn log_structured(
         error,
         client_timestamp: None,
     });
+}
+
+#[derive(Debug, Clone)]
+struct SshAuthFailure {
+    message: String,
+    remaining_methods: Vec<String>,
+    partial_success: bool,
+}
+
+impl SshAuthFailure {
+    fn from_auth_result(
+        message: impl Into<String>,
+        remaining_methods: &MethodSet,
+        partial_success: bool,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            remaining_methods: method_names(remaining_methods),
+            partial_success,
+        }
+    }
+
+    fn from_error(message: impl Into<String>, error: AppError) -> Self {
+        Self {
+            message: format!("{}: {}", message.into(), error),
+            remaining_methods: Vec::new(),
+            partial_success: false,
+        }
+    }
+
+    fn has_method(&self, method: &str) -> bool {
+        self.remaining_methods
+            .iter()
+            .any(|candidate| candidate == method)
+    }
+
+    fn password_available(&self) -> bool {
+        self.has_method("password") || self.has_method("keyboard-interactive")
+    }
+
+    fn publickey_available(&self) -> bool {
+        self.has_method("publickey")
+    }
+}
+
+impl From<SshAuthFailure> for AppError {
+    fn from(value: SshAuthFailure) -> Self {
+        if value.remaining_methods.is_empty() {
+            AppError::Auth(value.message)
+        } else {
+            AppError::Auth(format!(
+                "{} (remaining methods: {}; partial success: {})",
+                value.message,
+                value.remaining_methods.join(", "),
+                value.partial_success
+            ))
+        }
+    }
+}
+
+fn method_names(methods: &MethodSet) -> Vec<String> {
+    methods.iter().map(String::from).collect()
+}
+
+fn current_auth_mode(auth: &SshAuth) -> &'static str {
+    match auth {
+        SshAuth::None => "none",
+        SshAuth::Password { .. } => "password",
+        SshAuth::Key { .. } => "key",
+    }
+}
+
+fn default_available_methods(reason: SshAuthPromptReason) -> Vec<String> {
+    match reason.prompt_kind() {
+        "passphrase" | "publickey" => vec!["publickey".to_string()],
+        _ => vec!["password".to_string(), "keyboard-interactive".to_string()],
+    }
+}
+
+fn runtime_prompt_kind(reason: SshAuthPromptReason, available_methods: &[String]) -> &'static str {
+    if reason == SshAuthPromptReason::KeyPassphraseRequired {
+        return "passphrase";
+    }
+
+    let password_available = available_methods
+        .iter()
+        .any(|method| method == "password" || method == "keyboard-interactive");
+    let publickey_available = available_methods.iter().any(|method| method == "publickey");
+    if password_available && publickey_available {
+        "auth_method"
+    } else {
+        reason.prompt_kind()
+    }
 }
 
 pub(crate) fn load_saved_ssh_config(app: &AppHandle, connection_id: &str) -> AppResult<SshConfig> {
@@ -201,6 +431,7 @@ fn resolve_auth(app: &AppHandle, conn: &crate::config::SavedConnection) -> AppRe
                 .ok_or_else(|| AppError::Auth("No key data stored".to_string()))?;
             let cert_data = crate::config::decrypt_key_cert(&ssh_key)?;
             Ok(SshAuth::Key {
+                key_id: Some(key_id.to_string()),
                 key_data,
                 cert_data,
                 passphrase: ssh_key.passphrase,
@@ -213,23 +444,20 @@ fn resolve_auth(app: &AppHandle, conn: &crate::config::SavedConnection) -> AppRe
 fn resolve_password_material(
     app: Option<&AppHandle>,
     conn_auth: &crate::config::ConnectionAuth,
-) -> AppResult<String> {
+) -> AppResult<Option<String>> {
     if let Some(ref ciphertext) = conn_auth.password {
         return crate::utils::crypto::decrypt(ciphertext)
+            .map(Some)
             .map_err(|e| AppError::Auth(format!("Failed to decrypt inline password: {e}")));
     }
 
     let Some(pw_id) = conn_auth.password_id.as_deref().filter(|id| !id.is_empty()) else {
-        return Err(AppError::Auth(
-            "No password for this connection".to_string(),
-        ));
+        return Ok(None);
     };
 
     let app = app.ok_or_else(|| AppError::Auth("No password for this connection".to_string()))?;
     let pw_entry = crate::config::load_password_by_id(app, pw_id)?;
-    pw_entry
-        .password
-        .ok_or_else(|| AppError::Auth("No stored password".to_string()))
+    Ok(pw_entry.password)
 }
 
 fn resolve_proxy_jump(
@@ -308,6 +536,7 @@ pub(super) async fn authenticate_handle(
         .connection_id
         .as_deref()
         .and_then(|connection_id| resolve_otp_info(app, connection_id));
+    let mut updates = SshRuntimeAuthUpdates::default();
 
     match &config.auth {
         SshAuth::None => {
@@ -363,92 +592,80 @@ pub(super) async fn authenticate_handle(
                 None,
             );
 
-            let authenticated = handle
-                .authenticate_password(&config.username, password)
-                .await
-                .map_err(|error| AppError::Auth(format!("Authentication failed: {}", error)))?;
-
-            try_keyboard_interactive_after_partial(
+            let password_outcome = authenticate_password_with_runtime_prompt(
                 handle,
-                &authenticated,
-                &config.username,
-                config.connection_id.as_deref(),
-                &config.name,
-                config.owner_window_label.as_deref(),
+                config,
                 app,
+                password.as_deref(),
                 password_error,
-                Some(KeyboardInteractiveMode::PasswordFallback { password }),
+                None,
+                None,
                 otp_info.as_ref(),
             )
             .await?;
+            if let Some(secret) = password_outcome.password {
+                updates.password = Some(secret);
+            }
+            if let Some(secret) = password_outcome.key_passphrase {
+                updates.key_passphrase = Some(secret);
+            }
         }
-        SshAuth::Key {
-            key_data,
-            cert_data,
-            passphrase,
-        } => {
-            let key = russh::keys::decode_secret_key(key_data, passphrase.as_deref())?;
-            let hash_alg = handle
-                .best_supported_rsa_hash()
-                .await
-                .ok()
-                .flatten()
-                .flatten();
-            let cert = cert_data
-                .as_deref()
-                .map(russh::keys::Certificate::from_openssh)
-                .transpose()
-                .map_err(|error| AppError::Auth(format!("Invalid OpenSSH certificate: {error}")))?;
-            let cert_algorithm = cert.as_ref().map(|cert| cert.algorithm().to_string());
-
-            log_structured(
-                StructuredLogLevel::Info,
-                "ssh.auth",
-                "auth.start",
-                "Starting SSH authentication",
-                config.connection_id.as_deref(),
-                None,
-                Some(json!({
-                    "host": config.host,
-                    "port": config.port,
-                    "username": config.username,
-                    "auth_mode": "publickey",
-                    "key_algorithm": key.algorithm().to_string(),
-                    "certificate": cert.is_some(),
-                    "certificate_algorithm": cert_algorithm,
-                    "rsa_hash": format!("{hash_alg:?}"),
-                })),
-                None,
-            );
-
-            let authenticated = if let Some(cert) = cert {
-                handle
-                    .authenticate_openssh_cert(&config.username, Arc::new(key), cert)
-                    .await
-                    .map_err(|error| AppError::Auth(format!("Certificate auth failed: {error}")))?
-            } else {
-                handle
-                    .authenticate_publickey(
-                        &config.username,
-                        russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
-                    )
-                    .await
-                    .map_err(|error| AppError::Auth(format!("Key auth failed: {error}")))?
-            };
-
-            try_keyboard_interactive_after_partial(
+        SshAuth::Key { .. } => {
+            let key_result = authenticate_publickey_with_runtime_selection(
                 handle,
-                &authenticated,
-                &config.username,
-                config.connection_id.as_deref(),
-                &config.name,
-                config.owner_window_label.as_deref(),
+                config,
                 app,
                 key_error,
-                None,
                 otp_info.as_ref(),
             )
-            .await?;
+            .await;
+
+            match key_result {
+                Ok(Some(secret)) => {
+                    updates.key_passphrase = Some(secret);
+                }
+                Ok(None) => {}
+                Err(failure) if failure.password_available() => {
+                    let reason = if failure.publickey_available() {
+                        SshAuthPromptReason::KeyRejectedPasswordFallback
+                    } else {
+                        SshAuthPromptReason::PasswordRejected
+                    };
+                    let password_outcome = authenticate_password_with_runtime_prompt(
+                        handle,
+                        config,
+                        app,
+                        None,
+                        key_error,
+                        Some(reason),
+                        Some(failure.remaining_methods.clone()),
+                        otp_info.as_ref(),
+                    )
+                    .await?;
+                    if let Some(secret) = password_outcome.password {
+                        updates.password = Some(secret);
+                    }
+                    if let Some(secret) = password_outcome.key_passphrase {
+                        updates.key_passphrase = Some(secret);
+                    }
+                }
+                Err(failure) if failure.publickey_available() => {
+                    let key_secret = authenticate_publickey_with_runtime_key_prompt(
+                        handle,
+                        config,
+                        app,
+                        key_error,
+                        SshAuthPromptReason::PublickeyRejected,
+                        failure.remaining_methods.clone(),
+                        otp_info.as_ref(),
+                    )
+                    .await?;
+                    if let Some(secret) = key_secret {
+                        updates.key_passphrase = Some(secret);
+                    }
+                }
+                Err(failure) => return Err(failure.into()),
+            }
         }
     }
 
@@ -466,8 +683,779 @@ pub(super) async fn authenticate_handle(
         })),
         None,
     );
+    persist_runtime_auth_updates(app, config, &updates)?;
 
     Ok(())
+}
+
+const MAX_RUNTIME_SSH_AUTH_ATTEMPTS: u32 = 3;
+
+async fn request_runtime_secret(
+    app: &AppHandle,
+    config: &SshConfig,
+    reason: SshAuthPromptReason,
+    attempt: u32,
+    can_save: bool,
+) -> AppResult<RuntimeSecret> {
+    let response = request_runtime_auth_response(
+        app,
+        config,
+        reason,
+        attempt,
+        can_save,
+        default_available_methods(reason),
+    )
+    .await?;
+    let secret = response.secret.unwrap_or_default();
+    if secret.is_empty() {
+        return Err(AppError::Auth("SSH authentication response was empty".to_string()));
+    }
+
+    Ok(RuntimeSecret {
+        value: secret,
+        save: parse_runtime_secret_save(response.save, reason, can_save),
+    })
+}
+
+async fn request_runtime_key_id(
+    app: &AppHandle,
+    config: &SshConfig,
+    reason: SshAuthPromptReason,
+    attempt: u32,
+    available_methods: Vec<String>,
+) -> AppResult<String> {
+    let response =
+        request_runtime_auth_response(app, config, reason, attempt, false, available_methods)
+            .await?;
+    let method = response.method.as_deref().unwrap_or("key");
+    if method != "key" && method != "publickey" {
+        return Err(AppError::Auth(format!(
+            "Unsupported SSH authentication method '{}'",
+            method
+        )));
+    }
+    response
+        .key_id
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| AppError::Auth("No SSH key was selected".to_string()))
+}
+
+async fn request_runtime_auth_selection(
+    app: &AppHandle,
+    config: &SshConfig,
+    reason: SshAuthPromptReason,
+    attempt: u32,
+    can_save: bool,
+    available_methods: Vec<String>,
+) -> AppResult<RuntimeAuthSelection> {
+    let response = request_runtime_auth_response(
+        app,
+        config,
+        reason,
+        attempt,
+        can_save,
+        available_methods.clone(),
+    )
+    .await?;
+    let method = response
+        .method
+        .as_deref()
+        .unwrap_or_else(|| {
+            if available_methods.iter().any(|method| method == "publickey")
+                && !available_methods.iter().any(|method| method == "password")
+                && !available_methods
+                    .iter()
+                    .any(|method| method == "keyboard-interactive")
+            {
+                "key"
+            } else {
+                "password"
+            }
+        })
+        .to_string();
+
+    match method.as_str() {
+        "password" => {
+            let secret = response.secret.unwrap_or_default();
+            if secret.is_empty() {
+                return Err(AppError::Auth(
+                    "SSH authentication response was empty".to_string(),
+                ));
+            }
+            Ok(RuntimeAuthSelection::Password(RuntimeSecret {
+                value: secret,
+                save: parse_runtime_secret_save(response.save, reason, can_save),
+            }))
+        }
+        "key" | "publickey" => response
+            .key_id
+            .filter(|id| !id.trim().is_empty())
+            .map(RuntimeAuthSelection::Key)
+            .ok_or_else(|| AppError::Auth("No SSH key was selected".to_string())),
+        other => Err(AppError::Auth(format!(
+            "Unsupported SSH authentication method '{}'",
+            other
+        ))),
+    }
+}
+
+async fn request_runtime_auth_response(
+    app: &AppHandle,
+    config: &SshConfig,
+    reason: SshAuthPromptReason,
+    attempt: u32,
+    can_save: bool,
+    available_methods: Vec<String>,
+) -> AppResult<SshAuthResponse> {
+    let pending_mgr = app
+        .try_state::<Arc<PendingSshAuthManager>>()
+        .ok_or_else(|| AppError::Auth("PendingSshAuthManager not available".to_string()))?;
+    let pending_mgr = pending_mgr.inner().clone();
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let rx = pending_mgr.register(request_id.clone()).await;
+    let payload = SshAuthRequestPayload {
+        request_id: request_id.clone(),
+        connection_id: config.connection_id.clone(),
+        connection_name: config.name.clone(),
+        host: config.host.clone(),
+        port: config.port,
+        username: config.username.clone(),
+        reason: reason.as_str().to_string(),
+        prompt_kind: runtime_prompt_kind(reason, &available_methods).to_string(),
+        available_methods,
+        current_auth_mode: current_auth_mode(&config.auth).to_string(),
+        attempt,
+        can_save,
+        password_id: current_password_id(app, config.connection_id.as_deref()),
+        target_window_label: config.owner_window_label.clone(),
+    };
+
+    log_structured(
+        StructuredLogLevel::Info,
+        "security.flow",
+        "ssh_auth.requested",
+        "Forwarding SSH credential request to frontend",
+        config.connection_id.as_deref(),
+        Some(&request_id),
+        Some(json!({
+            "username": config.username,
+            "reason": payload.reason,
+            "prompt_kind": payload.prompt_kind,
+            "available_methods": payload.available_methods,
+            "current_auth_mode": payload.current_auth_mode,
+            "attempt": attempt,
+            "can_save": can_save,
+        })),
+        None,
+    );
+    let _ = app.emit("ssh-auth-request", &payload);
+
+    let response = match rx.await {
+        Ok(Some(response)) => response,
+        Ok(None) => {
+            return Err(AppError::Auth(
+                "SSH authentication cancelled by user".to_string(),
+            ));
+        }
+        Err(_) => {
+            return Err(AppError::Auth(
+                "SSH authentication request dropped".to_string(),
+            ));
+        }
+    };
+    Ok(response)
+}
+
+fn current_password_id(app: &AppHandle, connection_id: Option<&str>) -> Option<String> {
+    let connection_id = connection_id?;
+    let conn = crate::config::load_connection_by_id(app, connection_id).ok()?;
+    conn.auth?.password_id.filter(|id| !id.is_empty())
+}
+
+fn parse_runtime_secret_save(
+    save: Option<SshAuthSaveRequest>,
+    reason: SshAuthPromptReason,
+    can_save: bool,
+) -> Option<RuntimeSecretSave> {
+    if !can_save {
+        return None;
+    }
+    let save = save?;
+    match (reason.prompt_kind(), save.kind.as_str()) {
+        ("passphrase", "key_passphrase") => Some(RuntimeSecretSave::KeyPassphrase),
+        ("password", "connection") => Some(RuntimeSecretSave::ConnectionInline),
+        ("password", "saved_password") => {
+            let name = save
+                .name
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("SSH Password")
+                .to_string();
+            Some(RuntimeSecretSave::SavedPassword {
+                id: save.password_id.filter(|id| !id.is_empty()),
+                name,
+            })
+        }
+        _ => None,
+    }
+}
+
+async fn authenticate_password_with_runtime_prompt(
+    handle: &mut client::Handle<SshHandler>,
+    config: &SshConfig,
+    app: &AppHandle,
+    initial_password: Option<&str>,
+    fallback_error: &str,
+    first_prompt_reason: Option<SshAuthPromptReason>,
+    initial_available_methods: Option<Vec<String>>,
+    otp_info: Option<&OtpAutoFillInfo>,
+) -> AppResult<RuntimePasswordAuthOutcome> {
+    let mut runtime_secret: Option<RuntimeSecret> = None;
+    let mut password = initial_password.map(str::to_string);
+    let can_save = config.connection_id.is_some();
+    let mut advertised_methods = initial_available_methods;
+
+    for attempt in 1..=MAX_RUNTIME_SSH_AUTH_ATTEMPTS {
+        if password.as_deref().is_none_or(str::is_empty) {
+            if attempt == 1 && first_prompt_reason.is_none_or(|reason| reason == SshAuthPromptReason::MissingPassword) {
+                match discover_auth_methods_before_secret_prompt(
+                    handle,
+                    config,
+                    app,
+                    fallback_error,
+                    otp_info,
+                )
+                .await
+                {
+                    Ok(Some(outcome)) => return Ok(outcome),
+                    Ok(None) => {}
+                    Err(failure) if failure.password_available() => {
+                        advertised_methods = Some(failure.remaining_methods.clone());
+                    }
+                    Err(failure) if failure.publickey_available() => {
+                        let key_passphrase = authenticate_publickey_with_runtime_key_prompt(
+                            handle,
+                            config,
+                            app,
+                            fallback_error,
+                            SshAuthPromptReason::PublickeyRequired,
+                            failure.remaining_methods.clone(),
+                            otp_info,
+                        )
+                        .await?;
+                        return Ok(RuntimePasswordAuthOutcome {
+                            password: None,
+                            key_passphrase,
+                        });
+                    }
+                    Err(failure) => return Err(failure.into()),
+                }
+            }
+            let reason = first_prompt_reason.unwrap_or(SshAuthPromptReason::MissingPassword);
+            match request_runtime_auth_selection(
+                app,
+                config,
+                reason,
+                attempt,
+                can_save,
+                advertised_methods
+                    .clone()
+                    .unwrap_or_else(|| default_available_methods(reason)),
+            )
+            .await?
+            {
+                RuntimeAuthSelection::Password(secret) => {
+                    password = Some(secret.value.clone());
+                    runtime_secret = Some(secret);
+                }
+                RuntimeAuthSelection::Key(key_id) => {
+                    let key_passphrase = authenticate_runtime_key_by_id(
+                        handle,
+                        config,
+                        app,
+                        fallback_error,
+                        &key_id,
+                        otp_info,
+                    )
+                    .await?;
+                    return Ok(RuntimePasswordAuthOutcome {
+                        password: None,
+                        key_passphrase,
+                    });
+                }
+            }
+        }
+
+        let Some(current_password) = password.as_deref() else {
+            continue;
+        };
+        let authenticated = handle
+            .authenticate_password(&config.username, current_password)
+            .await
+            .map_err(|error| AppError::Auth(format!("Authentication failed: {}", error)))?;
+
+        match try_keyboard_interactive_after_partial(
+            handle,
+            &authenticated,
+            &config.username,
+            config.connection_id.as_deref(),
+            &config.name,
+            config.owner_window_label.as_deref(),
+            app,
+            fallback_error,
+            Some(KeyboardInteractiveMode::PasswordFallback {
+                password: current_password,
+            }),
+            otp_info,
+        )
+        .await
+        {
+            Ok(()) => {
+                return Ok(RuntimePasswordAuthOutcome {
+                    password: runtime_secret,
+                    key_passphrase: None,
+                });
+            }
+            Err(failure) if attempt < MAX_RUNTIME_SSH_AUTH_ATTEMPTS => {
+                if failure.password_available() {
+                    advertised_methods = Some(failure.remaining_methods.clone());
+                    match request_runtime_auth_selection(
+                        app,
+                        config,
+                        SshAuthPromptReason::PasswordRejected,
+                        attempt + 1,
+                        can_save,
+                        failure.remaining_methods.clone(),
+                    )
+                    .await?
+                    {
+                        RuntimeAuthSelection::Password(secret) => {
+                            password = Some(secret.value.clone());
+                            runtime_secret = Some(secret);
+                        }
+                        RuntimeAuthSelection::Key(key_id) => {
+                            let key_passphrase = authenticate_runtime_key_by_id(
+                                handle,
+                                config,
+                                app,
+                                fallback_error,
+                                &key_id,
+                                otp_info,
+                            )
+                            .await?;
+                            return Ok(RuntimePasswordAuthOutcome {
+                                password: None,
+                                key_passphrase,
+                            });
+                        }
+                    }
+                } else if failure.publickey_available() {
+                    let key_passphrase = authenticate_publickey_with_runtime_key_prompt(
+                        handle,
+                        config,
+                        app,
+                        fallback_error,
+                        SshAuthPromptReason::PublickeyRequired,
+                        failure.remaining_methods.clone(),
+                        otp_info,
+                    )
+                    .await?;
+                    return Ok(RuntimePasswordAuthOutcome {
+                        password: None,
+                        key_passphrase,
+                    });
+                } else {
+                    return Err(failure.into());
+                }
+            }
+            Err(failure) => return Err(failure.into()),
+        }
+    }
+
+    Err(AppError::Auth(fallback_error.to_string()))
+}
+
+async fn discover_auth_methods_before_secret_prompt(
+    handle: &mut client::Handle<SshHandler>,
+    config: &SshConfig,
+    app: &AppHandle,
+    fallback_error: &str,
+    otp_info: Option<&OtpAutoFillInfo>,
+) -> Result<Option<RuntimePasswordAuthOutcome>, SshAuthFailure> {
+    let authenticated = handle
+        .authenticate_none(&config.username)
+        .await
+        .map_err(|error| SshAuthFailure {
+            message: format!("None auth probe failed: {error}"),
+            remaining_methods: Vec::new(),
+            partial_success: false,
+        })?;
+
+    match try_keyboard_interactive_after_partial(
+        handle,
+        &authenticated,
+        &config.username,
+        config.connection_id.as_deref(),
+        &config.name,
+        config.owner_window_label.as_deref(),
+        app,
+        fallback_error,
+        None,
+        otp_info,
+    )
+    .await
+    {
+        Ok(()) => Ok(Some(RuntimePasswordAuthOutcome::default())),
+        Err(failure) => Err(failure),
+    }
+}
+
+async fn decode_secret_key_with_runtime_prompt(
+    key_data: &str,
+    initial_passphrase: Option<&str>,
+    config: &SshConfig,
+    app: &AppHandle,
+) -> AppResult<(russh::keys::PrivateKey, Option<RuntimeSecret>)> {
+    match russh::keys::decode_secret_key(key_data, initial_passphrase) {
+        Ok(key) => return Ok((key, None)),
+        Err(error) if initial_passphrase.is_some() => {
+            tracing::debug!(%error, "Stored SSH key passphrase failed, requesting runtime passphrase");
+        }
+        Err(error) => {
+            tracing::debug!(%error, "SSH key decode failed, requesting runtime passphrase");
+        }
+    }
+
+    let can_save = matches!(
+        &config.auth,
+        SshAuth::Key {
+            key_id: Some(_),
+            ..
+        }
+    );
+    let mut last_error: Option<russh::keys::Error> = None;
+    for attempt in 1..=MAX_RUNTIME_SSH_AUTH_ATTEMPTS {
+        let secret = request_runtime_secret(
+            app,
+            config,
+            SshAuthPromptReason::KeyPassphraseRequired,
+            attempt,
+            can_save,
+        )
+        .await?;
+        match russh::keys::decode_secret_key(key_data, Some(&secret.value)) {
+            Ok(key) => return Ok((key, Some(secret))),
+            Err(error) => {
+                last_error = Some(error);
+            }
+        }
+    }
+
+    Err(last_error
+        .map(AppError::from)
+        .unwrap_or_else(|| AppError::Auth("Invalid SSH key passphrase".to_string())))
+}
+
+fn load_runtime_key_auth(app: &AppHandle, key_id: &str) -> AppResult<SshAuth> {
+    let ssh_key = crate::config::load_key_by_id(app, key_id)?;
+    let key_data = crate::config::decrypt_key_pem(&ssh_key)?
+        .ok_or_else(|| AppError::Auth("No key data stored".to_string()))?;
+    let cert_data = crate::config::decrypt_key_cert(&ssh_key)?;
+    Ok(SshAuth::Key {
+        key_id: Some(key_id.to_string()),
+        key_data,
+        cert_data,
+        passphrase: ssh_key.passphrase,
+    })
+}
+
+async fn authenticate_publickey_with_runtime_selection(
+    handle: &mut client::Handle<SshHandler>,
+    config: &SshConfig,
+    app: &AppHandle,
+    fallback_error: &str,
+    otp_info: Option<&OtpAutoFillInfo>,
+) -> Result<Option<RuntimeKeyPassphrase>, SshAuthFailure> {
+    authenticate_publickey_attempt(handle, config, app, &config.auth, fallback_error, otp_info).await
+}
+
+async fn authenticate_publickey_with_runtime_key_prompt(
+    handle: &mut client::Handle<SshHandler>,
+    config: &SshConfig,
+    app: &AppHandle,
+    fallback_error: &str,
+    reason: SshAuthPromptReason,
+    available_methods: Vec<String>,
+    otp_info: Option<&OtpAutoFillInfo>,
+) -> AppResult<Option<RuntimeKeyPassphrase>> {
+    let mut last_failure: Option<SshAuthFailure> = None;
+    for attempt in 1..=MAX_RUNTIME_SSH_AUTH_ATTEMPTS {
+        let key_id =
+            request_runtime_key_id(app, config, reason, attempt, available_methods.clone()).await?;
+        let key_auth = load_runtime_key_auth(app, &key_id)?;
+
+        match authenticate_publickey_attempt(handle, config, app, &key_auth, fallback_error, otp_info)
+            .await
+        {
+            Ok(secret) => return Ok(secret),
+            Err(failure) => {
+                last_failure = Some(failure);
+            }
+        }
+    }
+
+    Err(last_failure
+        .map(AppError::from)
+        .unwrap_or_else(|| AppError::Auth(fallback_error.to_string())))
+}
+
+async fn authenticate_runtime_key_by_id(
+    handle: &mut client::Handle<SshHandler>,
+    config: &SshConfig,
+    app: &AppHandle,
+    fallback_error: &str,
+    key_id: &str,
+    otp_info: Option<&OtpAutoFillInfo>,
+) -> AppResult<Option<RuntimeKeyPassphrase>> {
+    let key_auth = load_runtime_key_auth(app, key_id)?;
+    authenticate_publickey_attempt(handle, config, app, &key_auth, fallback_error, otp_info)
+        .await
+        .map_err(AppError::from)
+}
+
+async fn authenticate_publickey_attempt(
+    handle: &mut client::Handle<SshHandler>,
+    config: &SshConfig,
+    app: &AppHandle,
+    auth: &SshAuth,
+    fallback_error: &str,
+    otp_info: Option<&OtpAutoFillInfo>,
+) -> Result<Option<RuntimeKeyPassphrase>, SshAuthFailure> {
+    let SshAuth::Key {
+        key_id,
+        key_data,
+        cert_data,
+        passphrase,
+    } = auth
+    else {
+        return Err(SshAuthFailure {
+            message: "No SSH key is configured".to_string(),
+            remaining_methods: vec!["publickey".to_string()],
+            partial_success: false,
+        });
+    };
+
+    let (key, key_passphrase_secret) =
+        decode_secret_key_with_runtime_prompt(key_data, passphrase.as_deref(), config, app)
+            .await
+            .map_err(|error| SshAuthFailure::from_error("Invalid SSH key passphrase", error))?;
+    let hash_alg = handle.best_supported_rsa_hash().await.ok().flatten().flatten();
+    let cert = cert_data
+        .as_deref()
+        .map(russh::keys::Certificate::from_openssh)
+        .transpose()
+        .map_err(|error| SshAuthFailure {
+            message: format!("Invalid OpenSSH certificate: {error}"),
+            remaining_methods: vec!["publickey".to_string()],
+            partial_success: false,
+        })?;
+    let cert_algorithm = cert.as_ref().map(|cert| cert.algorithm().to_string());
+
+    log_structured(
+        StructuredLogLevel::Info,
+        "ssh.auth",
+        "auth.start",
+        "Starting SSH authentication",
+        config.connection_id.as_deref(),
+        None,
+        Some(json!({
+            "host": config.host,
+            "port": config.port,
+            "username": config.username,
+            "auth_mode": "publickey",
+            "key_id": key_id,
+            "key_algorithm": key.algorithm().to_string(),
+            "certificate": cert.is_some(),
+            "certificate_algorithm": cert_algorithm,
+            "rsa_hash": format!("{hash_alg:?}"),
+        })),
+        None,
+    );
+
+    let authenticated = if let Some(cert) = cert {
+        handle
+            .authenticate_openssh_cert(&config.username, Arc::new(key), cert)
+            .await
+            .map_err(|error| SshAuthFailure {
+                message: format!("Certificate auth failed: {error}"),
+                remaining_methods: vec!["publickey".to_string()],
+                partial_success: false,
+            })?
+    } else {
+        handle
+            .authenticate_publickey(
+                &config.username,
+                russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
+            )
+            .await
+            .map_err(|error| SshAuthFailure {
+                message: format!("Key auth failed: {error}"),
+                remaining_methods: vec!["publickey".to_string()],
+                partial_success: false,
+            })?
+    };
+
+    try_keyboard_interactive_after_partial(
+        handle,
+        &authenticated,
+        &config.username,
+        config.connection_id.as_deref(),
+        &config.name,
+        config.owner_window_label.as_deref(),
+        app,
+        fallback_error,
+        None,
+        otp_info,
+    )
+    .await?;
+
+    Ok(key_id.as_ref().and_then(|id| {
+        key_passphrase_secret.map(|secret| RuntimeKeyPassphrase {
+            key_id: id.clone(),
+            secret,
+        })
+    }))
+}
+
+fn persist_runtime_auth_updates(
+    app: &AppHandle,
+    config: &SshConfig,
+    updates: &SshRuntimeAuthUpdates,
+) -> AppResult<()> {
+    if let Some(secret) = &updates.password {
+        persist_runtime_password(app, config, secret)?;
+    }
+    if let Some(secret) = &updates.key_passphrase {
+        persist_runtime_key_passphrase(app, secret)?;
+    }
+    Ok(())
+}
+
+fn persist_runtime_password(
+    app: &AppHandle,
+    config: &SshConfig,
+    secret: &RuntimeSecret,
+) -> AppResult<()> {
+    let Some(save) = &secret.save else {
+        return Ok(());
+    };
+    let Some(connection_id) = config.connection_id.as_deref() else {
+        return Ok(());
+    };
+
+    match save {
+        RuntimeSecretSave::ConnectionInline => {
+            let mut sessions = crate::config::load_config(app)?;
+            if let Some(conn) = sessions
+                .connections
+                .iter_mut()
+                .find(|candidate| candidate.id == connection_id)
+            {
+                let auth = conn.auth.get_or_insert_with(Default::default);
+                auth.mode = "password".to_string();
+                auth.password = Some(crate::utils::crypto::encrypt(&secret.value)?);
+                auth.password_id = None;
+                auth.has_password = false;
+                crate::config::save_config(app, &sessions)?;
+                emit_config_changed(app);
+            }
+        }
+        RuntimeSecretSave::SavedPassword { id, name } => {
+            let password_id = upsert_runtime_saved_password(app, id.as_deref(), name, &secret.value)?;
+            let mut sessions = crate::config::load_config(app)?;
+            if let Some(conn) = sessions
+                .connections
+                .iter_mut()
+                .find(|candidate| candidate.id == connection_id)
+            {
+                let auth = conn.auth.get_or_insert_with(Default::default);
+                auth.mode = "password".to_string();
+                auth.password_id = Some(password_id);
+                auth.password = None;
+                auth.has_password = false;
+                crate::config::save_config(app, &sessions)?;
+                emit_config_changed(app);
+            }
+        }
+        RuntimeSecretSave::KeyPassphrase => {}
+    }
+
+    Ok(())
+}
+
+fn upsert_runtime_saved_password(
+    app: &AppHandle,
+    id: Option<&str>,
+    name: &str,
+    value: &str,
+) -> AppResult<String> {
+    let mut cfg = crate::config::load_passwords(app)?;
+    let target_id = id
+        .filter(|id| cfg.passwords.iter().any(|password| password.id == *id))
+        .map(str::to_string)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let entry_name = cfg
+        .passwords
+        .iter()
+        .find(|password| password.id == target_id)
+        .map(|password| password.name.clone())
+        .unwrap_or_else(|| name.to_string());
+    let entry = crate::config::SavedPassword {
+        id: target_id.clone(),
+        name: entry_name,
+        password: Some(crate::utils::crypto::encrypt(value)?),
+        has_password: false,
+    };
+    if let Some(existing) = cfg
+        .passwords
+        .iter_mut()
+        .find(|password| password.id == target_id)
+    {
+        *existing = entry;
+    } else {
+        cfg.passwords.push(entry);
+    }
+    crate::config::save_passwords(app, &cfg)?;
+    Ok(target_id)
+}
+
+fn persist_runtime_key_passphrase(app: &AppHandle, key_secret: &RuntimeKeyPassphrase) -> AppResult<()> {
+    if !matches!(key_secret.secret.save, Some(RuntimeSecretSave::KeyPassphrase)) {
+        return Ok(());
+    }
+
+    let mut cfg = crate::config::load_keys(app)?;
+    if let Some(key) = cfg
+        .keys
+        .iter_mut()
+        .find(|candidate| candidate.id == key_secret.key_id)
+    {
+        key.passphrase = Some(crate::utils::crypto::encrypt(&key_secret.secret.value)?);
+        key.has_key_data = false;
+        key.has_cert_data = false;
+        crate::config::save_keys(app, &cfg)?;
+        emit_config_changed(app);
+    }
+    Ok(())
+}
+
+fn emit_config_changed(app: &AppHandle) {
+    let _ = app.emit("connections-changed", ());
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::core::cloud_sync::notify_config_changed(&app_handle).await;
+    });
 }
 
 struct OtpAutoFillInfo {
@@ -1024,7 +2012,7 @@ async fn try_keyboard_interactive_after_partial(
     fallback_error: &str,
     keyboard_interactive_fallback: Option<KeyboardInteractiveMode<'_>>,
     otp_info: Option<&OtpAutoFillInfo>,
-) -> AppResult<()> {
+) -> Result<(), SshAuthFailure> {
     match auth_result {
         client::AuthResult::Success => Ok(()),
         client::AuthResult::Failure {
@@ -1061,6 +2049,13 @@ async fn try_keyboard_interactive_after_partial(
                     otp_info,
                 )
                 .await
+                .map_err(|error| {
+                    SshAuthFailure::from_auth_result(
+                        format!("{fallback_error}: {error}"),
+                        remaining_methods,
+                        *partial_success,
+                    )
+                })
             } else if can_retry_keyboard_interactive {
                 log_structured(
                     StructuredLogLevel::Info,
@@ -1076,7 +2071,11 @@ async fn try_keyboard_interactive_after_partial(
                     None,
                 );
                 let Some(mode) = keyboard_interactive_fallback else {
-                    return Err(AppError::Auth(fallback_error.to_string()));
+                    return Err(SshAuthFailure::from_auth_result(
+                        fallback_error,
+                        remaining_methods,
+                        *partial_success,
+                    ));
                 };
                 finish_keyboard_interactive(
                     handle,
@@ -1089,6 +2088,13 @@ async fn try_keyboard_interactive_after_partial(
                     otp_info,
                 )
                 .await
+                .map_err(|error| {
+                    SshAuthFailure::from_auth_result(
+                        format!("{fallback_error}: {error}"),
+                        remaining_methods,
+                        *partial_success,
+                    )
+                })
             } else {
                 log_structured(
                     StructuredLogLevel::Warn,
@@ -1106,7 +2112,11 @@ async fn try_keyboard_interactive_after_partial(
                         "message": fallback_error,
                     })),
                 );
-                Err(AppError::Auth(fallback_error.to_string()))
+                Err(SshAuthFailure::from_auth_result(
+                    fallback_error,
+                    remaining_methods,
+                    *partial_success,
+                ))
             }
         }
     }
@@ -1369,13 +2379,9 @@ mod tests {
             ..Default::default()
         };
 
-        let error = resolve_password_material(None, &auth).unwrap_err();
+        let password = resolve_password_material(None, &auth).unwrap();
 
-        assert!(
-            error
-                .to_string()
-                .contains("No password for this connection")
-        );
+        assert_eq!(password, None);
     }
 
     #[test]

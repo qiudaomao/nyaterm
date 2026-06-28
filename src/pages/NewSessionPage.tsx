@@ -346,9 +346,6 @@ export default function NewSessionPage() {
       if (!username.trim()) {
         return t("dialog.usernameRequired", "Username is required");
       }
-      if (authType === "password" && !passwordId && !password && !hasPassword) {
-        return t("dialog.passwordRequired");
-      }
       if (postLoginEnabled && !postLoginCommand.trim()) {
         return t("dialog.postLoginCommandRequired");
       }
@@ -389,13 +386,9 @@ export default function NewSessionPage() {
 
     return "";
   }, [
-    authType,
     baudRate,
     currentTab,
-    hasPassword,
     host,
-    password,
-    passwordId,
     postLoginCommand,
     postLoginDelayMs,
     postLoginEnabled,

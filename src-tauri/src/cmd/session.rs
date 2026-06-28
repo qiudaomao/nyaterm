@@ -1,5 +1,7 @@
 use crate::config;
-use crate::core::ssh::{self, HostKeyVerifyManager, PendingAuthManager};
+use crate::core::ssh::{
+    self, HostKeyVerifyManager, PendingAuthManager, PendingSshAuthManager, SshAuthResponse,
+};
 use crate::core::{
     self, QuickCommandsStore, RecordingManager, SessionCommand, SessionInfo, SessionManager,
     TerminalHistorySearchRequest, TerminalHistorySearchResponse,
@@ -848,6 +850,63 @@ pub async fn cancel_otp_request(
             "Cancelled OTP request".to_string()
         } else {
             "OTP request was already missing when cancellation arrived".to_string()
+        },
+        ids: Some(serde_json::json!({ "request_id": request_id })),
+        data: None,
+        error: None,
+        client_timestamp: None,
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn submit_ssh_auth_response(
+    state: tauri::State<'_, Arc<PendingSshAuthManager>>,
+    request_id: String,
+    response: SshAuthResponse,
+) -> AppResult<()> {
+    if state.respond(&request_id, Some(response)).await {
+        observability::log_event(StructuredLog {
+            level: StructuredLogLevel::Info,
+            domain: "security.flow".to_string(),
+            event: "ssh_auth.response_received".to_string(),
+            message: "Received SSH credential response from frontend".to_string(),
+            ids: Some(serde_json::json!({ "request_id": request_id })),
+            data: None,
+            error: None,
+            client_timestamp: None,
+        });
+        Ok(())
+    } else {
+        Err(AppError::Auth(format!(
+            "No pending SSH authentication request with id '{}'",
+            request_id
+        )))
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_ssh_auth_request(
+    state: tauri::State<'_, Arc<PendingSshAuthManager>>,
+    request_id: String,
+) -> AppResult<()> {
+    let cancelled = state.respond(&request_id, None).await;
+    observability::log_event(StructuredLog {
+        level: if cancelled {
+            StructuredLogLevel::Info
+        } else {
+            StructuredLogLevel::Warn
+        },
+        domain: "security.flow".to_string(),
+        event: if cancelled {
+            "ssh_auth.request_cancelled".to_string()
+        } else {
+            "ssh_auth.request_cancel_missing".to_string()
+        },
+        message: if cancelled {
+            "Cancelled SSH credential request".to_string()
+        } else {
+            "SSH credential request was already missing when cancellation arrived".to_string()
         },
         ids: Some(serde_json::json!({ "request_id": request_id })),
         data: None,

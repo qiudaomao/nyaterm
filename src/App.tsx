@@ -7,6 +7,7 @@ import AppLayout from "./components/app/AppLayout";
 import AppPanelContent from "./components/app/AppPanelContent";
 import type { HostKeyVerifyRequest } from "./components/dialog/connections/HostKeyVerifyDialog";
 import type { OtpRequest } from "./components/dialog/connections/OtpDialog";
+import type { SshAuthRequest } from "./components/dialog/connections/SshAuthDialog";
 import SessionQuickSwitcher, {
   type QuickSwitcherSession,
 } from "./components/dialog/terminal/SessionQuickSwitcherDialog";
@@ -329,6 +330,7 @@ function App() {
 
   // OTP / 2FA dialog state
   const [otpRequest, setOtpRequest] = useState<OtpRequest | null>(null);
+  const [sshAuthRequest, setSshAuthRequest] = useState<SshAuthRequest | null>(null);
   const [hostKeyVerifyRequest, setHostKeyVerifyRequest] = useState<HostKeyVerifyRequest | null>(
     null,
   );
@@ -422,6 +424,13 @@ function App() {
       listen<OtpRequest>("otp-request", (event) => {
         if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
         setOtpRequest(event.payload);
+      }),
+    );
+
+    unsubs.push(
+      listen<SshAuthRequest>("ssh-auth-request", (event) => {
+        if (!eventTargetsCurrentWindow(event.payload.targetWindowLabel)) return;
+        setSshAuthRequest(event.payload);
       }),
     );
 
@@ -2449,6 +2458,9 @@ function App() {
           otpRequest,
           onOtpDone: (requestId) =>
             setOtpRequest((current) => (current?.requestId === requestId ? null : current)),
+          sshAuthRequest,
+          onSshAuthDone: (requestId) =>
+            setSshAuthRequest((current) => (current?.requestId === requestId ? null : current)),
           hostKeyVerifyRequest,
           onHostKeyVerifyDone: () => setHostKeyVerifyRequest(null),
           modalChildWindowCount,

@@ -21,6 +21,17 @@ export function getErrorMessage(error: unknown): string {
 }
 
 const EDIT_CONNECTION_RECOVERY_PATTERNS = [
+  "no ssh key for this connection",
+  "no key data stored",
+  "no auth config for ssh connection",
+  "unknown auth type:",
+  "ssh key error:",
+  "password not found",
+  "proxy",
+  "jump host",
+];
+
+const NON_EDITOR_RECOVERY_PATTERNS = [
   "authentication failed: invalid credentials",
   "authentication failed: key rejected",
   "authentication failed: none auth rejected",
@@ -28,15 +39,9 @@ const EDIT_CONNECTION_RECOVERY_PATTERNS = [
   "none auth failed",
   "no password for this connection",
   "no stored password",
-  "no ssh key for this connection",
-  "no key data stored",
-  "no auth config for ssh connection",
-  "unknown auth type:",
-  "ssh key error:",
   "key auth failed:",
-];
-
-const NON_EDITOR_RECOVERY_PATTERNS = [
+  "ssh authentication cancelled by user",
+  "ssh authentication request dropped",
   "2fa authentication cancelled by user",
   "2fa authentication request dropped",
   "keyboard-interactive authentication failed",
