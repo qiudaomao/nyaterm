@@ -167,13 +167,11 @@ fn ensure_download_complete(
 }
 
 fn sftp_directory_concurrency(max_open_handles: Option<u64>) -> SftpDirectoryConcurrency {
-    let handle_budget = max_open_handles
-        .map(|handles| handles.saturating_sub(SFTP_HANDLE_RESERVE as u64) as usize)
-        .filter(|handles| *handles > 0);
-
-    let small_file_concurrency = handle_budget
-        .unwrap_or(SFTP_DEFAULT_SMALL_FILE_CONCURRENCY)
-        .clamp(1, SFTP_MAX_SMALL_FILE_CONCURRENCY);
+    let small_file_concurrency = match max_open_handles {
+        Some(handles) => (handles.saturating_sub(SFTP_HANDLE_RESERVE as u64) as usize)
+            .clamp(1, SFTP_MAX_SMALL_FILE_CONCURRENCY),
+        None => SFTP_DEFAULT_SMALL_FILE_CONCURRENCY,
+    };
     let large_file_concurrency = SFTP_LARGE_FILE_CONCURRENCY
         .min(small_file_concurrency)
         .max(1);
@@ -911,6 +909,143 @@ async fn read_sftp_chunk(
     Ok((offset, data, completed_range, remote_file))
 }
 
+async fn download_known_size_to_local_file<F, G>(
+    sftp: &SftpSession,
+    remote_path: &str,
+    local_path: &str,
+    local_file: &mut tokio::fs::File,
+    total_size: u64,
+    request_kib: usize,
+    pipeline_depth: usize,
+    max_pipeline_depth: usize,
+    controller: &Arc<TransferController>,
+    parent_controller: Option<&Arc<TransferController>>,
+    mut on_bytes: F,
+    mut on_progress_interval: G,
+) -> AppResult<u64>
+where
+    F: FnMut(u64, u64),
+    G: FnMut(u64),
+{
+    use std::io::SeekFrom;
+    use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+    use tokio::task::JoinSet;
+
+    if total_size == 0 {
+        ensure_download_complete(
+            remote_path,
+            local_path,
+            total_size,
+            0,
+            request_kib,
+            sftp_payload_size(request_kib),
+        )?;
+        return Ok(0);
+    }
+
+    let chunk_size = sftp_payload_size(request_kib) as u64;
+    let num_chunks = total_size.div_ceil(chunk_size) as usize;
+    let concurrency = pipeline_depth
+        .min(max_pipeline_depth.max(1))
+        .min(num_chunks);
+
+    let mut handle_pool: Vec<russh_sftp::client::fs::File> = Vec::with_capacity(concurrency);
+    for _ in 0..concurrency {
+        handle_pool.push(
+            sftp.open(remote_path)
+                .await
+                .map_err(|e| AppError::Channel(format!("Failed to open remote file: {}", e)))?,
+        );
+    }
+
+    type Task = AppResult<(u64, Vec<u8>, bool, russh_sftp::client::fs::File)>;
+    let mut join_set: JoinSet<Task> = JoinSet::new();
+    let mut next_offset: u64 = 0;
+    let mut last_progress = Instant::now();
+    let mut bytes_transferred: u64 = 0;
+
+    while let Some(fh) = handle_pool.pop() {
+        if next_offset >= total_size {
+            break;
+        }
+        wait_for_transfer_chain(controller, parent_controller).await?;
+        let len = chunk_size.min(total_size - next_offset) as usize;
+        let offset = next_offset;
+        next_offset += len as u64;
+        join_set.spawn(read_sftp_chunk(
+            fh,
+            offset,
+            len,
+            remote_path.to_string(),
+            total_size,
+            chunk_size as usize,
+        ));
+    }
+
+    while let Some(res) = join_set.join_next().await {
+        wait_for_transfer_chain(controller, parent_controller).await?;
+        let (chunk_offset, data, completed_range, fh) =
+            res.map_err(|e| AppError::Channel(format!("Task panicked: {}", e)))??;
+
+        if !data.is_empty() {
+            local_file
+                .seek(SeekFrom::Start(chunk_offset))
+                .await
+                .map_err(|e| AppError::Channel(format!("Local seek failed: {}", e)))?;
+            local_file
+                .write_all(&data)
+                .await
+                .map_err(|e| AppError::Channel(format!("Local write failed: {}", e)))?;
+
+            let delta = data.len() as u64;
+            bytes_transferred = bytes_transferred.saturating_add(delta);
+            on_bytes(bytes_transferred, delta);
+        }
+
+        if !completed_range {
+            return Err(unexpected_download_eof_error(
+                remote_path,
+                local_path,
+                total_size,
+                bytes_transferred,
+                request_kib,
+                chunk_size as usize,
+            ));
+        }
+
+        if next_offset < total_size {
+            wait_for_transfer_chain(controller, parent_controller).await?;
+            let len = chunk_size.min(total_size - next_offset) as usize;
+            let offset = next_offset;
+            next_offset += len as u64;
+            join_set.spawn(read_sftp_chunk(
+                fh,
+                offset,
+                len,
+                remote_path.to_string(),
+                total_size,
+                chunk_size as usize,
+            ));
+        }
+
+        if last_progress.elapsed() >= TRANSFER_PROGRESS_INTERVAL {
+            last_progress = Instant::now();
+            on_progress_interval(bytes_transferred);
+        }
+    }
+
+    ensure_download_complete(
+        remote_path,
+        local_path,
+        total_size,
+        bytes_transferred,
+        request_kib,
+        chunk_size as usize,
+    )?;
+
+    Ok(bytes_transferred)
+}
+
 async fn download_remote_file_inner_with_controller(
     backend: &SftpBackend,
     app: &tauri::AppHandle,
@@ -921,9 +1056,7 @@ async fn download_remote_file_inner_with_controller(
     controller: Arc<TransferController>,
     parent_controller: Option<Arc<TransferController>>,
 ) -> AppResult<()> {
-    use std::io::SeekFrom;
-    use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-    use tokio::task::JoinSet;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     register_transfer(controller.clone());
     let _ = app.emit(
@@ -961,109 +1094,35 @@ async fn download_remote_file_inner_with_controller(
             let _ = local_file.set_len(total_size).await;
         }
 
-        let mut last_progress = Instant::now();
         let mut bytes_transferred: u64 = 0;
 
         if let Some(total_size) = remote_size {
-            if total_size == 0 {
-                ensure_download_complete(
-                    remote_path,
-                    actual_path,
-                    total_size,
-                    bytes_transferred,
-                    request_kib,
-                    chunk_size as usize,
-                )?;
-            } else {
-                let num_chunks = ((total_size + chunk_size - 1) / chunk_size) as usize;
-                let concurrency = pipeline_depth.min(num_chunks);
-
-                let mut handle_pool: Vec<russh_sftp::client::fs::File> =
-                    Vec::with_capacity(concurrency);
-                for _ in 0..concurrency {
-                    handle_pool.push(sftp.open(remote_path).await.map_err(|e| {
-                        AppError::Channel(format!("Failed to open remote file: {}", e))
-                    })?);
-                }
-
-                type Task = AppResult<(u64, Vec<u8>, bool, russh_sftp::client::fs::File)>;
-                let mut join_set: JoinSet<Task> = JoinSet::new();
-                let mut next_offset: u64 = 0;
-
-                while let Some(fh) = handle_pool.pop() {
-                    if next_offset >= total_size {
-                        break;
-                    }
-                    wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
-                    let len = chunk_size.min(total_size - next_offset) as usize;
-                    let offset = next_offset;
-                    next_offset += len as u64;
-                    join_set.spawn(read_sftp_chunk(
-                        fh,
-                        offset,
-                        len,
-                        remote_path.to_string(),
-                        total_size,
-                        chunk_size as usize,
-                    ));
-                }
-
-                while let Some(res) = join_set.join_next().await {
-                    wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
-                    let (chunk_offset, data, completed_range, fh) =
-                        res.map_err(|e| AppError::Channel(format!("Task panicked: {}", e)))??;
-
-                    if !data.is_empty() {
-                        local_file
-                            .seek(SeekFrom::Start(chunk_offset))
-                            .await
-                            .map_err(|e| AppError::Channel(format!("Local seek failed: {}", e)))?;
-                        local_file
-                            .write_all(&data)
-                            .await
-                            .map_err(|e| AppError::Channel(format!("Local write failed: {}", e)))?;
-
-                        bytes_transferred = bytes_transferred.saturating_add(data.len() as u64);
-                        controller.update_progress(bytes_transferred, total_size);
-                    }
-
-                    if !completed_range {
-                        return Err(unexpected_download_eof_error(
-                            remote_path,
-                            actual_path,
-                            total_size,
-                            bytes_transferred,
-                            request_kib,
-                            chunk_size as usize,
-                        ));
-                    }
-
-                    if next_offset < total_size {
-                        wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
-                        let len = chunk_size.min(total_size - next_offset) as usize;
-                        let offset = next_offset;
-                        next_offset += len as u64;
-                        join_set.spawn(read_sftp_chunk(
-                            fh,
-                            offset,
-                            len,
-                            remote_path.to_string(),
-                            total_size,
-                            chunk_size as usize,
-                        ));
-                    }
-
-                    if last_progress.elapsed() >= TRANSFER_PROGRESS_INTERVAL {
-                        last_progress = Instant::now();
-                        emit_parent_progress(app, parent_controller.as_ref());
-                        let _ = app.emit(
-                            "transfer-event",
-                            &controller.build_event("progress", total_size, None),
-                        );
-                    }
-                }
-            }
+            bytes_transferred = download_known_size_to_local_file(
+                &sftp,
+                remote_path,
+                actual_path,
+                &mut local_file,
+                total_size,
+                request_kib,
+                pipeline_depth,
+                pipeline_depth,
+                &controller,
+                parent_controller.as_ref(),
+                |current, _delta| {
+                    controller.update_progress(current, total_size);
+                },
+                |current| {
+                    controller.update_progress(current, total_size);
+                    emit_parent_progress(app, parent_controller.as_ref());
+                    let _ = app.emit(
+                        "transfer-event",
+                        &controller.build_event("progress", total_size, None),
+                    );
+                },
+            )
+            .await?;
         } else {
+            let mut last_progress = Instant::now();
             let mut remote_file = sftp
                 .open(remote_path)
                 .await
@@ -2499,6 +2558,17 @@ fn sftp_directory_file_concurrency(
     files_len.min(concurrency.small_file_concurrency).max(1)
 }
 
+fn add_directory_transferred_bytes(
+    directory_controller: &Arc<TransferController>,
+    completed_bytes: &AtomicU64,
+    delta: u64,
+    total_size: u64,
+) -> u64 {
+    let bytes_done = completed_bytes.fetch_add(delta, Ordering::SeqCst) + delta;
+    directory_controller.update_progress(bytes_done, total_size);
+    bytes_done
+}
+
 async fn run_download_directory_workers(
     app: &tauri::AppHandle,
     pool: SftpSessionPool,
@@ -2543,18 +2613,21 @@ async fn run_download_directory_workers(
                     None
                 };
                 let session = pool.session_for(worker_index);
-                let bytes = download_directory_file_with_session(
+                let _bytes = download_directory_file_with_session(
                     &app,
                     session,
                     file,
                     &directory_controller,
                     &transfer_settings,
+                    &completed_bytes,
+                    total_size,
+                    concurrency.small_file_concurrency,
                 )
                 .await?;
                 let completed = completed_count.fetch_add(1, Ordering::SeqCst) + 1;
-                let bytes_done = completed_bytes.fetch_add(bytes, Ordering::SeqCst) + bytes;
-                directory_controller.update_progress(bytes_done, total_size);
                 directory_controller.update_item_progress(completed, total_files);
+                let bytes_done = completed_bytes.load(Ordering::SeqCst);
+                directory_controller.update_progress(bytes_done, total_size);
                 let _ = app.emit(
                     "transfer-event",
                     &directory_controller.build_event("progress", 0, None),
@@ -2639,18 +2712,20 @@ async fn run_upload_directory_workers(
                     None
                 };
                 let session = pool.session_for(worker_index);
-                let bytes = upload_directory_file_with_session(
+                let _bytes = upload_directory_file_with_session(
                     &app,
                     session,
                     file,
                     &directory_controller,
                     &transfer_settings,
+                    &completed_bytes,
+                    total_size,
                 )
                 .await?;
                 let completed = completed_count.fetch_add(1, Ordering::SeqCst) + 1;
-                let bytes_done = completed_bytes.fetch_add(bytes, Ordering::SeqCst) + bytes;
-                directory_controller.update_progress(bytes_done, total_size);
                 directory_controller.update_item_progress(completed, total_files);
+                let bytes_done = completed_bytes.load(Ordering::SeqCst);
+                directory_controller.update_progress(bytes_done, total_size);
                 let _ = app.emit(
                     "transfer-event",
                     &directory_controller.build_event("progress", 0, None),
@@ -2697,6 +2772,9 @@ async fn download_directory_file_with_session(
     file: RemoteDirectoryFile,
     directory_controller: &Arc<TransferController>,
     transfer_settings: &crate::config::TransferSettings,
+    completed_bytes: &Arc<AtomicU64>,
+    total_size: u64,
+    max_pipeline_depth: usize,
 ) -> AppResult<u64> {
     use tokio::io::AsyncWriteExt;
 
@@ -2720,43 +2798,37 @@ async fn download_directory_file_with_session(
     }
 
     let mut bytes_transferred = 0u64;
-    let (request_kib, _, _) = sftp_pipeline_config(transfer_settings);
+    let (request_kib, pipeline_depth, _) = sftp_pipeline_config(transfer_settings);
     let payload_bytes = sftp_payload_size(request_kib);
     if file.size > 0 {
-        let chunk_size = payload_bytes as u64;
-        let remote_file = sftp.open(&file.remote_path).await.map_err(|e| {
-            AppError::Channel(format!(
-                "Failed to open remote file {}: {}",
-                file.remote_path, e
-            ))
-        })?;
-        let mut next_offset = 0u64;
-        while next_offset < file.size {
-            wait_for_transfer_ready(directory_controller).await?;
-            let len = chunk_size.min(file.size - next_offset) as usize;
-            let offset = next_offset;
-            let data = remote_file.read_at(offset, len).await.map_err(|e| {
-                AppError::Channel(format!("SFTP read failed for {}: {}", file.remote_path, e))
-            })?;
-            let progress = classify_download_read_progress(
-                &file.remote_path,
-                &file.local_path,
-                file.size,
-                offset,
-                bytes_transferred,
-                data.len(),
-                request_kib,
-                payload_bytes,
-            )?;
-            local_file.write_all(&data).await.map_err(|e| {
-                AppError::Channel(format!("Local write failed for {}: {}", file.local_path, e))
-            })?;
-            bytes_transferred = bytes_transferred.saturating_add(data.len() as u64);
-            next_offset = match progress {
-                DownloadReadProgress::Continue(next_offset) => next_offset,
-                DownloadReadProgress::Complete => file.size,
-            };
-        }
+        let app_for_progress = app.clone();
+        bytes_transferred = download_known_size_to_local_file(
+            &sftp,
+            &file.remote_path,
+            &file.local_path,
+            &mut local_file,
+            file.size,
+            request_kib,
+            pipeline_depth,
+            max_pipeline_depth,
+            directory_controller,
+            None,
+            |_current, delta| {
+                add_directory_transferred_bytes(
+                    directory_controller,
+                    completed_bytes,
+                    delta,
+                    total_size,
+                );
+            },
+            |_current| {
+                let _ = app_for_progress.emit(
+                    "transfer-event",
+                    &directory_controller.build_event("progress", 0, None),
+                );
+            },
+        )
+        .await?;
     }
 
     local_file
@@ -2793,6 +2865,8 @@ async fn upload_directory_file_with_session(
     file: LocalDirectoryFile,
     directory_controller: &Arc<TransferController>,
     transfer_settings: &crate::config::TransferSettings,
+    completed_bytes: &Arc<AtomicU64>,
+    total_size: u64,
 ) -> AppResult<u64> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -2813,6 +2887,7 @@ async fn upload_directory_file_with_session(
     let (request_kib, _, _) = sftp_pipeline_config(transfer_settings);
     let mut buf = vec![0u8; sftp_payload_size(request_kib)];
     let mut bytes_transferred = 0u64;
+    let mut last_progress = Instant::now();
     loop {
         wait_for_transfer_ready(directory_controller).await?;
         let read = local_file.read(&mut buf).await.map_err(|e| {
@@ -2828,6 +2903,20 @@ async fn upload_directory_file_with_session(
             AppError::Channel(format!("SFTP write failed for {}: {}", file.remote_path, e))
         })?;
         bytes_transferred = bytes_transferred.saturating_add(read as u64);
+        add_directory_transferred_bytes(
+            directory_controller,
+            completed_bytes,
+            read as u64,
+            total_size,
+        );
+
+        if last_progress.elapsed() >= TRANSFER_PROGRESS_INTERVAL {
+            last_progress = Instant::now();
+            let _ = app.emit(
+                "transfer-event",
+                &directory_controller.build_event("progress", 0, None),
+            );
+        }
     }
     remote_file.shutdown().await.map_err(|e| {
         AppError::Channel(format!("SFTP flush failed for {}: {}", file.remote_path, e))
@@ -2995,6 +3084,38 @@ mod tests {
         assert_eq!(concurrency.session_pool_size, 1);
         assert_eq!(concurrency.small_file_concurrency, 1);
         assert_eq!(concurrency.large_file_concurrency, 1);
+    }
+
+    #[test]
+    fn directory_progress_accumulates_chunk_deltas_without_completion_double_count() {
+        let controller = create_directory_transfer_controller(
+            Some("directory-progress-test".to_string()),
+            "session-1",
+            "folder".to_string(),
+            "/remote/folder",
+            "C:/local/folder",
+            "download",
+            2,
+            1_000,
+        );
+        let completed_bytes = AtomicU64::new(0);
+
+        assert_eq!(
+            add_directory_transferred_bytes(&controller, &completed_bytes, 128, 1_000),
+            128
+        );
+        assert_eq!(
+            add_directory_transferred_bytes(&controller, &completed_bytes, 256, 1_000),
+            384
+        );
+
+        controller.update_item_progress(1, 2);
+        controller.update_progress(completed_bytes.load(Ordering::SeqCst), 1_000);
+
+        let event = controller.build_event("progress", 0, None);
+        assert_eq!(event.bytes_transferred, 384);
+        assert_eq!(event.item_count_completed, Some(1));
+        assert_eq!(event.item_count_total, Some(2));
     }
 
     #[test]
