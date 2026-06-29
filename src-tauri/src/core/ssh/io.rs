@@ -19,6 +19,7 @@ use tokio::time::{Duration, Sleep, timeout};
 
 const INJECT_TIMEOUT_SECS: u64 = 5;
 const INITIAL_INJECT_DELAY_MS: u64 = 500;
+const SUPPRESSED_VISIBLE_FALLBACK_MAX_BYTES: usize = 64 * 1024;
 
 /// Tries to detect the remote shell via an exec channel with a timeout.
 ///
@@ -70,6 +71,7 @@ pub(super) async fn open_shell_channel(
     russh::Channel<client::Msg>,
     Option<String>,
     String,
+    Option<ShellKind>,
     Option<String>,
 )> {
     let channel = handle
@@ -104,8 +106,10 @@ pub(super) async fn open_shell_channel(
 
     let ready_marker = osc::build_ready_marker(session_id);
 
+    let mut detected_shell = None;
     let injection_script = match detect_shell_type(handle).await {
         Some(shell_kind) => {
+            detected_shell = Some(shell_kind);
             let script = osc::injection_script(shell_kind, &ready_marker);
             if script.is_some() {
                 tracing::debug!(
@@ -131,7 +135,13 @@ pub(super) async fn open_shell_channel(
         }
     };
 
-    Ok((channel, injection_script, ready_marker, local_notice))
+    Ok((
+        channel,
+        injection_script,
+        ready_marker,
+        detected_shell,
+        local_notice,
+    ))
 }
 
 /// Injection phase state machine.
@@ -238,6 +248,33 @@ fn handle_injection_timeout(phase: &mut IoPhase) -> InjectionTimeoutEvent {
     }
 }
 
+fn append_suppressed_visible(buffer: &mut String, visible: &str) {
+    if visible.is_empty() {
+        return;
+    }
+
+    buffer.push_str(visible);
+    while buffer.len() > SUPPRESSED_VISIBLE_FALLBACK_MAX_BYTES {
+        let Some(first_char) = buffer.chars().next() else {
+            break;
+        };
+        buffer.drain(..first_char.len_utf8());
+    }
+}
+
+fn take_suppressed_fallback(buffer: &mut String, flushed_osc_buffer: String) -> String {
+    if buffer.is_empty() {
+        return flushed_osc_buffer;
+    }
+    if flushed_osc_buffer.is_empty() {
+        return std::mem::take(buffer);
+    }
+
+    let mut fallback = std::mem::take(buffer);
+    fallback.push_str(&flushed_osc_buffer);
+    fallback
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn handle_osc_result(
     app: &AppHandle,
@@ -252,9 +289,17 @@ async fn handle_osc_result(
     inject_deadline: &mut Pin<&mut Sleep>,
     phase: &mut IoPhase,
     result: &osc::OscResult,
+    suppressed_visible_fallback: &mut String,
+    shell_kind: Option<ShellKind>,
 ) {
     match handle_injection_result(phase, result) {
         InjectionEvent::Inject => {
+            tracing::debug!(
+                session_id = %session_id,
+                shell = ?shell_kind,
+                visible_bytes = result.visible.len(),
+                "Sending SSH shell integration injection"
+            );
             emit_output(
                 app,
                 output,
@@ -277,6 +322,19 @@ async fn handle_osc_result(
         InjectionEvent::Ready {
             visible_after_ready,
         } => {
+            let suppressed_visible_bytes = result
+                .visible
+                .len()
+                .saturating_sub(visible_after_ready.len())
+                + suppressed_visible_fallback.len();
+            suppressed_visible_fallback.clear();
+            tracing::debug!(
+                session_id = %session_id,
+                shell = ?shell_kind,
+                suppressed_visible_bytes,
+                ready_after_visible_bytes = visible_after_ready.len(),
+                "SSH shell integration ready marker received"
+            );
             emit_metadata(app, cwd_event, cwd, manager, session_id, result).await;
             if !visible_after_ready.is_empty() {
                 emit_visible_text(output, recording_mgr, session_id, &visible_after_ready);
@@ -296,6 +354,7 @@ async fn handle_osc_result(
             .await;
         }
         InjectionEvent::None => {
+            append_suppressed_visible(suppressed_visible_fallback, &result.visible);
             emit_metadata(app, cwd_event, cwd, manager, session_id, result).await;
         }
     }
@@ -312,6 +371,7 @@ pub(super) async fn ssh_io_loop(
     connection_id: Option<String>,
     injection_script: Option<String>,
     ready_marker: String,
+    shell_kind: Option<ShellKind>,
     post_login: Option<SshPostLoginConfig>,
     startup_command: Option<SshStartupCommand>,
     backspace_mode: String,
@@ -338,6 +398,7 @@ pub(super) async fn ssh_io_loop(
     } else {
         IoPhase::Normal
     };
+    let mut suppressed_visible_fallback = String::new();
     let mut pending_script = injection_script;
     let mut pending_post_login = post_login.and_then(|config| {
         build_startup_command_input(&config.command).map(|input| PendingStartupCommand {
@@ -519,6 +580,8 @@ pub(super) async fn ssh_io_loop(
                                         &mut inject_deadline,
                                         &mut phase,
                                         &result,
+                                        &mut suppressed_visible_fallback,
+                                        shell_kind,
                                     ).await;
                                     continue;
                                 }
@@ -582,6 +645,11 @@ pub(super) async fn ssh_io_loop(
             _ = &mut initial_inject_deadline, if should_send_initial_injection(&phase, pending_script.is_some()) => {
                 if let Some(script) = pending_script.take() {
                     let _ = channel.data(script.as_bytes()).await;
+                    tracing::debug!(
+                        session_id = %session_id,
+                        shell = ?shell_kind,
+                        "Sending SSH shell integration injection after initial delay"
+                    );
                     on_initial_injection_sent(&mut phase);
                     inject_deadline.as_mut().reset(
                         tokio::time::Instant::now()
@@ -592,13 +660,18 @@ pub(super) async fn ssh_io_loop(
             _ = &mut inject_deadline, if phase != IoPhase::Normal => {
                 let timeout_event = handle_injection_timeout(&mut phase);
                 let flushed = stripper.flush();
+                let fallback_visible = take_suppressed_fallback(
+                    &mut suppressed_visible_fallback,
+                    flushed,
+                );
                 tracing::debug!(
                     session_id = %session_id,
-                    buffered_bytes = flushed.len(),
+                    shell = ?shell_kind,
+                    fallback_visible_bytes = fallback_visible.len(),
                     "Injection timeout — falling back to passthrough mode"
                 );
-                if timeout_event == InjectionTimeoutEvent::FallbackToNormal && !flushed.is_empty() {
-                    emit_visible_text(&output, &recording_mgr, &session_id, &flushed);
+                if timeout_event == InjectionTimeoutEvent::FallbackToNormal && !fallback_visible.is_empty() {
+                    emit_visible_text(&output, &recording_mgr, &session_id, &fallback_visible);
                 }
             }
             _ = async {
@@ -749,8 +822,9 @@ fn emit_visible_text(
 mod tests {
     use super::{
         INITIAL_INJECT_DELAY_MS, INJECT_TIMEOUT_SECS, InjectionEvent, InjectionTimeoutEvent,
-        IoPhase, PendingStartupCommand, build_startup_command_input, handle_injection_result,
-        handle_injection_timeout, should_send_initial_injection,
+        IoPhase, PendingStartupCommand, SUPPRESSED_VISIBLE_FALLBACK_MAX_BYTES,
+        append_suppressed_visible, build_startup_command_input, handle_injection_result,
+        handle_injection_timeout, should_send_initial_injection, take_suppressed_fallback,
     };
     use crate::core::ssh::osc::OscResult;
     use std::pin::Pin;
@@ -827,6 +901,37 @@ mod tests {
             InjectionTimeoutEvent::FallbackToNormal
         );
         assert_eq!(suppressing, IoPhase::Normal);
+    }
+
+    #[test]
+    fn suppressed_visible_fallback_keeps_recent_visible_text() {
+        let mut buffer = String::new();
+
+        append_suppressed_visible(&mut buffer, "prompt-before-ready");
+
+        assert_eq!(buffer, "prompt-before-ready");
+    }
+
+    #[test]
+    fn suppressed_visible_fallback_is_bounded() {
+        let mut buffer = String::new();
+
+        append_suppressed_visible(
+            &mut buffer,
+            &"x".repeat(SUPPRESSED_VISIBLE_FALLBACK_MAX_BYTES + 16),
+        );
+
+        assert_eq!(buffer.len(), SUPPRESSED_VISIBLE_FALLBACK_MAX_BYTES);
+    }
+
+    #[test]
+    fn timeout_fallback_combines_suppressed_visible_and_buffered_osc_text() {
+        let mut buffer = "prompt".to_string();
+
+        let fallback = take_suppressed_fallback(&mut buffer, "tail".to_string());
+
+        assert_eq!(fallback, "prompttail");
+        assert!(buffer.is_empty());
     }
 
     #[tokio::test]

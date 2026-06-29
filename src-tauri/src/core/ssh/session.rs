@@ -215,12 +215,13 @@ async fn create_ssh_session_inner(
     let handle_mtx = ssh_connection.target_handle();
     let mut handle = handle_mtx.lock().await;
 
-    let (channel, injection_script, ready_marker, initial_notice) = open_shell_channel(
-        &mut handle,
-        &session_id,
-        x11_config.as_ref().map(|cfg| cfg.fake_cookie_hex.as_str()),
-    )
-    .await?;
+    let (channel, injection_script, ready_marker, detected_shell, initial_notice) =
+        open_shell_channel(
+            &mut handle,
+            &session_id,
+            x11_config.as_ref().map(|cfg| cfg.fake_cookie_hex.as_str()),
+        )
+        .await?;
     drop(handle);
     let injection_active = injection_script.is_some();
 
@@ -284,6 +285,7 @@ async fn create_ssh_session_inner(
             io_connection_id,
             injection_script,
             ready_marker,
+            detected_shell,
             post_login,
             startup_command,
             backspace_mode,
@@ -366,7 +368,7 @@ pub async fn create_multiplexed_ssh_session(
 
     let handle_mtx = ssh_connection.target_handle();
     let mut handle = handle_mtx.lock().await;
-    let (channel, injection_script, ready_marker, initial_notice) =
+    let (channel, injection_script, ready_marker, detected_shell, initial_notice) =
         open_shell_channel(&mut handle, &session_id, None).await?;
     drop(handle);
     let injection_active = injection_script.is_some();
@@ -414,6 +416,7 @@ pub async fn create_multiplexed_ssh_session(
             io_connection_id,
             injection_script,
             ready_marker,
+            detected_shell,
             post_login,
             startup_command,
             backspace_mode,
