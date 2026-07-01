@@ -114,6 +114,7 @@ interface AppLayoutProps {
     locked: boolean;
     hasMasterPassword: boolean;
     onUnlock: () => void;
+    onRequestClose: () => void;
   };
 }
 
@@ -484,7 +485,11 @@ export default function AppLayout({
         )}
 
         {dialogs.locked && (
-          <LockScreen hasPassword={dialogs.hasMasterPassword} onUnlock={dialogs.onUnlock} />
+          <LockScreen
+            hasPassword={dialogs.hasMasterPassword}
+            onUnlock={dialogs.onUnlock}
+            onRequestClose={dialogs.onRequestClose}
+          />
         )}
       </div>
     </div>

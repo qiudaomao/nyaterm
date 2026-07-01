@@ -1402,6 +1402,21 @@ function App() {
     handleQuitApplication();
   }, [appSettings.general.confirm_on_close, handleQuitApplication, tabs.length]);
 
+  const handleRequestWindowClose = useCallback(() => {
+    if (
+      !appSettings.general.minimize_to_tray &&
+      tabs.length > 0 &&
+      appSettings.general.confirm_on_close !== false
+    ) {
+      setShowQuitConfirm(true);
+      return;
+    }
+
+    import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => getCurrentWindow().close())
+      .catch(() => {});
+  }, [appSettings.general.confirm_on_close, appSettings.general.minimize_to_tray, tabs.length]);
+
   useEffect(() => {
     const unlisten = listen<TrayAction>("tray-action", ({ payload }) => {
       if (!eventTargetsCurrentWindow(payload.targetWindowLabel)) return;
@@ -2656,6 +2671,7 @@ function App() {
           locked: isLocked,
           hasMasterPassword: !!appSettings.security.master_password,
           onUnlock: () => setIsLocked(false),
+          onRequestClose: handleRequestWindowClose,
         }}
       />
       <SessionQuickSwitcher
