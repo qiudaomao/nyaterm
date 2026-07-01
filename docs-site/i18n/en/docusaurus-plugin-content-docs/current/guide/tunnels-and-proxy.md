@@ -20,6 +20,7 @@ Currently supported:
 
 - **SOCKS5**
 - **HTTP**
+- **ProxyCommand**
 
 Each proxy configuration can store:
 
@@ -28,6 +29,26 @@ Each proxy configuration can store:
 - Host
 - Port
 - Username / password
+- ProxyCommand command template
+
+### ProxyCommand
+
+ProxyCommand is useful when you already have a command-line proxy, gateway, or corporate network helper. NyaTerm replaces OpenSSH-style placeholders in the command template:
+
+| Placeholder | Meaning |
+|-------------|---------|
+| `%h` | Target host |
+| `%p` | Target port |
+| `%r` | Login username |
+| `%%` | Literal `%` |
+
+Example:
+
+```bash
+nc -X connect -x jump.example.com:1080 %h %p
+```
+
+If your environment depends on a custom gateway, bastion command, or local proxy program, save it as a ProxyCommand profile and select it from the advanced section of an SSH connection.
 
 Proxies are managed centrally in the Network panel, then selected from the advanced section of an SSH connection.
 
@@ -47,7 +68,11 @@ Typical use cases:
 - Internal hosts that are not directly reachable
 - Multi-layer SSH network isolation
 
-In the SSH connection advanced section, you can pick an existing saved SSH connection as the jump host.
+In the SSH connection advanced section, you can pick an existing saved SSH connection as the jump host. NyaTerm validates the jump-host chain:
+
+- Missing referenced jump hosts are blocked or surfaced for correction
+- Recursive relationships are rejected so connections cannot loop forever
+- Multi-hop designs should stay as clear one-way chains, for example `local -> bastion -> internal host`
 
 ## Tunnels
 

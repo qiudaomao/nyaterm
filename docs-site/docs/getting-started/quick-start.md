@@ -28,9 +28,10 @@ sidebar_position: 2
 
 如有需要，还可以展开高级区域配置：
 
-- 代理
-- 跳板机
+- 代理（SOCKS5 / HTTP / ProxyCommand）
+- 跳板机（会校验缺失引用与环路）
 - OTP 绑定与自动填充
+- X11 转发、本地 X11 DISPLAY
 - 图标、分组、描述等元数据
 
 保存后，连接会出现在已保存连接列表中。
@@ -181,5 +182,5 @@ NyaTerm 支持把当前会话输出录制为日志文件。
 - 想管理文件与自动回传：查看 [SFTP 文件传输](../guide/file-transfer)
 - 想了解终端增强与录制：查看 [终端功能](../guide/terminal)
 - 想配置 OTP：查看 [OTP 与认证](../guide/otp-and-auth)
-- 想启用 AI 辅助：查看 [终端功能](../guide/terminal)
+- 想启用 AI 辅助：查看 [AI 助手](../guide/ai-assistant)
 - 想启用云同步：查看 [云同步](../guide/sync-and-backup)

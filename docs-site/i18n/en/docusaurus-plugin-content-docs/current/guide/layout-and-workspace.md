@@ -28,7 +28,8 @@ Common tab actions include:
 - Switching between tabs
 - Renaming a tab
 - Setting a tab color
-- Duplicating the current session
+- Duplicating the current session, optionally with a startup command
+- Dragging a tab into another dock/split area
 - Reconnecting a session
 - Viewing session details
 
@@ -38,7 +39,18 @@ This makes NyaTerm a good fit for separating:
 - Different projects
 - Different task phases
 
-## Session quick switcher
+## Command Palette and session quick switcher
+
+The **Command Palette** helps you find app actions, session entry points, and common workspace workflows. Open it from the top menu or keyboard shortcut, then filter by keyword.
+
+It is useful for:
+
+- Opening or switching to an existing session
+- Creating new SSH or Local Terminal sessions
+- Finding settings, panel toggles, lock actions, and other app-level commands
+- Staying keyboard-first while navigating the workspace
+
+### Session quick switcher
 
 When you have many tabs and connections open, the session quick switcher is the fastest way to navigate. It is a command-palette-style searchable dialog that you open via its keyboard shortcut or activity-bar entry.
 
@@ -53,7 +65,7 @@ Right-click a tab to split the current session into:
 - **Horizontal Split**
 - **Vertical Split**
 
-The panes still belong to the same tab, but each pane can hold its own independent session content. This is useful for:
+The panes still belong to the same tab, but each pane can hold its own independent session content. Newer workspace builds also let you drag tabs into target docking areas, which is a more visual way to move sessions into horizontal or vertical splits. This is useful for:
 
 - Watching logs in one pane and running commands in another
 - Comparing two hosts side by side
@@ -72,6 +84,12 @@ For day-to-day usage, the simple mental model is:
 - Tabs organize tasks
 - Splits let you observe things side by side
 - The active pane decides where input goes
+
+## Layout restoration and workspace padding
+
+NyaTerm saves the terminal window layout and tries to restore tabs, splits, and active positions when the workspace is reopened. This helps if you maintain the same set of hosts, logs, and local build tasks over time.
+
+If you want clearer visual separation between terminal areas, adjust **Workspace Padding** in terminal-related settings. This only changes the workspace spacing; it does not change remote or local shell behavior.
 
 ## Left and right panels
 
@@ -122,6 +140,18 @@ This helps because it:
 - Avoids interrupting the main workspace
 - Gives complex configuration its own focused space
 - Makes screenshots and demos easier to structure
+
+## Tray, child windows, and window state
+
+If **Minimize to tray when closing** is enabled in **Settings → General**, closing the main window keeps the app running in the background instead of quitting immediately. The main window can also be hidden and restored later from the tray or system entry point.
+
+NyaTerm also tries to remember child-window size, position, and modal relationships. Settings, new-session, remote-file editing, and auto-upload windows should reopen with more stable focus and window state.
+
+This is useful when you want to:
+
+- Keep active sessions alive
+- Let sync or backup continue in the background
+- Reopen the main workspace quickly from the tray
 
 ## Recommended workflow combinations
 

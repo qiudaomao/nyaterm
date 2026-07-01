@@ -97,7 +97,7 @@ not as a collaborative merge tool.
 
 For the complete setup and workflow details, see [Cloud Sync](./sync-and-backup).
 
-## Screen lock
+## Screen lock and app lock
 
 ### Manual lock
 
@@ -115,7 +115,9 @@ In **Settings → Security**, once screen lock is enabled, you can also configur
 - **With a master password** — entering the correct master password is required
 - **Without a master password** — unlocking can happen directly
 
-If you plan to use NyaTerm on a shared machine or during demos, enabling both **master password** and **screen lock** is the safer setup.
+The app lock state is shared across the main workspace, modal child windows, and idle detection. When locked, terminal content and sensitive panels are covered; treat it as protection for the local NyaTerm workspace and local sensitive-operation entry points, not as remote-system access control.
+
+If you plan to use NyaTerm on a shared machine or during demos, enabling **master password**, **screen lock**, and **idle auto-lock** together is the safer setup.
 
 ## SSH host key policies
 

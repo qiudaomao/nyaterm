@@ -27,11 +27,18 @@ In **Settings → Interaction**, you can also adjust:
 - Word separators
 - Default character encoding
 
-### Scrollback and fonts
+### Scrollback, fonts, and zoom
 
 - The default scrollback buffer keeps **10000 lines**
-- You can customize font family, font size, cursor style, and cursor blink
+- You can customize font family, font size, normal font weight, bold font weight, cursor style, and cursor blink
+- Use the menu or keyboard shortcuts to zoom in, zoom out, or reset zoom; the terminal root coordinates zoom handling so nested workspaces do not process it twice
 - **Hardware acceleration** is optional and is **not enabled by default**; you can toggle it manually in **Settings → Terminal** if you want to compare rendering behavior
+
+### Paste and input compatibility
+
+- Terminal settings can control image path pasting, which is useful when you want to pass screenshot or local image paths to command-line tools
+- On macOS, enable the IME compatibility option in **Settings → Interaction** if composition text, candidate windows, or special key behavior feels wrong
+- In interactive programs such as vim, less, or top, NyaTerm suppresses command suggestions so history completions do not interfere with the program's own input handling
 
 ## Command history and suggestions
 
@@ -42,6 +49,16 @@ NyaTerm provides two related helpers for session workflows.
 - Commands entered in the terminal are recorded automatically
 - Fuzzy search is supported
 - You can review history from the **Command History** panel on the right
+- The search UI keeps recent queries so repeated log/error searches are easier
+
+### Terminal find
+
+`Ctrl / Cmd + Shift + F` opens terminal find. The find UI supports:
+
+- Previous / next result navigation
+- Current-result and total-result feedback
+- No-result, searching, and invalid-regex states
+- Reusing recent queries without retyping the full keyword
 
 ### Input suggestions
 

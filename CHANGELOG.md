@@ -4,6 +4,136 @@ All notable changes to this project will be documented in this file.
 
 This changelog is inferred from release bump commits in git history (for example `chore: bump version to vX.Y.Z`) and grouped by Conventional Commit type.
 
+## [1.1.12] - 2026-06-30
+
+### Added
+
+- **connections:** Enhance jump host configuration with clearer chain handling and validation for ProxyJump-style setups.
+
+### Fixed
+
+- **connections:** Prevent cycles in jump host relationships so saved connections cannot reference each other recursively.
+
+### Documentation
+
+- **i18n:** Add localization strings for the updated jump host workflow.
+
+## [1.1.11] - 2026-06-30
+
+### Added
+
+- **header:** Add a Command Palette entry for quickly finding app actions and session workflows.
+- **ai:** Introduce command-execution and final-answer tools for Agent interactions while preserving approval gates.
+- **app-lock:** Implement app lock state management with idle locking support.
+- **terminal-layout:** Restore terminal window layout state and add related settings for persistent workspaces.
+- **appearance:** Add terminal font weight options for normal and bold text rendering.
+- **app:** Add minimize-to-tray and hide-main-window behavior for background workflows.
+
+### Changed
+
+- **window-management:** Improve child-window state persistence and modal focus handling.
+- **themes:** Refresh terminal and app theme colors, including high-contrast variants.
+
+### Fixed
+
+- **saved-connections:** Improve pointer-event handling for connection interactions and drag behavior.
+- **terminal:** Improve terminal zoom handling across nested workspace roots.
+
+## [1.1.10] - 2026-06-25
+
+### Added
+
+- **ssh-auth:** Add a dedicated SSH authentication request dialog for interactive login flows.
+- **proxy:** Add ProxyCommand support to proxy configuration, including OpenSSH-style placeholders.
+- **transfer-dialog:** Add duplicate target handling options for uploads and downloads.
+- **terminal:** Improve terminal search with persistent query state, result navigation, and clearer feedback.
+- **cloud-sync:** Add more detailed cloud sync status updates and cleanup timeout handling.
+
+### Changed
+
+- **ai:** Streamline AI model client service-target configuration.
+- **cloud-sync:** Adjust cloud-sync history and log handling for clearer diagnostics.
+
+### Fixed
+
+- **terminal:** Improve search focus handling and selection clearing.
+- **settings:** Fix saved connection sort order on the new session page.
+
+### Performance
+
+- **serial:** Streamline serial session management and timeout handling.
+
+## [1.1.9] - 2026-06-21
+
+### Added
+
+- **terminal:** Add startup commands for duplicated and multiplexed sessions.
+- **terminal:** Add image path pasting behavior in terminal settings.
+- **terminal:** Add workspace padding settings for terminal layout spacing.
+- **interaction:** Add a macOS IME compatibility setting.
+- **telnet:** Add local line editing for Telnet sessions.
+- **terminal:** Enhance Windows Terminal support and shell selection.
+
+### Changed
+
+- **terminal:** Suppress command suggestions in interactive programs where inline suggestions are more likely to interfere.
+- **sync-backup:** Streamline sync backup history and cloud sync manager behavior.
+
+### Fixed
+
+- **tabbar:** Prevent pointer event propagation issues in tab interactions.
+- **terminal:** Improve reconnect content management and connection error handling.
+
+## [1.1.8] - 2026-06-21
+
+### Added
+
+- **terminal:** Add tab splitting with drag-and-drop docking support.
+- **ssh:** Add X11 forwarding support for SSH connections.
+- **russh-sftp:** Introduce a new SFTP subsystem with client and server support.
+- **file-explorer:** Add remote file editor flows and dedicated remote-file handling dialogs.
+- **sftp:** Add OpenSSH-compatible symlink support.
+- **file-transfer:** Show transfer speed in the transfer UI.
+- **cloud-sync:** Enhance cloud sync and GitHub Gist startup/error handling.
+- **saved-connections:** Add copy shortcuts and improve drag-and-drop behavior for selected connections.
+
+### Fixed
+
+- **scp:** Add compatibility checks for GNU `-printf` and `-c` support in remote commands.
+- **file-explorer:** Improve directory loading, download handling, and error feedback.
+
+### Performance
+
+- **russh-sftp:** Improve SFTP upload throughput and transfer tracking.
+- **sftp:** Use asynchronous downloads when file sizes are known.
+
+### Documentation
+
+- **ssh:** Document X11 forwarding in the SSH connection guide.
+- **cloud-sync:** Update cloud sync terminology and GitHub Gist authorization guidance.
+
+## [1.1.7] - 2026-06-15
+
+### Added
+
+- **panel:** Add multi-open panel behavior for opening multiple tools without losing context.
+- **terminal:** Add backend output pause/resume controls.
+- **session:** Add a session quick switcher dialog for faster navigation between active sessions and saved connections.
+- **icons:** Add server icons and improve saved connection icon resolution.
+- **network:** Add group management for proxies and tunnels.
+- **sync:** Add v3 snapshot decoding and payload hash calculation.
+
+### Changed
+
+- **file-explorer:** Define a shared `FileProperties` interface and clean up the Properties dialog.
+- **terminal:** Improve tab tooltips, tab management, and scrolling behavior.
+
+### Fixed
+
+- **command-history:** Correct suggestion application behavior.
+- **app:** Improve Windows folder opening when permission errors occur.
+- **file-explorer:** Fix opening the target directory after remote-file downloads.
+
 ## [1.1.6] - 2026-06-12
 
 ### Added

@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
         'guide/ssh-connection',
         'guide/layout-and-workspace',
         'guide/terminal',
+        'guide/ai-assistant',
         'guide/file-transfer',
         'guide/tunnels-and-proxy',
         'guide/quick-commands',

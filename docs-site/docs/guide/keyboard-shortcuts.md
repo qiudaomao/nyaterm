@@ -32,12 +32,17 @@ NyaTerm 的快捷键分成两类理解最不容易混淆：
 | 快捷键 | 功能 |
 |--------|------|
 | `Ctrl / Cmd + Shift + N` | 新建会话 |
+| `Ctrl / Cmd + Shift + S` | 打开命令面板 / 会话快速切换 |
 | ``Ctrl / Cmd + ` `` | 新建本地终端 |
 | `Ctrl / Cmd + Shift + W` | 关闭当前标签 |
 | `Ctrl + Tab` | 切换到下一个标签 |
 | `Ctrl + Shift + Tab` | 切换到上一个标签 |
 | `Ctrl / Cmd + 1-8` | 跳转到指定标签 |
 | `Ctrl / Cmd + 9` | 跳转到最后一个标签 |
+| `Ctrl / Cmd + Shift + D` | 复制当前会话 |
+| `Ctrl / Cmd + Shift + M` | 多路复用当前 SSH 会话 |
+| `Ctrl / Cmd + Alt + D` | 复制当前会话并指定启动命令 |
+| `Ctrl / Cmd + Alt + M` | 多路复用 SSH 并指定启动命令 |
 
 ## 视图与面板
 
@@ -55,6 +60,8 @@ NyaTerm 的快捷键分成两类理解最不容易混淆：
 |--------|------|
 | `Ctrl / Cmd + Shift + L` | 锁定屏幕 |
 | `Ctrl / Cmd + ,` | 打开设置 |
+| `Ctrl / Cmd + Shift + G` | 管理同步输入组 |
+| `Ctrl / Cmd + Alt + C` | 复制已选保存连接（在已保存连接面板中） |
 
 ## 使用建议
 

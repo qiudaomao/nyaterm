@@ -32,7 +32,7 @@ From the file list or the context menu, you can perform:
 | Move | Move a file or directory to another path |
 | Delete | Remove a file or directory |
 | Properties | View size, timestamps, UID/GID, permissions, and more |
-| New File / Folder / Symlink | Create entries directly in the current directory |
+| New File / Folder / Symlink | Create entries directly in the current directory; symlinks use OpenSSH-compatible handling |
 
 The **Open** action is not just a preview. It prepares the round-trip editing flow.
 
@@ -76,6 +76,7 @@ Both file downloads and directory downloads are supported.
 NyaTerm puts uploads and downloads into a shared transfer queue so you can inspect:
 
 - Current progress
+- Real-time transfer speed
 - Success, paused, canceled, and failed states
 - Concurrent transfers
 - The current download target
@@ -107,6 +108,20 @@ In **Settings → Transfer**, you can adjust:
 - Default download path
 - Whether to ask for the save location every time
 - The local editor used when opening remote files
+
+### Duplicate target handling
+
+When an upload or download reaches an existing file, the duplicate target dialog lets you choose:
+
+- **Overwrite** — replace the target file
+- **Overwrite and do not ask again for this task** — keep overwriting for the current batch
+- **Skip** — keep the target file and skip the current item
+
+If you often sync the same directories in batches, tune the default conflict strategy in **Settings → Transfer** to reduce repeated prompts.
+
+### SFTP reliability and performance
+
+The newer SFTP backend improves directory handling, symlinks, known-size downloads, and large uploads. You usually do not need to think about the implementation details; the visible result is clearer speed feedback, more specific errors, and directory/symlink behavior that is closer to OpenSSH.
 
 ## Sync with terminal paths
 

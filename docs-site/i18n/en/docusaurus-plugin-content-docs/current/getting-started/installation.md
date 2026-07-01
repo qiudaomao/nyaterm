@@ -36,8 +36,8 @@ After installation, the main window is typically organized into these areas:
 
 - **Top menu and window bar** — File / View / Help and window controls
 - **Central workspace** — terminal tabs and split panes inside the active tab
-- **Left activity bar and panels** — file explorer, network, Security/Auth, and related capability entry points
-- **Right activity bar and panels** — saved connections, active sessions, command history, and resource monitor
+- **Left activity bar and panels** — file explorer, network, Security/Auth, Cloud Sync, settings, and related capability entry points
+- **Right activity bar and panels** — saved connections, AI Assistant, active sessions, command history, and resource monitor
 - **Bottom helper area** — quick commands, serial send, recording, and lock actions
 
 Some workflows open dedicated child windows instead of interrupting the main workspace, such as:
@@ -45,7 +45,22 @@ Some workflows open dedicated child windows instead of interrupting the main wor
 - Settings
 - New session / connection creation
 - Quick command editing
+- Remote-file editing
 - Auto-upload prompts
+
+## Settings worth checking after install
+
+Before using NyaTerm long term, quickly review:
+
+- **Settings → General**: startup restore, minimize to tray when closing, close confirmation
+- **Settings → General**: log level, log retention, open log directory, export diagnostics bundle
+- **Settings → Interaction**: command suggestions, history-command length filters, copy, right-click paste, macOS IME compatibility
+- **Settings → Terminal**: scrollback, Keep-Alive, action links, line numbers / timestamps, keyword highlighting, resource monitor, workspace padding, font weight, image path paste behavior
+- **Settings → Transfer**: default download directory, default editor, recording path, concurrency, retry, duplicate-target strategy
+- **Settings → Security**: master password, screen lock, idle auto-lock, host key policy
+- **Settings → AI**: providers, models, risk controls, history, and context limits
+
+If you often keep sessions or sync tasks running in the background, check **Minimize to tray when closing** early.
 
 ## Suggested first run
 
@@ -55,4 +70,5 @@ For a first pass through the app, try this order:
 2. Create one **SSH** connection
 3. Create one **Local Terminal** to experience the mixed workspace model
 4. Open the file explorer and transfer queue in the SSH session
-5. Try command history, quick commands, and terminal search
+5. Try command history, quick commands, AI Assistant, recording, and terminal search
+6. On Windows, also try dragging local files or folders into the file explorer for upload

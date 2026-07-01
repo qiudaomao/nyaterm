@@ -55,9 +55,10 @@ NyaTerm includes an AI Assistant panel for command generation, terminal output e
 - **Agent mode** for multi-step work using an observe-decide-run loop against the active terminal session
 - **Recent-output actions** so you can ask AI to explain the latest terminal output without manually copying it
 - **Structured command cards** with risk levels, execution controls, and optional save-to-quick-command support
+- **Approved command execution tools** for Agent workflows, with a separate final-answer step after terminal work completes
 - **Inline terminal capture** during Agent execution with configurable `Terminal Output Lines`
 - **Session mentions** with `@` to bring other terminal sessions into the AI context
-- **Provider management** for built-in providers and custom OpenAI-compatible endpoints
+- **Provider management** for built-in providers, manual model entries, credential groups, and custom OpenAI-compatible endpoints
 - **Risk control** for high-impact commands, including approval gates and safer alternatives
 
 ---
@@ -94,20 +95,22 @@ NyaTerm is built for people who move between servers, local commands, devices, a
 ## Sessions and Workspace
 
 - SSH, Local Terminal, Telnet, and Serial session support
-- Multi-tab workspace with horizontal and vertical pane splits
-- Saved connections with folders, icons, metadata, duplication, reconnect, and import flows
+- Multi-tab workspace with horizontal and vertical pane splits, tab drag docking, and layout restoration
+- Saved connections with folders, icons, metadata, duplication, keyboard copy, reconnect, and import flows
+- Command Palette and session quick switcher for finding actions, open sessions, saved connections, and new-session entry points
 - Main-window `Background Image` customization with `cover` / `contain` / `stretch` / `tile` sizing and adjustable `Background Content Opacity`
 - Left and right activity bars for file explorer, network, Security/Auth, Sync & Backup, AI Assistant, saved connections, active sessions, command history, and resource monitoring
-- Child windows for settings, new-session creation, quick-command editing, and auto-upload prompts
-- Tray support with optional minimize-to-tray behavior
+- Child windows for settings, new-session creation, quick-command editing, remote-file editing, and auto-upload prompts
+- Tray support with optional minimize-to-tray and hide-main-window behavior
 
 ## Terminal Experience
 
-- Terminal search, copy/paste, context menus, and selected-text actions
-- Command history with fuzzy suggestions and configurable length filters for noisy commands
+- Terminal search with result navigation, search history, copy/paste, context menus, and selected-text actions
+- Command history with fuzzy suggestions, configurable length filters, and suppression in interactive programs
 - Optional line-number and timestamp gutter
 - Optional action links for IPv4 addresses, `host:port`, and archive filenames
-- Optional keyword highlighting with built-in presets and custom rules
+- Optional keyword highlighting with built-in presets, custom rules, and JSON import
+- Terminal zoom, workspace padding, font weight controls, macOS IME compatibility, and image path paste handling
 - AI shortcuts for explaining recent output, plus inline Agent command output with configurable `Terminal Output Lines`
 - Large-output protection, configurable scrollback, SSH keep-alive, and session recording
 - Online search and translation from selected terminal text
@@ -117,9 +120,9 @@ NyaTerm is built for people who move between servers, local commands, devices, a
 ## SFTP and File Workflows
 
 - Built-in SFTP file explorer for SSH sessions
-- Upload, download, rename, move, delete, properties, new file/folder, and symlink actions
+- Upload, download, rename, move, delete, properties, new file/folder, and OpenSSH-compatible symlink actions
 - Folder upload, multi-select, editable path bar, and manual/automatic sync with terminal cwd
-- Transfer queue with pause, resume, cancel, retry, timestamp preservation, and configurable concurrency
+- Transfer queue with speed display, pause, resume, cancel, retry, duplicate-target handling, timestamp preservation, and configurable concurrency
 - Open remote files in a local editor and upload saved changes back through the watcher-driven auto-upload flow
 - External drag-and-drop upload support on Windows
 
@@ -128,16 +131,17 @@ NyaTerm is built for people who move between servers, local commands, devices, a
 - Password authentication, private keys, host-key verification, and encrypted local persistence
 - Credential management with regex-based terminal auto-fill
 - OTP management with TOTP/HOTP, QR import, and SSH auto-fill support
-- Proxy configurations, SSH jump hosts, and local / remote / dynamic tunnels
-- Screen lock, master password, diagnostics settings, local log management, and diagnostics bundle export
+- Proxy configurations including SOCKS5, HTTP, and ProxyCommand; SSH jump hosts with cycle prevention; local / remote / dynamic tunnels
+- SSH X11 forwarding for environments with a local X server
+- Screen lock, idle app lock, master password, diagnostics settings, local log management, and diagnostics bundle export
 
 ## Sync, Backup, and Migration
 
-- Encrypted cloud sync and backup through WebDAV and S3-compatible storage
+- Encrypted cloud sync and backup through WebDAV, S3-compatible storage, and GitHub Gist
 - Master password required before sync, backup, encrypted import/export, or scheduled encrypted backup actions
-- Startup sync checks, debounced auto-push after supported local changes, and scheduled backup retention
+- Startup sync checks, debounced auto-push after supported local changes, detailed status updates, and scheduled backup retention
 - Manual test / push / pull / backup actions, remote backup restore, and snapshot-level conflict resolution
-- Session import from Xshell, MobaXterm, and WindTerm
+- Session import from Xshell, MobaXterm, WindTerm, and NyaTerm JSON definitions
 - Full-app encrypted `.nya` import/export for portable NyaTerm configuration
 
 ---

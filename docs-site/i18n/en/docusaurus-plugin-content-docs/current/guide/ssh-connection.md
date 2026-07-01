@@ -61,6 +61,17 @@ Useful for:
 
 Both passwords and keys can be managed centrally in **Security/Auth**.
 
+### Interactive authentication requests
+
+When a server asks for additional keyboard-interactive input, OTP, or a restarted authentication step, NyaTerm collects the information through a dedicated SSH authentication request window instead of mixing every prompt into terminal output. This makes it easier to distinguish:
+
+- Normal password / private-key authentication
+- Keyboard-interactive authentication
+- OTP or second-factor prompts
+- Authentication flows that need to restart
+
+If an authentication request comes from an unexpected host or session, verify the connection details before entering sensitive information.
+
 ## Advanced configuration
 
 The advanced section is where an SSH connection goes from "can connect" to "fits a real daily workflow."
@@ -73,6 +84,7 @@ Supported proxy types:
 
 - **SOCKS5**
 - **HTTP**
+- **ProxyCommand**
 
 A proxy record can store:
 
@@ -91,6 +103,8 @@ Typical cases include:
 - Connecting through a bastion host
 - Reaching internal production hosts
 - Multi-hop SSH login chains
+
+NyaTerm validates jump-host chains and rejects missing or cyclic references, so a saved connection cannot recurse forever through its own proxy path.
 
 ### Post-login command
 

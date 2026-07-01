@@ -10,6 +10,190 @@ export type ChangelogRelease = {
 
 const changelogReleasesEn: ChangelogRelease[] = [
   {
+    version: '[1.1.12] - 2026-06-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '**connections:** Enhance jump host configuration with clearer chain handling and validation for ProxyJump-style setups.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          '**connections:** Prevent cycles in jump host relationships so saved connections cannot reference each other recursively.',
+        ],
+      },
+      {
+        title: 'Documentation',
+        items: ['**i18n:** Add localization strings for the updated jump host workflow.'],
+      },
+    ],
+  },
+  {
+    version: '[1.1.11] - 2026-06-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '**header:** Add a Command Palette entry for quickly finding app actions and session workflows.',
+          '**ai:** Introduce command-execution and final-answer tools for Agent interactions while preserving approval gates.',
+          '**app-lock:** Implement app lock state management with idle locking support.',
+          '**terminal-layout:** Restore terminal window layout state and add related settings for persistent workspaces.',
+          '**appearance:** Add terminal font weight options for normal and bold text rendering.',
+          '**app:** Add minimize-to-tray and hide-main-window behavior for background workflows.',
+        ],
+      },
+      {
+        title: 'Changed',
+        items: [
+          '**window-management:** Improve child-window state persistence and modal focus handling.',
+          '**themes:** Refresh terminal and app theme colors, including high-contrast variants.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          '**saved-connections:** Improve pointer-event handling for connection interactions and drag behavior.',
+          '**terminal:** Improve terminal zoom handling across nested workspace roots.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '[1.1.10] - 2026-06-25',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '**ssh-auth:** Add a dedicated SSH authentication request dialog for interactive login flows.',
+          '**proxy:** Add ProxyCommand support to proxy configuration, including OpenSSH-style placeholders.',
+          '**transfer-dialog:** Add duplicate target handling options for uploads and downloads.',
+          '**terminal:** Improve terminal search with persistent query state, result navigation, and clearer feedback.',
+          '**cloud-sync:** Add more detailed cloud sync status updates and cleanup timeout handling.',
+        ],
+      },
+      {
+        title: 'Changed',
+        items: [
+          '**ai:** Streamline AI model client service-target configuration.',
+          '**cloud-sync:** Adjust cloud-sync history and log handling for clearer diagnostics.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          '**terminal:** Improve search focus handling and selection clearing.',
+          '**settings:** Fix saved connection sort order on the new session page.',
+        ],
+      },
+      {
+        title: 'Performance',
+        items: ['**serial:** Streamline serial session management and timeout handling.'],
+      },
+    ],
+  },
+  {
+    version: '[1.1.9] - 2026-06-21',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '**terminal:** Add startup commands for duplicated and multiplexed sessions.',
+          '**terminal:** Add image path pasting behavior in terminal settings.',
+          '**terminal:** Add workspace padding settings for terminal layout spacing.',
+          '**interaction:** Add a macOS IME compatibility setting.',
+          '**telnet:** Add local line editing for Telnet sessions.',
+          '**terminal:** Enhance Windows Terminal support and shell selection.',
+        ],
+      },
+      {
+        title: 'Changed',
+        items: [
+          '**terminal:** Suppress command suggestions in interactive programs where inline suggestions are more likely to interfere.',
+          '**sync-backup:** Streamline sync backup history and cloud sync manager behavior.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          '**tabbar:** Prevent pointer event propagation issues in tab interactions.',
+          '**terminal:** Improve reconnect content management and connection error handling.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '[1.1.8] - 2026-06-21',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '**terminal:** Add tab splitting with drag-and-drop docking support.',
+          '**ssh:** Add X11 forwarding support for SSH connections.',
+          '**russh-sftp:** Introduce a new SFTP subsystem with client and server support.',
+          '**file-explorer:** Add remote file editor flows and dedicated remote-file handling dialogs.',
+          '**sftp:** Add OpenSSH-compatible symlink support.',
+          '**file-transfer:** Show transfer speed in the transfer UI.',
+          '**cloud-sync:** Enhance cloud sync and GitHub Gist startup/error handling.',
+          '**saved-connections:** Add copy shortcuts and improve drag-and-drop behavior for selected connections.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          '**scp:** Add compatibility checks for GNU `-printf` and `-c` support in remote commands.',
+          '**file-explorer:** Improve directory loading, download handling, and error feedback.',
+        ],
+      },
+      {
+        title: 'Performance',
+        items: [
+          '**russh-sftp:** Improve SFTP upload throughput and transfer tracking.',
+          '**sftp:** Use asynchronous downloads when file sizes are known.',
+        ],
+      },
+      {
+        title: 'Documentation',
+        items: [
+          '**ssh:** Document X11 forwarding in the SSH connection guide.',
+          '**cloud-sync:** Update cloud sync terminology and GitHub Gist authorization guidance.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '[1.1.7] - 2026-06-15',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '**panel:** Add multi-open panel behavior for opening multiple tools without losing context.',
+          '**terminal:** Add backend output pause/resume controls.',
+          '**session:** Add a session quick switcher dialog for faster navigation between active sessions and saved connections.',
+          '**icons:** Add server icons and improve saved connection icon resolution.',
+          '**network:** Add group management for proxies and tunnels.',
+          '**sync:** Add v3 snapshot decoding and payload hash calculation.',
+        ],
+      },
+      {
+        title: 'Changed',
+        items: [
+          '**file-explorer:** Define a shared `FileProperties` interface and clean up the Properties dialog.',
+          '**terminal:** Improve tab tooltips, tab management, and scrolling behavior.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          '**command-history:** Correct suggestion application behavior.',
+          '**app:** Improve Windows folder opening when permission errors occur.',
+          '**file-explorer:** Fix opening the target directory after remote-file downloads.',
+        ],
+      },
+    ],
+  },
+  {
     version: '[1.1.6] - 2026-06-12',
     sections: [
       {
@@ -1285,6 +1469,186 @@ const changelogReleasesEn: ChangelogRelease[] = [
 ];
 
 const changelogReleasesZhCN: ChangelogRelease[] = [
+  {
+    version: '[1.1.12] - 2026-06-30',
+    sections: [
+      {
+        title: '新增',
+        items: ['**connections:** 增强跳板机配置，改进 ProxyJump 风格链路的展示与校验。'],
+      },
+      {
+        title: '修复',
+        items: ['**connections:** 阻止跳板机关系形成环路，避免已保存连接递归引用。'],
+      },
+      {
+        title: '文档',
+        items: ['**i18n:** 为更新后的跳板机工作流补充本地化字符串。'],
+      },
+    ],
+  },
+  {
+    version: '[1.1.11] - 2026-06-30',
+    sections: [
+      {
+        title: '新增',
+        items: [
+          '**header:** 新增命令面板入口，便于快速查找应用动作和会话工作流。',
+          '**ai:** 为 Agent 交互引入命令执行与最终回答工具，同时保留审批门槛。',
+          '**app-lock:** 实现应用锁定状态管理，并支持空闲自动锁定。',
+          '**terminal-layout:** 恢复终端窗口布局状态，并加入持久工作区相关设置。',
+          '**appearance:** 新增终端普通文本与粗体文本的字重选项。',
+          '**app:** 新增最小化到托盘和隐藏主窗口行为，适合后台驻留工作流。',
+        ],
+      },
+      {
+        title: '变更',
+        items: [
+          '**window-management:** 改进子窗口状态持久化和模态焦点处理。',
+          '**themes:** 刷新终端与应用主题颜色，包括高对比度变体。',
+        ],
+      },
+      {
+        title: '修复',
+        items: [
+          '**saved-connections:** 改进连接交互和拖拽行为中的 pointer event 处理。',
+          '**terminal:** 改进嵌套工作区根节点中的终端缩放处理。',
+        ],
+      },
+    ],
+  },
+  {
+    version: '[1.1.10] - 2026-06-25',
+    sections: [
+      {
+        title: '新增',
+        items: [
+          '**ssh-auth:** 新增专用 SSH 认证请求对话框，用于交互式登录流程。',
+          '**proxy:** 在代理配置中新增 ProxyCommand 支持，并兼容 OpenSSH 风格占位符。',
+          '**transfer-dialog:** 为上传和下载新增重复目标处理选项。',
+          '**terminal:** 改进终端搜索，支持持久查询状态、结果跳转和更清晰反馈。',
+          '**cloud-sync:** 新增更详细的云同步状态更新和清理超时处理。',
+        ],
+      },
+      {
+        title: '变更',
+        items: [
+          '**ai:** 精简 AI 模型客户端的服务目标配置。',
+          '**cloud-sync:** 调整云同步历史和日志处理，便于诊断。',
+        ],
+      },
+      {
+        title: '修复',
+        items: [
+          '**terminal:** 改进搜索焦点处理和选区清理。',
+          '**settings:** 修复新建会话页面中的已保存连接排序。',
+        ],
+      },
+      {
+        title: '性能',
+        items: ['**serial:** 精简串口会话管理并改进超时处理。'],
+      },
+    ],
+  },
+  {
+    version: '[1.1.9] - 2026-06-21',
+    sections: [
+      {
+        title: '新增',
+        items: [
+          '**terminal:** 为复制会话和多路复用会话新增启动命令。',
+          '**terminal:** 在终端设置中新增图片路径粘贴行为。',
+          '**terminal:** 新增工作区 padding 设置，用于调整终端布局间距。',
+          '**interaction:** 新增 macOS IME 兼容性设置。',
+          '**telnet:** 为 Telnet 会话新增本地行编辑。',
+          '**terminal:** 增强 Windows Terminal 支持和 shell 选择。',
+        ],
+      },
+      {
+        title: '变更',
+        items: [
+          '**terminal:** 在交互式程序中抑制命令建议，避免内联建议干扰输入。',
+          '**sync-backup:** 精简同步备份历史和云同步管理器行为。',
+        ],
+      },
+      {
+        title: '修复',
+        items: [
+          '**tabbar:** 阻止标签交互中的 pointer event 传播问题。',
+          '**terminal:** 改进重连内容管理和连接错误处理。',
+        ],
+      },
+    ],
+  },
+  {
+    version: '[1.1.8] - 2026-06-21',
+    sections: [
+      {
+        title: '新增',
+        items: [
+          '**terminal:** 新增标签页分屏和拖拽停靠支持。',
+          '**ssh:** 为 SSH 连接新增 X11 转发支持。',
+          '**russh-sftp:** 引入新的 SFTP 子系统，提供客户端和服务端支持。',
+          '**file-explorer:** 新增远程文件编辑流程和专用远程文件处理对话框。',
+          '**sftp:** 新增 OpenSSH 兼容的符号链接支持。',
+          '**file-transfer:** 在传输界面显示传输速度。',
+          '**cloud-sync:** 增强云同步和 GitHub Gist 的启动检查与错误处理。',
+          '**saved-connections:** 新增连接复制快捷键，并改进已选连接的拖拽行为。',
+        ],
+      },
+      {
+        title: '修复',
+        items: [
+          '**scp:** 为远端命令增加 GNU `-printf` 和 `-c` 支持检查。',
+          '**file-explorer:** 改进目录加载、下载处理和错误反馈。',
+        ],
+      },
+      {
+        title: '性能',
+        items: [
+          '**russh-sftp:** 提升 SFTP 上传吞吐和传输跟踪。',
+          '**sftp:** 对已知大小的文件使用异步下载。',
+        ],
+      },
+      {
+        title: '文档',
+        items: [
+          '**ssh:** 在 SSH 连接指南中记录 X11 转发。',
+          '**cloud-sync:** 更新云同步术语和 GitHub Gist 授权说明。',
+        ],
+      },
+    ],
+  },
+  {
+    version: '[1.1.7] - 2026-06-15',
+    sections: [
+      {
+        title: '新增',
+        items: [
+          '**panel:** 新增多面板打开行为，可在不丢失上下文的情况下打开多个工具。',
+          '**terminal:** 新增后端输出暂停/恢复控制。',
+          '**session:** 新增会话快速切换器对话框，便于在活动会话和已保存连接间快速导航。',
+          '**icons:** 新增服务器图标并改进已保存连接的图标解析。',
+          '**network:** 为代理和隧道新增分组管理。',
+          '**sync:** 新增 v3 快照解码和 payload hash 计算。',
+        ],
+      },
+      {
+        title: '变更',
+        items: [
+          '**file-explorer:** 定义共享 `FileProperties` 接口并清理属性对话框。',
+          '**terminal:** 改进标签提示、标签管理和滚动行为。',
+        ],
+      },
+      {
+        title: '修复',
+        items: [
+          '**command-history:** 修正命令建议应用行为。',
+          '**app:** 改进 Windows 上权限错误时的文件夹打开逻辑。',
+          '**file-explorer:** 修复远程文件下载后打开目标目录失败的问题。',
+        ],
+      },
+    ],
+  },
   {
     version: '[1.1.6] - 2026-06-12',
     sections: [

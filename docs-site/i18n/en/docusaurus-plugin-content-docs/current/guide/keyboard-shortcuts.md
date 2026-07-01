@@ -32,12 +32,17 @@ If you want to copy text from the terminal, use NyaTerm's app-level shortcuts ra
 | Shortcut | Action |
 |--------|------|
 | `Ctrl / Cmd + Shift + N` | New session |
+| `Ctrl / Cmd + Shift + S` | Open Command Palette / session quick switcher |
 | ``Ctrl / Cmd + ` `` | New local terminal |
 | `Ctrl / Cmd + Shift + W` | Close current tab |
 | `Ctrl + Tab` | Next tab |
 | `Ctrl + Shift + Tab` | Previous tab |
 | `Ctrl / Cmd + 1-8` | Jump to a specific tab |
 | `Ctrl / Cmd + 9` | Jump to the last tab |
+| `Ctrl / Cmd + Shift + D` | Duplicate current session |
+| `Ctrl / Cmd + Shift + M` | Multiplex current SSH session |
+| `Ctrl / Cmd + Alt + D` | Duplicate current session with a startup command |
+| `Ctrl / Cmd + Alt + M` | Multiplex SSH with a startup command |
 
 ## View and panels
 
@@ -55,6 +60,8 @@ If you want to copy text from the terminal, use NyaTerm's app-level shortcuts ra
 |--------|------|
 | `Ctrl / Cmd + Shift + L` | Lock screen |
 | `Ctrl / Cmd + ,` | Open settings |
+| `Ctrl / Cmd + Shift + G` | Manage synchronized input groups |
+| `Ctrl / Cmd + Alt + C` | Copy selected saved connections in the Saved Connections panel |
 
 ## Usage tips
 
