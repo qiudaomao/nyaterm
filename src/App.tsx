@@ -240,6 +240,7 @@ function App() {
     closeTabs,
     savedConnections,
     recordRecentConnection,
+    syncGroups,
     setSyncGroups,
     broadcastToAll,
     setBroadcastToAll,
@@ -2302,6 +2303,34 @@ function App() {
     () => collectActiveNonSerialSessionIds(terminalWindows, tabsById),
     [tabsById, terminalWindows],
   );
+  const sendCommandSessionTargets = useMemo(() => {
+    if (!terminalWindows) return [];
+
+    const targets: { id: string; type: SessionType }[] = [];
+    const seen = new Set<string>();
+
+    const visit = (node: TerminalWindowNode) => {
+      if (node.kind === "split") {
+        visit(node.first);
+        visit(node.second);
+        return;
+      }
+
+      for (const tabId of node.tabIds) {
+        const tab = tabsById.get(tabId);
+        if (!tab) continue;
+
+        for (const pane of collectSessionPanes(tab.root)) {
+          if (!hasLiveSession(pane) || seen.has(pane.sessionId)) continue;
+          seen.add(pane.sessionId);
+          targets.push({ id: pane.sessionId, type: pane.type });
+        }
+      }
+    };
+
+    visit(terminalWindows);
+    return targets;
+  }, [tabsById, terminalWindows]);
   const activeBottomPanel = uiConfig.show_serial_send_panel
     ? "serialSend"
     : uiConfig.show_quick_cmd_bar
@@ -2641,6 +2670,8 @@ function App() {
           activeSerialSessionId,
           activeNonSerialSessionId,
           activeNonSerialSessionIds,
+          syncGroups,
+          sessionTargets: sendCommandSessionTargets,
           sendCommandDraft,
           onSendCommandDraftConsumed: handleSendCommandDraftConsumed,
           onQuickCmdResize: handleQuickCmdResize,

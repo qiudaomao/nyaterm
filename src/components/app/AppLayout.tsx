@@ -32,7 +32,7 @@ import { isMacOS } from "@/lib/platform";
 import type { SendCommandPanelDraft } from "@/lib/sendCommandPanelEvents";
 import type { UpdateInfo } from "@/lib/updater";
 import { bounceTopModalWindow } from "@/lib/windowManager";
-import type { AppearanceSettings, UiConfig } from "@/types/global";
+import type { AppearanceSettings, SessionType, SyncGroup, UiConfig } from "@/types/global";
 
 type HeaderProps = ComponentProps<typeof Header>;
 type ActivityBarProps = ComponentProps<typeof ActivityBar>;
@@ -86,6 +86,8 @@ interface AppLayoutProps {
     activeSerialSessionId: string | null;
     activeNonSerialSessionId: string | null;
     activeNonSerialSessionIds: string[];
+    syncGroups: SyncGroup[];
+    sessionTargets: { id: string; type: SessionType }[];
     sendCommandDraft: SendCommandPanelDraft | null;
     onSendCommandDraftConsumed: () => void;
     onQuickCmdResize: (delta: number) => void;
@@ -367,6 +369,8 @@ export default function AppLayout({
                     serialSessionId={bottomPanel.activeSerialSessionId}
                     currentShellSessionId={bottomPanel.activeNonSerialSessionId}
                     shellSessionIds={bottomPanel.activeNonSerialSessionIds}
+                    syncGroups={bottomPanel.syncGroups}
+                    sessionTargets={bottomPanel.sessionTargets}
                     draft={bottomPanel.sendCommandDraft}
                     onDraftConsumed={bottomPanel.onSendCommandDraftConsumed}
                   />

@@ -32,11 +32,14 @@ import type {
   SendCommandTarget,
 } from "@/lib/sendCommandPanelEvents";
 import { buildTerminalCommandInput, sendSessionInput } from "@/lib/sessionInput";
+import type { SessionType, SyncGroup } from "@/types/global";
 
 interface SendCommandPanelProps {
   serialSessionId: string | null;
   currentShellSessionId: string | null;
   shellSessionIds: string[];
+  syncGroups: SyncGroup[];
+  sessionTargets: SendCommandSessionTarget[];
   draft?: SendCommandPanelDraft | null;
   onDraftConsumed?: () => void;
 }
@@ -49,7 +52,13 @@ interface SendProgress {
 }
 
 type TargetKind = "serial" | "shell";
+type TargetSelectValue = SendCommandTarget | `group:${string}`;
 type LineEnding = "none" | "cr" | "lf" | "crlf";
+
+interface SendCommandSessionTarget {
+  id: string;
+  type: SessionType;
+}
 
 interface SendUnit {
   data: string;
@@ -204,10 +213,16 @@ function buildHexPreview(bytes: number[]): string {
     .join("");
 }
 
+function isGroupTarget(value: TargetSelectValue): value is `group:${string}` {
+  return value.startsWith("group:");
+}
+
 export default function SendCommandPanel({
   serialSessionId,
   currentShellSessionId,
   shellSessionIds,
+  syncGroups,
+  sessionTargets,
   draft,
   onDraftConsumed,
 }: SendCommandPanelProps) {
@@ -218,7 +233,7 @@ export default function SendCommandPanel({
   const [sendMode, setSendMode] = useState<SendCommandMode>("line");
   const [count, setCount] = useState<SendCommandCount>(1);
   const [intervalInput, setIntervalInput] = useState("1.00");
-  const [target, setTarget] = useState<SendCommandTarget>("current");
+  const [target, setTarget] = useState<TargetSelectValue>("current");
   const [draftCurrentSessionId, setDraftCurrentSessionId] = useState<string | null>(null);
   const [draftTargetKind, setDraftTargetKind] = useState<TargetKind | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -249,8 +264,43 @@ export default function SendCommandPanel({
         ? draftCurrentSessionId
         : currentShellSessionId;
 
-  const targetSessionIds =
-    targetKind === "serial"
+  const sessionTargetById = useMemo(
+    () => new Map(sessionTargets.map((session) => [session.id, session])),
+    [sessionTargets],
+  );
+
+  const groupTargetOptions = useMemo(() => {
+    const isCompatible = (session: SendCommandSessionTarget) =>
+      targetKind === "serial" ? session.type === "Serial" : session.type !== "Serial";
+
+    return syncGroups
+      .filter((group) => group.enabled)
+      .map((group) => {
+        const pausedSessionIds = new Set(group.pausedSessionIds);
+        const sessionIds = group.sessionIds.filter((sessionId, index) => {
+          if (group.sessionIds.indexOf(sessionId) !== index) return false;
+          if (pausedSessionIds.has(sessionId)) return false;
+          const session = sessionTargetById.get(sessionId);
+          return session ? isCompatible(session) : false;
+        });
+
+        return {
+          group,
+          value: `group:${group.id}` as const,
+          sessionIds,
+        };
+      })
+      .filter((option) => option.sessionIds.length > 0);
+  }, [sessionTargetById, syncGroups, targetKind]);
+
+  const groupTargetByValue = useMemo(
+    () => new Map(groupTargetOptions.map((option) => [option.value, option])),
+    [groupTargetOptions],
+  );
+
+  const targetSessionIds = isGroupTarget(target)
+    ? (groupTargetByValue.get(target)?.sessionIds ?? [])
+    : targetKind === "serial"
       ? serialSessionId
         ? [serialSessionId]
         : []
@@ -284,7 +334,19 @@ export default function SendCommandPanel({
   }, [cancelSend]);
 
   useEffect(() => {
-    if (targetKind === "serial" && target !== "current") {
+    const fallbackTarget: TargetSelectValue =
+      currentTargetSessionId || targetKind === "serial"
+        ? "current"
+        : shellSessionIds.length > 0
+          ? "all"
+          : "current";
+
+    if (isGroupTarget(target) && !groupTargetByValue.has(target)) {
+      setTarget(fallbackTarget);
+      return;
+    }
+
+    if (targetKind === "serial" && target === "all") {
       setTarget("current");
       return;
     }
@@ -294,7 +356,7 @@ export default function SendCommandPanel({
     if (shellSessionIds.length > 0) {
       setTarget("all");
     }
-  }, [currentTargetSessionId, shellSessionIds.length, target, targetKind]);
+  }, [currentTargetSessionId, groupTargetByValue, shellSessionIds.length, target, targetKind]);
 
   useEffect(() => {
     if (
@@ -719,9 +781,9 @@ export default function SendCommandPanel({
             {t("serialSend.target", "Target")}
           </Label>
           <Select
-            value={targetKind === "serial" ? "current" : target}
-            onValueChange={(value) => setTarget(value as SendCommandTarget)}
-            disabled={isSending || targetKind === "serial"}
+            value={target}
+            onValueChange={(value) => setTarget(value as TargetSelectValue)}
+            disabled={isSending}
           >
             <SelectTrigger className="h-8 min-w-0 flex-1 border-0 bg-transparent px-2 text-[0.6875rem] shadow-none focus-visible:ring-0">
               <SelectValue />
@@ -735,6 +797,14 @@ export default function SendCommandPanel({
                   {t("serialSend.allSessions", "All sessions")}
                 </SelectItem>
               )}
+              {groupTargetOptions.map((option) => (
+                <SelectItem key={option.group.id} value={option.value} className="text-xs">
+                  {t("serialSend.groupSession", "Group: {{name}} ({{count}})", {
+                    name: option.group.name,
+                    count: option.sessionIds.length,
+                  })}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
