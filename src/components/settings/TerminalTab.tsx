@@ -240,6 +240,52 @@ export function TerminalTab() {
             onChange={(v) => updateUi({ remote_stats_interval: v || 3 })}
           />
         )}
+
+        <SettingRow
+          label={t("settings.showProcessManager")}
+          desc={t("settings.showProcessManagerDesc")}
+        >
+          <SettingSwitch
+            checked={appSettings.ui.show_process_manager ?? true}
+            onChange={(v) => updateUi({ show_process_manager: v })}
+          />
+        </SettingRow>
+
+        {appSettings.ui.show_process_manager && (
+          <SettingNumberInput
+            label={t("settings.processManagerInterval")}
+            desc={t("settings.processManagerIntervalDesc")}
+            min={3}
+            max={120}
+            step={1}
+            value={appSettings.ui.process_manager_interval ?? 5}
+            controlClassName="max-w-sm"
+            onChange={(v) => updateUi({ process_manager_interval: v || 5 })}
+          />
+        )}
+
+        <SettingRow
+          label={t("settings.showDockerManager")}
+          desc={t("settings.showDockerManagerDesc")}
+        >
+          <SettingSwitch
+            checked={appSettings.ui.show_docker_manager ?? true}
+            onChange={(v) => updateUi({ show_docker_manager: v })}
+          />
+        </SettingRow>
+
+        {appSettings.ui.show_docker_manager && (
+          <SettingNumberInput
+            label={t("settings.dockerManagerInterval")}
+            desc={t("settings.dockerManagerIntervalDesc")}
+            min={3}
+            max={120}
+            step={1}
+            value={appSettings.ui.docker_manager_interval ?? 10}
+            controlClassName="max-w-sm"
+            onChange={(v) => updateUi({ docker_manager_interval: v || 10 })}
+          />
+        )}
       </SettingSection>
 
       <SettingSection contentClassName="space-y-4">

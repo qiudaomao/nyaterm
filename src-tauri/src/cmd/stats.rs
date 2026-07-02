@@ -1,5 +1,5 @@
 use crate::core::SessionManager;
-use crate::core::ssh::SshConnectionHandles;
+use crate::core::remote_exec::{ensure_success, exec_ssh_session_command};
 use crate::core::stats::{RemoteStats, SYSINFO_SCRIPT, parse_stats_output};
 use crate::error::{AppError, AppResult};
 use std::sync::Arc;
@@ -10,55 +10,16 @@ pub async fn get_remote_stats(
     state: tauri::State<'_, Arc<SessionManager>>,
     session_id: String,
 ) -> AppResult<RemoteStats> {
-    use russh::ChannelMsg;
+    let output = exec_ssh_session_command(
+        state.inner(),
+        &session_id,
+        SYSINFO_SCRIPT.as_bytes(),
+        Duration::from_secs(15),
+    )
+    .await?;
+    let output = ensure_success(output, "Failed to fetch stats")?;
 
-    let ssh_handle = {
-        let sessions = state.sessions.lock().await;
-        let session = sessions.get(&session_id).ok_or_else(|| {
-            AppError::SessionNotFound(format!("Session '{}' not found", session_id))
-        })?;
-
-        session
-            .ssh_handle
-            .as_ref()
-            .ok_or_else(|| AppError::Config("Not an SSH session".to_string()))?
-            .clone()
-            .downcast::<SshConnectionHandles>()
-            .map_err(|_| AppError::Config("Failed to get SSH handle".to_string()))?
-    };
-    let handle_mtx = ssh_handle.target_handle();
-
-    let output = tokio::time::timeout(Duration::from_secs(15), async {
-        let mut channel = {
-            let handle = handle_mtx.lock().await;
-            handle
-                .channel_open_session()
-                .await
-                .map_err(|e| AppError::Channel(format!("Failed to open channel: {}", e)))?
-        };
-
-        channel
-            .exec(true, SYSINFO_SCRIPT)
-            .await
-            .map_err(|e| AppError::Channel(format!("Failed to execute stats command: {}", e)))?;
-
-        let mut buf = String::new();
-        loop {
-            match channel.wait().await {
-                Some(ChannelMsg::Data { ref data }) => {
-                    buf.push_str(&String::from_utf8_lossy(data));
-                }
-                Some(ChannelMsg::Eof) | None => break,
-                _ => {}
-            }
-        }
-
-        Ok::<String, AppError>(buf)
-    })
-    .await
-    .map_err(|_| AppError::Channel("Stats command timed out".to_string()))??;
-
-    Ok(parse_stats_output(&output))
+    Ok(parse_stats_output(&output.stdout))
 }
 
 #[tauri::command]

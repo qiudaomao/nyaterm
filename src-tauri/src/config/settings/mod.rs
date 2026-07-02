@@ -249,6 +249,54 @@ pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
         }
     }
 
+    {
+        let all_ids: Vec<&str> = settings
+            .ui
+            .activity_bar_layout
+            .left_top
+            .iter()
+            .chain(&settings.ui.activity_bar_layout.left_bottom)
+            .chain(&settings.ui.activity_bar_layout.right_top)
+            .chain(&settings.ui.activity_bar_layout.right_bottom)
+            .map(|s| s.as_str())
+            .collect();
+        if !all_ids.contains(&"processManager") {
+            let right_top = &mut settings.ui.activity_bar_layout.right_top;
+            if let Some(resource_index) = right_top.iter().position(|id| id == "resourceMonitor") {
+                right_top.insert(resource_index + 1, "processManager".to_string());
+            } else {
+                right_top.push("processManager".to_string());
+            }
+            migrated = true;
+        }
+    }
+
+    {
+        let all_ids: Vec<&str> = settings
+            .ui
+            .activity_bar_layout
+            .left_top
+            .iter()
+            .chain(&settings.ui.activity_bar_layout.left_bottom)
+            .chain(&settings.ui.activity_bar_layout.right_top)
+            .chain(&settings.ui.activity_bar_layout.right_bottom)
+            .map(|s| s.as_str())
+            .collect();
+        if !all_ids.contains(&"dockerManager") {
+            let right_top = &mut settings.ui.activity_bar_layout.right_top;
+            if let Some(process_index) = right_top.iter().position(|id| id == "processManager") {
+                right_top.insert(process_index + 1, "dockerManager".to_string());
+            } else if let Some(resource_index) =
+                right_top.iter().position(|id| id == "resourceMonitor")
+            {
+                right_top.insert(resource_index + 1, "dockerManager".to_string());
+            } else {
+                right_top.push("dockerManager".to_string());
+            }
+            migrated = true;
+        }
+    }
+
     for tab in &mut settings.ui.open_tabs {
         if tab.normalize() {
             migrated = true;

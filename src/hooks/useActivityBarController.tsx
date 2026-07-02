@@ -10,12 +10,14 @@ import {
   MdHistory,
   MdLan,
   MdLink,
+  MdListAlt,
   MdLock,
   MdOutlineMonitorHeart,
   MdSend,
   MdSettings,
 } from "react-icons/md";
 import { PiRecordFill } from "react-icons/pi";
+import { SiDocker } from "react-icons/si";
 import type { ActivityBarItem } from "@/components/layout/ActivityBar";
 import { buildMultiPanelToggleUpdate, getItemSide } from "@/lib/appWorkspace";
 import { openSettings } from "@/lib/windowManager";
@@ -99,6 +101,14 @@ function normalizeActivityBarState(uiConfig: UiConfig): Partial<UiConfig> | null
     layout.right_bottom = insertBeforeOrPush(layout.right_bottom, "lock", "recording");
     seen.add("recording");
   }
+  if (!seen.has("processManager")) {
+    layout.right_top = insertAfter(layout.right_top, "resourceMonitor", "processManager");
+    seen.add("processManager");
+  }
+  if (!seen.has("dockerManager")) {
+    layout.right_top = insertAfter(layout.right_top, "processManager", "dockerManager");
+    seen.add("dockerManager");
+  }
 
   const leftPanelIds = new Set([...layout.left_top, ...layout.left_bottom]);
   const rightPanelIds = new Set([...layout.right_top, ...layout.right_bottom]);
@@ -179,6 +189,8 @@ export function useActivityBarController({
       activeSessions: { icon: <MdLink />, tooltip: t("panel.activeSessions") },
       commandHistory: { icon: <MdHistory />, tooltip: t("panel.commandHistory") },
       resourceMonitor: { icon: <MdOutlineMonitorHeart />, tooltip: t("panel.resourceMonitor") },
+      processManager: { icon: <MdListAlt />, tooltip: t("panel.processManager") },
+      dockerManager: { icon: <SiDocker />, tooltip: t("panel.dockerManager") },
       quickCmdBar: { icon: <MdBolt />, tooltip: t("panel.quickCommands") },
       serialSend: { icon: <MdSend />, tooltip: t("panel.serialSend", "Command Send") },
       recording: {

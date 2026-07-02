@@ -194,6 +194,8 @@ fn default_right_top() -> Vec<String> {
         "activeSessions".to_string(),
         "commandHistory".to_string(),
         "resourceMonitor".to_string(),
+        "processManager".to_string(),
+        "dockerManager".to_string(),
     ]
 }
 
@@ -247,6 +249,14 @@ pub struct UiConfig {
     pub show_remote_stats: bool,
     #[serde(default = "default_remote_stats_interval")]
     pub remote_stats_interval: u32,
+    #[serde(default = "default_true_fn")]
+    pub show_process_manager: bool,
+    #[serde(default = "default_process_manager_interval")]
+    pub process_manager_interval: u32,
+    #[serde(default = "default_true_fn")]
+    pub show_docker_manager: bool,
+    #[serde(default = "default_docker_manager_interval")]
+    pub docker_manager_interval: u32,
     #[serde(default = "default_sort_mode")]
     pub saved_connections_sort_mode: String,
     #[serde(default)]
@@ -301,6 +311,14 @@ fn default_remote_stats_interval() -> u32 {
     3
 }
 
+fn default_process_manager_interval() -> u32 {
+    5
+}
+
+fn default_docker_manager_interval() -> u32 {
+    10
+}
+
 fn default_transfer_height() -> f64 {
     180.0
 }
@@ -339,6 +357,10 @@ impl Default for UiConfig {
             language: default_language(),
             show_remote_stats: true,
             remote_stats_interval: default_remote_stats_interval(),
+            show_process_manager: true,
+            process_manager_interval: default_process_manager_interval(),
+            show_docker_manager: true,
+            docker_manager_interval: default_docker_manager_interval(),
             saved_connections_sort_mode: default_sort_mode(),
             recent_connection_ids: vec![],
             transfer_height: default_transfer_height(),

@@ -304,6 +304,8 @@ export type RightPanelId =
   | "activeSessions"
   | "commandHistory"
   | "resourceMonitor"
+  | "processManager"
+  | "dockerManager"
   | "recording"
   | "syncBackupHistory";
 
@@ -361,6 +363,10 @@ export interface UiConfig {
   language?: string;
   show_remote_stats: boolean;
   remote_stats_interval: number;
+  show_process_manager: boolean;
+  process_manager_interval: number;
+  show_docker_manager: boolean;
+  docker_manager_interval: number;
   saved_connections_sort_mode?: string;
   recent_connection_ids: string[];
   transfer_height: number;
@@ -418,6 +424,97 @@ export interface RemoteStats {
   memory: RemoteStatsMemory;
   networks: RemoteStatsNetwork[];
   disks: RemoteStatsDisk[];
+}
+
+export interface RemoteProcess {
+  pid: number;
+  ppid: number;
+  user: string;
+  state: string;
+  cpu_percent: number;
+  memory_percent: number;
+  rss_kb: number;
+  vsz_kb: number;
+  elapsed: string;
+  command: string;
+  command_line: string;
+}
+
+export interface RemoteCommandOutput {
+  stdout: string;
+  stderr: string;
+  exit_status?: number | null;
+}
+
+export interface DockerContainerStats {
+  cpu_percent: number;
+  memory_percent: number;
+  memory_usage: string;
+  net_io: string;
+  block_io: string;
+  pids: string;
+}
+
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  ports: string;
+  created_at: string;
+  size: string;
+  stats?: DockerContainerStats | null;
+}
+
+export interface DockerImage {
+  id: string;
+  repository: string;
+  tag: string;
+  size: string;
+  created_since: string;
+}
+
+export interface DockerVolume {
+  driver: string;
+  name: string;
+}
+
+export interface DockerNetwork {
+  id: string;
+  name: string;
+  driver: string;
+  scope: string;
+}
+
+export interface DockerComposeProject {
+  name: string;
+  status: string;
+  config_files: string;
+}
+
+export interface DockerComposeServiceContainer {
+  id: string;
+  name: string;
+  state: string;
+  status: string;
+}
+
+export interface DockerComposeService {
+  name: string;
+  status: string;
+  containers: DockerComposeServiceContainer[];
+}
+
+export interface RemoteDockerOverview {
+  available: boolean;
+  version: string;
+  compose_available: boolean;
+  containers: DockerContainer[];
+  images: DockerImage[];
+  volumes: DockerVolume[];
+  networks: DockerNetwork[];
+  compose_projects: DockerComposeProject[];
 }
 
 /** Labeled command shortcut for quick execution. */

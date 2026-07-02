@@ -7,6 +7,7 @@ import DockerManager from "@/components/panel/DockerManager";
 import FileExplorer from "@/components/panel/file-explorer";
 import FileTransfer from "@/components/panel/file-explorer/FileTransfer";
 import NetworkPanel from "@/components/panel/NetworkPanel";
+import ProcessManager from "@/components/panel/ProcessManager";
 import RecordingPanel from "@/components/panel/RecordingPanel";
 import ResourceMonitor from "@/components/panel/ResourceMonitor";
 import SyncBackupHistoryPanel from "@/components/panel/SyncBackupHistoryPanel";
