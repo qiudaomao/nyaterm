@@ -11,6 +11,7 @@ import ExternalFileDropOverlay from "@/components/ExternalFileDropOverlay";
 import type { ResolvedLocalDropPathEntry } from "@/components/panel/file-explorer/model";
 import { useTerminalAppSettings } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useTransfer } from "@/context/TransferContext";
 import { useActionLinks } from "@/hooks/useActionLinks";
 import { useCommandHistory } from "@/hooks/useCommandHistory";
 import { useCredentialAutofill } from "@/hooks/useCredentialAutofill";
@@ -197,6 +198,8 @@ export default function XTerminal({
 
   const { terminalTheme } = useTheme();
   const { t } = useTranslation();
+  const { upsertExternalTransferProgress, completeExternalTransfer, failExternalTransfer } =
+    useTransfer();
   const terminalAppSettings = useTerminalAppSettings();
   const { appearance, interaction, terminal: terminalSettings } = terminalAppSettings;
   const terminalThemeColors = useMemo(
@@ -542,6 +545,11 @@ export default function XTerminal({
       sessionId,
       () => tRef.current,
       () => terminalAppSettingsRef.current?.transfer.duplicate_strategy ?? "ask",
+      {
+        upsertProgress: upsertExternalTransferProgress,
+        complete: completeExternalTransfer,
+        fail: failExternalTransfer,
+      },
     );
 
     terminal.options.linkHandler = oscLinkHandler;

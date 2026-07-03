@@ -35,11 +35,31 @@ export interface ZmodemEventHandler {
   dispose(): void;
 }
 
+export interface ZmodemTransferProgressSink {
+  upsertProgress: (progress: {
+    id: string;
+    sessionId: string;
+    fileName: string;
+    direction: "download" | "upload";
+    bytesTransferred: number;
+    totalSize: number;
+  }) => void;
+  complete: (id: string) => void;
+  fail: (id: string, reason: string) => void;
+}
+
+interface CurrentZmodemTransferFile {
+  id: string;
+  fileName: string;
+  direction: "download" | "upload";
+}
+
 export function createZmodemEventHandler(
   terminal: Terminal,
   sessionId: string,
   getT: () => Translate,
   getDuplicateStrategy: () => string = () => "ask",
+  progressSink?: ZmodemTransferProgressSink,
 ): ZmodemEventHandler {
   let pendingProgress: Extract<ZmodemEventPayload, { type: "progress" }> | null = null;
   let progressRaf: number | null = null;
@@ -48,6 +68,8 @@ export function createZmodemEventHandler(
   let uploadStarted = false;
   let uploadFileName = "";
   let uploadToastId: string | number | null = null;
+  let currentTransferFile: CurrentZmodemTransferFile | null = null;
+  let transferFileSequence = 0;
   let disposed = false;
 
   const clearProgressTimer = () => {
@@ -129,6 +151,59 @@ export function createZmodemEventHandler(
     const t = getT();
     const description = uploadFileName;
     toast.success(t("fileTransfer.uploadCompleted"), { description });
+  };
+
+  const buildTransferId = (direction: "download" | "upload", fileName: string) => {
+    transferFileSequence += 1;
+    return `zmodem-${sessionId}-${direction}-${transferFileSequence}-${encodeURIComponent(fileName)}`;
+  };
+
+  const syncTransferProgress = (payload: Extract<ZmodemEventPayload, { type: "progress" }>) => {
+    if (!progressSink) return;
+
+    const payloadFileName = payload.fileName ?? payload.file_name;
+    const fileName = payloadFileName || uploadFileName || "zmodem_file";
+    const bytesTransferred = payload.bytesTransferred ?? payload.bytes_transferred ?? 0;
+    const totalSize = payload.totalSize ?? payload.total_size ?? 0;
+    const changedFile =
+      !currentTransferFile ||
+      currentTransferFile.fileName !== fileName ||
+      currentTransferFile.direction !== payload.direction;
+
+    if (changedFile) {
+      if (currentTransferFile) {
+        progressSink.complete(currentTransferFile.id);
+      }
+      currentTransferFile = {
+        id: buildTransferId(payload.direction, fileName),
+        fileName,
+        direction: payload.direction,
+      };
+    }
+
+    const activeTransferFile = currentTransferFile;
+    if (!activeTransferFile) return;
+
+    progressSink.upsertProgress({
+      id: activeTransferFile.id,
+      sessionId,
+      fileName,
+      direction: payload.direction,
+      bytesTransferred,
+      totalSize,
+    });
+  };
+
+  const completeCurrentTransferFile = () => {
+    if (!progressSink || !currentTransferFile) return;
+    progressSink.complete(currentTransferFile.id);
+    currentTransferFile = null;
+  };
+
+  const failCurrentTransferFile = (reason: string) => {
+    if (!progressSink || !currentTransferFile) return;
+    progressSink.fail(currentTransferFile.id, reason);
+    currentTransferFile = null;
   };
 
   const handleDetected = async (payload: Extract<ZmodemEventPayload, { type: "detected" }>) => {
@@ -222,11 +297,13 @@ export function createZmodemEventHandler(
           if (payload.direction === "upload") {
             markPendingZmodemUploadActive(sessionId);
           }
+          syncTransferProgress(payload);
           pendingProgress = payload;
           scheduleProgressRender();
           break;
         case "complete": {
           flushProgress();
+          completeCurrentTransferFile();
           if (payload.direction === "upload") {
             showUploadCompletedToast();
             completePendingZmodemUpload(sessionId);
@@ -240,6 +317,7 @@ export function createZmodemEventHandler(
         }
         case "failed": {
           flushProgress();
+          failCurrentTransferFile(payload.reason);
           const isUpload = hasPendingZmodemUpload(sessionId) || uploadStarted;
           if (isUpload) {
             dismissUploadToast();
@@ -274,6 +352,7 @@ export function createZmodemEventHandler(
       uploadStarted = false;
       uploadFileName = "";
       uploadToastId = null;
+      currentTransferFile = null;
       clearProgressRaf();
       clearProgressTimer();
     },

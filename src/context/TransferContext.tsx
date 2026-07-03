@@ -17,6 +17,7 @@ import { filterEnqueueUploadRequests } from "@/lib/transferDuplicateResolution";
 
 export type TransferDirection = "upload" | "download";
 export type TransferKind = "file" | "directory";
+export type TransferSource = "sftp" | "zmodem";
 export type TransferStatus =
   | "queued"
   | "transferring"
@@ -52,6 +53,17 @@ interface QueuedTransferRequest {
   duplicateStrategyOverride?: string;
 }
 
+export interface ExternalTransferProgress {
+  id: string;
+  sessionId: string;
+  fileName: string;
+  direction: TransferDirection;
+  bytesTransferred: number;
+  totalSize: number;
+  localPath?: string;
+  remotePath?: string;
+}
+
 export interface TransferItem {
   id: string;
   sessionId: string;
@@ -71,6 +83,7 @@ export interface TransferItem {
   error?: string;
   timestamp: number;
   queueState?: "pending" | "running";
+  source?: TransferSource;
 }
 
 interface TransferContextValue {
@@ -84,6 +97,9 @@ interface TransferContextValue {
   retryTransfer: (item: TransferItem) => Promise<void>;
   enqueueUploads: (uploads: EnqueueUploadRequest[]) => string[];
   enqueueDownloads: (downloads: EnqueueDownloadRequest[]) => string[];
+  upsertExternalTransferProgress: (progress: ExternalTransferProgress) => void;
+  completeExternalTransfer: (id: string) => void;
+  failExternalTransfer: (id: string, reason: string) => void;
 }
 
 const TransferContext = createContext<TransferContextValue | null>(null);
@@ -225,6 +241,7 @@ export function TransferProvider({ children }: { children: ReactNode }) {
             queueState:
               existing?.queueState ??
               (queuedTransfersRef.current.has(p.id) ? "running" : undefined),
+            source: existing?.source ?? "sftp",
           });
           return next;
         });
@@ -800,6 +817,7 @@ export function TransferProvider({ children }: { children: ReactNode }) {
           totalSize: 0,
           timestamp: Date.now() + index,
           queueState: "pending",
+          source: "sftp",
         });
       });
       return next;
@@ -833,6 +851,93 @@ export function TransferProvider({ children }: { children: ReactNode }) {
     [enqueueTransfers],
   );
 
+  const upsertExternalTransferProgress = useCallback((progress: ExternalTransferProgress) => {
+    const now = Date.now();
+    setTransferMap((prev) => {
+      const existing = prev.get(progress.id);
+      const next = new Map(prev);
+      let speedBytesPerSec = existing?.speedBytesPerSec ?? 0;
+
+      if (!existing) {
+        transferSpeedSamplesRef.current.set(progress.id, [
+          {
+            bytesTransferred: progress.bytesTransferred,
+            timestamp: now,
+          },
+        ]);
+      } else {
+        const speed = calculateTransferSpeed(
+          transferSpeedSamplesRef.current.get(progress.id),
+          progress.bytesTransferred,
+          now,
+        );
+        transferSpeedSamplesRef.current.set(progress.id, speed.samples);
+        speedBytesPerSec = speed.speedBytesPerSec ?? speedBytesPerSec;
+      }
+
+      next.set(progress.id, {
+        ...existing,
+        id: progress.id,
+        sessionId: progress.sessionId,
+        fileName: progress.fileName,
+        remotePath: progress.remotePath ?? existing?.remotePath ?? "",
+        localPath: progress.localPath ?? existing?.localPath ?? "",
+        direction: progress.direction,
+        kind: "file",
+        status: "transferring",
+        size: existing?.size ?? 0,
+        bytesTransferred: progress.bytesTransferred,
+        speedBytesPerSec,
+        totalSize: progress.totalSize,
+        timestamp: existing?.timestamp ?? now,
+        queueState: undefined,
+        error: undefined,
+        source: "zmodem",
+      });
+      return next;
+    });
+  }, []);
+
+  const completeExternalTransfer = useCallback((id: string) => {
+    transferSpeedSamplesRef.current.delete(id);
+    setTransferMap((prev) => {
+      const existing = prev.get(id);
+      if (!existing) return prev;
+      const next = new Map(prev);
+      const completedBytes =
+        existing.totalSize > 0
+          ? Math.max(existing.bytesTransferred, existing.totalSize)
+          : existing.bytesTransferred;
+      next.set(id, {
+        ...existing,
+        status: "completed",
+        size: existing.totalSize > 0 ? existing.totalSize : existing.size,
+        bytesTransferred: completedBytes,
+        speedBytesPerSec: undefined,
+        queueState: undefined,
+        error: undefined,
+      });
+      return next;
+    });
+  }, []);
+
+  const failExternalTransfer = useCallback((id: string, reason: string) => {
+    transferSpeedSamplesRef.current.delete(id);
+    setTransferMap((prev) => {
+      const existing = prev.get(id);
+      if (!existing) return prev;
+      const next = new Map(prev);
+      next.set(id, {
+        ...existing,
+        status: "error",
+        speedBytesPerSec: undefined,
+        queueState: undefined,
+        error: reason,
+      });
+      return next;
+    });
+  }, []);
+
   const contextValue = useMemo(
     () => ({
       transfers,
@@ -845,6 +950,9 @@ export function TransferProvider({ children }: { children: ReactNode }) {
       retryTransfer,
       enqueueUploads,
       enqueueDownloads,
+      upsertExternalTransferProgress,
+      completeExternalTransfer,
+      failExternalTransfer,
     }),
     [
       transfers,
@@ -857,6 +965,9 @@ export function TransferProvider({ children }: { children: ReactNode }) {
       retryTransfer,
       enqueueUploads,
       enqueueDownloads,
+      upsertExternalTransferProgress,
+      completeExternalTransfer,
+      failExternalTransfer,
     ],
   );
 

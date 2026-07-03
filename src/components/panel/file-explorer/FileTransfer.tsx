@@ -146,13 +146,17 @@ function TransferRow({
       : item.totalSize > 0
         ? Math.min(100, Math.round((item.bytesTransferred / item.totalSize) * 100))
         : 0;
-  const canPause = item.status === "transferring";
-  const canPauseQueued = item.status === "queued";
-  const canResume = item.status === "paused";
-  const canRetry = item.status === "error" || item.status === "cancelled";
+  const isZmodemTransfer = item.source === "zmodem";
+  const canPause = !isZmodemTransfer && item.status === "transferring";
+  const canPauseQueued = !isZmodemTransfer && item.status === "queued";
+  const canResume = !isZmodemTransfer && item.status === "paused";
+  const canRetry = !isZmodemTransfer && (item.status === "error" || item.status === "cancelled");
   const canCancel =
-    item.status === "queued" || item.status === "transferring" || item.status === "paused";
-  const canDelete = !canCancel || item.status === "queued" || item.queueState === "pending";
+    !isZmodemTransfer &&
+    (item.status === "queued" || item.status === "transferring" || item.status === "paused");
+  const canDelete = isZmodemTransfer
+    ? item.status !== "transferring"
+    : !canCancel || item.status === "queued" || item.queueState === "pending";
 
   let statusColor = "#facc15";
   let statusText = formatRate(item.speedBytesPerSec ?? 0);
@@ -285,32 +289,39 @@ function TransferRow({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[180px]">
-        <ContextMenuItem onClick={() => onPause(item.id)} disabled={!canPause && !canPauseQueued}>
-          <MdPause className="mr-2 text-[0.875rem]" />
-          {t("fileTransfer.pause")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onResume(item.id)} disabled={!canResume}>
-          <MdPlayArrow className="mr-2 text-[0.875rem]" />
-          {t("fileTransfer.resume")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onRetry(item)} disabled={!canRetry}>
-          <MdRefresh className="mr-2 text-[0.875rem]" />
-          {t("fileTransfer.retry")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onCancel(item.id)} disabled={!canCancel}>
-          <MdBlock className="mr-2 text-[0.875rem]" />
-          {t("fileTransfer.cancel")}
-        </ContextMenuItem>
-        {item.direction === "download" && (
+        {!isZmodemTransfer && (
           <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={() => onOpenTargetDirectory(item.id)}>
-              <MdFolder className="mr-2 text-[0.875rem]" />
-              {t("fileTransfer.openTargetDirectory")}
+            <ContextMenuItem
+              onClick={() => onPause(item.id)}
+              disabled={!canPause && !canPauseQueued}
+            >
+              <MdPause className="mr-2 text-[0.875rem]" />
+              {t("fileTransfer.pause")}
             </ContextMenuItem>
+            <ContextMenuItem onClick={() => onResume(item.id)} disabled={!canResume}>
+              <MdPlayArrow className="mr-2 text-[0.875rem]" />
+              {t("fileTransfer.resume")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onRetry(item)} disabled={!canRetry}>
+              <MdRefresh className="mr-2 text-[0.875rem]" />
+              {t("fileTransfer.retry")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCancel(item.id)} disabled={!canCancel}>
+              <MdBlock className="mr-2 text-[0.875rem]" />
+              {t("fileTransfer.cancel")}
+            </ContextMenuItem>
+            {item.direction === "download" && (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => onOpenTargetDirectory(item.id)}>
+                  <MdFolder className="mr-2 text-[0.875rem]" />
+                  {t("fileTransfer.openTargetDirectory")}
+                </ContextMenuItem>
+              </>
+            )}
+            <ContextMenuSeparator />
           </>
         )}
-        <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onClick={() => onDelete(item)} disabled={!canDelete}>
           <MdDelete className="mr-2 text-[0.875rem]" />
           {t("fileTransfer.delete")}
@@ -380,6 +391,9 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
   );
 
   const canDeleteTransfer = useCallback((transfer: TransferItem) => {
+    if (transfer.source === "zmodem") {
+      return transfer.status !== "transferring";
+    }
     const canCancel =
       transfer.status === "queued" ||
       transfer.status === "transferring" ||
@@ -447,14 +461,19 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
   );
 
   const hasRunning = visibleTransfers.some(
-    (transfer) => transfer.status === "transferring" || transfer.status === "queued",
+    (transfer) =>
+      transfer.source !== "zmodem" &&
+      (transfer.status === "transferring" || transfer.status === "queued"),
   );
-  const hasPaused = visibleTransfers.some((transfer) => transfer.status === "paused");
+  const hasPaused = visibleTransfers.some(
+    (transfer) => transfer.source !== "zmodem" && transfer.status === "paused",
+  );
   const hasActive = visibleTransfers.some(
     (transfer) =>
-      transfer.status === "queued" ||
-      transfer.status === "transferring" ||
-      transfer.status === "paused",
+      transfer.source !== "zmodem" &&
+      (transfer.status === "queued" ||
+        transfer.status === "transferring" ||
+        transfer.status === "paused"),
   );
   const hasCompleted = visibleTransfers.some((transfer) => transfer.status === "completed");
   const hasClearable = visibleTransfers.some(
@@ -467,7 +486,11 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
   const handlePauseAll = useCallback(() => {
     void Promise.all(
       visibleTransfers
-        .filter((transfer) => transfer.status === "transferring" || transfer.status === "queued")
+        .filter(
+          (transfer) =>
+            transfer.source !== "zmodem" &&
+            (transfer.status === "transferring" || transfer.status === "queued"),
+        )
         .map((transfer) => pauseTransfer(transfer.id)),
     );
   }, [pauseTransfer, visibleTransfers]);
@@ -488,7 +511,7 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
   const handleResumeAll = useCallback(() => {
     void Promise.all(
       visibleTransfers
-        .filter((transfer) => transfer.status === "paused")
+        .filter((transfer) => transfer.source !== "zmodem" && transfer.status === "paused")
         .map((transfer) => resumeTransfer(transfer.id)),
     );
   }, [resumeTransfer, visibleTransfers]);
@@ -498,9 +521,10 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
       visibleTransfers
         .filter(
           (transfer) =>
-            transfer.status === "queued" ||
-            transfer.status === "transferring" ||
-            transfer.status === "paused",
+            transfer.source !== "zmodem" &&
+            (transfer.status === "queued" ||
+              transfer.status === "transferring" ||
+              transfer.status === "paused"),
         )
         .map((transfer) => cancelTransfer(transfer.id)),
     );
