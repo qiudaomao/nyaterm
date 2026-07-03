@@ -518,16 +518,26 @@ impl client::Handler for SshHandler {
         channel: russh::Channel<client::Msg>,
         originator_address: &str,
         originator_port: u32,
+        reply: client::ChannelOpenHandle,
         _session: &mut client::Session,
     ) -> Result<(), Self::Error> {
         if let Some(tx) = &self.x11_tx {
-            let _ = tx.send(super::x11_forwarding::X11ChannelOpen {
+            if let Err(error) = tx.send(super::x11_forwarding::X11ChannelOpen {
                 channel,
                 originator_address: originator_address.to_string(),
                 originator_port,
-            });
+            }) {
+                reply
+                    .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
+                    .await;
+                let _ = error.0.channel.close().await;
+                return Ok(());
+            }
+            reply.accept().await;
         } else {
-            let _ = channel.close().await;
+            reply
+                .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
         }
         Ok(())
     }
