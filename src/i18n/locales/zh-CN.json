@@ -670,7 +670,7 @@
     "uploadStarted": "正在上传文件「{{name}}」…"
   },
   "lockScreen": {
-    "message": "由于长时间无操作，应用程序已自动锁定。",
+    "message": "由于长时间无操作，应用程序已自动锁定",
     "passwordPlaceholder": "请输入解锁密码",
     "title": "应用程序已锁定",
     "unlock": "解锁",

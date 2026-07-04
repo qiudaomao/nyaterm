@@ -670,7 +670,7 @@
     "uploadStarted": "Uploading file \"{{name}}\"..."
   },
   "lockScreen": {
-    "message": "Locked due to inactivity.",
+    "message": "Locked due to inactivity",
     "passwordPlaceholder": "Unlock password",
     "title": "Locked",
     "unlock": "Unlock",
