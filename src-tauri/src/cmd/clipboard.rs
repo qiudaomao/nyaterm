@@ -40,6 +40,27 @@ pub async fn read_clipboard_text() -> Option<String> {
 }
 
 #[tauri::command]
+pub async fn write_clipboard_text(text: String) -> Result<(), String> {
+    let result = tokio::time::timeout(
+        CLIPBOARD_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            let mut clipboard = arboard::Clipboard::new()
+                .map_err(|err| format!("failed to open clipboard: {err}"))?;
+            clipboard
+                .set_text(text)
+                .map_err(|err| format!("failed to write clipboard text: {err}"))
+        }),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(result)) => result,
+        Ok(Err(err)) => Err(format!("clipboard write task failed: {err}")),
+        Err(_) => Err("clipboard write timed out".to_string()),
+    }
+}
+
+#[tauri::command]
 pub async fn read_clipboard_path_payload() -> Result<Option<ClipboardPathPayload>, String> {
     let result = tokio::time::timeout(
         CLIPBOARD_TIMEOUT,

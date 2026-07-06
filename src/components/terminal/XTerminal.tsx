@@ -28,6 +28,7 @@ import {
   readClipboardPathPayload,
   readClipboardText,
   uploadClipboardImageToSsh,
+  writeClipboardText,
 } from "@/lib/clipboard";
 import {
   commandStartsSuggestionSuppressingProgram,
@@ -98,6 +99,7 @@ import { createZmodemEventHandler, type ZmodemEventPayload } from "./zmodemTermi
 import "@xterm/xterm/css/xterm.css";
 
 const BACKSPACE_INPUT = "\x7f";
+const OSC52_MAX_DECODED_BYTES = 1024 * 1024;
 
 interface XTermInternalTrimSource {
   _core?: {
@@ -139,6 +141,26 @@ function buildClipboardPathPasteText(
   const paths = payload.paths.map((path) => path.trim()).filter((path) => !!path);
   if (paths.length === 0) return null;
   return paths.map(quotePastedPath).join(" ");
+}
+
+function decodeOsc52ClipboardText(data: string): string | null {
+  const separatorIndex = data.indexOf(";");
+  if (separatorIndex === -1) return null;
+
+  const payload = data.slice(separatorIndex + 1).replace(/\s/g, "");
+  if (payload === "?") return null;
+
+  let binary = "";
+  try {
+    binary = atob(payload);
+  } catch {
+    return null;
+  }
+
+  if (binary.length > OSC52_MAX_DECODED_BYTES) return null;
+
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 interface SessionCommandAcceptedEvent {
@@ -1104,7 +1126,7 @@ export default function XTerminal({
       if (matchesKeyEvent(resolveShortcutKeys("terminal.copy", kb), e)) {
         e.preventDefault();
         const sel = terminal.getSelection();
-        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        if (sel) writeClipboardText(sel).catch(() => {});
         return false;
       }
       if (matchesKeyEvent(resolveShortcutKeys("terminal.paste", kb), e)) {
@@ -1196,6 +1218,18 @@ export default function XTerminal({
       }
 
       return false;
+    });
+
+    const clipboardOscDisposable = terminal.parser.registerOscHandler(52, (data) => {
+      if (!terminalAppSettingsRef.current?.interaction?.allow_osc52_clipboard_write) {
+        return true;
+      }
+
+      const text = decodeOsc52ClipboardText(data);
+      if (text === null) return true;
+
+      void writeClipboardText(text).catch(() => {});
+      return true;
     });
 
     const writeParsedDisposable = terminal.onWriteParsed(() => {
@@ -1861,7 +1895,7 @@ export default function XTerminal({
       }
       if (terminalAppSettingsRef.current?.interaction?.copy_on_select) {
         if (text) {
-          navigator.clipboard.writeText(text).catch(() => {});
+          writeClipboardText(text).catch(() => {});
         }
       }
     });
@@ -1919,6 +1953,11 @@ export default function XTerminal({
               }
             }
           }
+        }
+
+        if (terminalAppSettingsRef.current?.interaction?.copy_on_select) {
+          const sel = terminal.getSelection();
+          if (sel) writeClipboardText(sel).catch(() => {});
         }
         return;
       }
@@ -1997,6 +2036,7 @@ export default function XTerminal({
       resetCredentialAutofill();
 
       oscDisposable.dispose();
+      clipboardOscDisposable.dispose();
       writeParsedDisposable.dispose();
       dataDisposable.dispose();
       resizeDisposable.dispose();

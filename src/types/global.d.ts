@@ -1043,6 +1043,7 @@ export interface TunnelConfig {
 
 export interface InteractionSettings {
   copy_on_select: boolean;
+  allow_osc52_clipboard_write: boolean;
   right_click_paste: boolean;
   command_suggestions_enabled: boolean;
   command_suggestion_min_chars: number;

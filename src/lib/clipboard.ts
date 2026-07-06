@@ -13,6 +13,14 @@ export async function readClipboardText(): Promise<string> {
   return text ?? "";
 }
 
+export async function writeClipboardText(text: string): Promise<void> {
+  try {
+    await invoke<void>("write_clipboard_text", { text });
+  } catch {
+    await navigator.clipboard.writeText(text);
+  }
+}
+
 export async function readClipboardPathPayload(): Promise<ClipboardPathPayload | null> {
   return invoke<ClipboardPathPayload | null>("read_clipboard_path_payload");
 }

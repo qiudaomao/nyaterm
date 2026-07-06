@@ -63,6 +63,16 @@ export function InteractionTab() {
           />
         </SettingRow>
 
+        <SettingRow
+          label={t("settings.allowOsc52ClipboardWrite")}
+          desc={t("settings.allowOsc52ClipboardWriteDesc")}
+        >
+          <SettingSwitch
+            checked={interaction.allow_osc52_clipboard_write}
+            onChange={(v) => updateInteraction({ allow_osc52_clipboard_write: v })}
+          />
+        </SettingRow>
+
         <SettingRow label={t("settings.rightClickPaste")} desc={t("settings.rightClickPasteDesc")}>
           <SettingSwitch
             checked={interaction.right_click_paste}

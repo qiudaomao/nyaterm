@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub struct InteractionSettings {
     #[serde(default = "default_true")]
     pub copy_on_select: bool,
+    #[serde(default)]
+    pub allow_osc52_clipboard_write: bool,
     #[serde(default = "default_true")]
     pub right_click_paste: bool,
     #[serde(default = "default_true")]
@@ -69,6 +71,7 @@ impl Default for InteractionSettings {
     fn default() -> Self {
         Self {
             copy_on_select: false,
+            allow_osc52_clipboard_write: false,
             right_click_paste: false,
             command_suggestions_enabled: true,
             command_suggestion_min_chars: default_command_suggestion_min_chars(),
@@ -96,6 +99,7 @@ mod tests {
         assert_eq!(settings.tab_double_click_action, "disconnect_session");
         assert_eq!(settings.tab_middle_click_action, "rename_tab");
         assert_eq!(settings.tab_right_click_action, "none");
+        assert!(!settings.allow_osc52_clipboard_write);
         assert!(!settings.alt_as_meta);
         assert!(!settings.mac_ime_compatibility);
     }
@@ -117,6 +121,7 @@ mod tests {
         assert_eq!(settings.tab_middle_click_action, "rename_tab");
         assert_eq!(settings.tab_right_click_action, "none");
         assert_eq!(settings.duplicate_session_command_delay_ms, 1000);
+        assert!(!settings.allow_osc52_clipboard_write);
         assert!(!settings.alt_as_meta);
         assert!(!settings.mac_ime_compatibility);
     }
