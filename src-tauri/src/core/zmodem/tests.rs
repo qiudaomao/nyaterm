@@ -2,8 +2,9 @@
 mod tests {
     use super::{
         ProgressThrottle, ZMODEM_PROGRESS_BYTES, ZMODEM_PROGRESS_INTERVAL, ZmodemDetectResult,
-        ZmodemDetector, ZmodemDirection,
+        ZmodemDetector, ZmodemDirection, ZmodemEvent,
     };
+    use serde_json::json;
     use std::time::{Duration, Instant};
 
     fn detected_direction(result: ZmodemDetectResult) -> ZmodemDirection {
@@ -30,6 +31,53 @@ mod tests {
             }
             ZmodemDetectResult::NoMatch { .. } => panic!("expected ZMODEM detection"),
         }
+    }
+
+    #[test]
+    fn zmodem_events_serialize_lowercase_directions() {
+        let detected = serde_json::to_value(ZmodemEvent::Detected {
+            direction: ZmodemDirection::Download,
+        })
+        .expect("detected event json");
+        assert_eq!(
+            detected,
+            json!({
+                "type": "detected",
+                "direction": "download",
+            })
+        );
+
+        let progress = serde_json::to_value(ZmodemEvent::Progress {
+            file_name: "sample.bin".to_string(),
+            bytes_transferred: 128,
+            total_size: 256,
+            direction: ZmodemDirection::Upload,
+        })
+        .expect("progress event json");
+        assert_eq!(
+            progress,
+            json!({
+                "type": "progress",
+                "fileName": "sample.bin",
+                "bytesTransferred": 128,
+                "totalSize": 256,
+                "direction": "upload",
+            })
+        );
+
+        let complete = serde_json::to_value(ZmodemEvent::Complete {
+            direction: ZmodemDirection::Download,
+            file_count: 1,
+        })
+        .expect("complete event json");
+        assert_eq!(
+            complete,
+            json!({
+                "type": "complete",
+                "direction": "download",
+                "fileCount": 1,
+            })
+        );
     }
 
     #[test]

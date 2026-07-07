@@ -1,5 +1,6 @@
 /// Direction of the ZMODEM transfer from the **local** perspective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ZmodemDirection {
     /// Remote `sz` → we **download** (receive) files.
     Download,

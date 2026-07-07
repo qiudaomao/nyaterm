@@ -13,8 +13,11 @@ import {
 
 const PROGRESS_RENDER_INTERVAL_MS = 100;
 
+type ZmodemDirection = "download" | "upload";
+type ZmodemWireDirection = ZmodemDirection | "Download" | "Upload";
+
 export type ZmodemEventPayload =
-  | { type: "detected"; direction: "download" | "upload" }
+  | { type: "detected"; direction: ZmodemWireDirection }
   | {
       type: "progress";
       fileName?: string;
@@ -23,9 +26,9 @@ export type ZmodemEventPayload =
       bytes_transferred?: number;
       totalSize?: number;
       total_size?: number;
-      direction: "download" | "upload";
+      direction: ZmodemWireDirection;
     }
-  | { type: "complete"; direction: "download" | "upload"; fileCount?: number; file_count?: number }
+  | { type: "complete"; direction: ZmodemWireDirection; fileCount?: number; file_count?: number }
   | { type: "failed"; reason: string };
 
 type Translate = (key: string, opts?: Record<string, unknown>) => string;
@@ -40,7 +43,7 @@ export interface ZmodemTransferProgressSink {
     id: string;
     sessionId: string;
     fileName: string;
-    direction: "download" | "upload";
+    direction: ZmodemDirection;
     bytesTransferred: number;
     totalSize: number;
   }) => void;
@@ -51,7 +54,31 @@ export interface ZmodemTransferProgressSink {
 interface CurrentZmodemTransferFile {
   id: string;
   fileName: string;
-  direction: "download" | "upload";
+  direction: ZmodemDirection;
+}
+
+type NormalizedZmodemPayload =
+  | { type: "detected"; direction: ZmodemDirection }
+  | (Extract<ZmodemEventPayload, { type: "progress" }> & { direction: ZmodemDirection })
+  | (Extract<ZmodemEventPayload, { type: "complete" }> & { direction: ZmodemDirection })
+  | { type: "failed"; reason: string };
+
+function normalizeZmodemDirection(direction: string): ZmodemDirection | null {
+  const normalized = direction.toLowerCase();
+  return normalized === "download" || normalized === "upload" ? normalized : null;
+}
+
+function normalizeZmodemPayload(payload: ZmodemEventPayload): NormalizedZmodemPayload | null {
+  if (payload.type === "failed") {
+    return payload;
+  }
+
+  const direction = normalizeZmodemDirection(payload.direction);
+  if (!direction) {
+    return null;
+  }
+
+  return { ...payload, direction };
 }
 
 export function createZmodemEventHandler(
@@ -153,12 +180,14 @@ export function createZmodemEventHandler(
     toast.success(t("fileTransfer.uploadCompleted"), { description });
   };
 
-  const buildTransferId = (direction: "download" | "upload", fileName: string) => {
+  const buildTransferId = (direction: ZmodemDirection, fileName: string) => {
     transferFileSequence += 1;
     return `zmodem-${sessionId}-${direction}-${transferFileSequence}-${encodeURIComponent(fileName)}`;
   };
 
-  const syncTransferProgress = (payload: Extract<ZmodemEventPayload, { type: "progress" }>) => {
+  const syncTransferProgress = (
+    payload: Extract<NormalizedZmodemPayload, { type: "progress" }>,
+  ) => {
     if (!progressSink) return;
 
     const payloadFileName = payload.fileName ?? payload.file_name;
@@ -206,7 +235,9 @@ export function createZmodemEventHandler(
     currentTransferFile = null;
   };
 
-  const handleDetected = async (payload: Extract<ZmodemEventPayload, { type: "detected" }>) => {
+  const handleDetected = async (
+    payload: Extract<NormalizedZmodemPayload, { type: "detected" }>,
+  ) => {
     const t = getT();
     const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
     if (disposed) return;
@@ -286,25 +317,30 @@ export function createZmodemEventHandler(
     handle(payload) {
       if (disposed) return;
 
-      switch (payload.type) {
+      const normalizedPayload = normalizeZmodemPayload(payload);
+      if (!normalizedPayload) {
+        return;
+      }
+
+      switch (normalizedPayload.type) {
         case "detected":
-          if (payload.direction === "upload" && hasPendingZmodemUpload(sessionId)) {
+          if (normalizedPayload.direction === "upload" && hasPendingZmodemUpload(sessionId)) {
             markPendingZmodemUploadActive(sessionId);
           }
-          void handleDetected(payload);
+          void handleDetected(normalizedPayload);
           break;
         case "progress":
-          if (payload.direction === "upload") {
+          if (normalizedPayload.direction === "upload") {
             markPendingZmodemUploadActive(sessionId);
           }
-          syncTransferProgress(payload);
-          pendingProgress = payload;
+          syncTransferProgress(normalizedPayload);
+          pendingProgress = normalizedPayload;
           scheduleProgressRender();
           break;
         case "complete": {
           flushProgress();
           completeCurrentTransferFile();
-          if (payload.direction === "upload") {
+          if (normalizedPayload.direction === "upload") {
             showUploadCompletedToast();
             completePendingZmodemUpload(sessionId);
           } else {
@@ -317,25 +353,25 @@ export function createZmodemEventHandler(
         }
         case "failed": {
           flushProgress();
-          failCurrentTransferFile(payload.reason);
+          failCurrentTransferFile(normalizedPayload.reason);
           const isUpload = hasPendingZmodemUpload(sessionId) || uploadStarted;
           if (isUpload) {
             dismissUploadToast();
-            if (payload.reason !== "cancelled") {
+            if (normalizedPayload.reason !== "cancelled") {
               toast.error(
                 getT()("fileTransfer.uploadFailed", {
                   name: uploadFileName || "file",
                 }),
                 {
-                  description: payload.reason,
+                  description: normalizedPayload.reason,
                 },
               );
             }
-            failPendingZmodemUpload(sessionId, payload.reason);
+            failPendingZmodemUpload(sessionId, normalizedPayload.reason);
           } else {
             terminal.write(
               `\r\n\x1b[31m[ZMODEM] ${getT()("zmodem.failed", {
-                reason: payload.reason,
+                reason: normalizedPayload.reason,
               })}\x1b[0m\r\n`,
             );
           }
