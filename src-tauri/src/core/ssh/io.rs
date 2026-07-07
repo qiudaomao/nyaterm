@@ -3,8 +3,8 @@ use crate::core::capture::OutputCaptureProcessor;
 use crate::core::input::remap_del_to_bs;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
 use crate::core::zmodem::{
-    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemDirection, ZmodemEvent, ZmodemTransfer,
-    start_zmodem_transfer,
+    ZmodemAction, ZmodemDetectResult, ZmodemDetector, ZmodemDirection, ZmodemDownloadOoDrain,
+    ZmodemEvent, ZmodemTransfer, ZmodemUploadDrain, start_zmodem_transfer,
 };
 use crate::core::{
     RecordingManager, SessionCommand, SessionManager, SessionOutputCoalescer, SharedCwd,
@@ -423,6 +423,8 @@ pub(super) async fn ssh_io_loop(
 
     let mut zmodem_detector = ZmodemDetector::new();
     let mut zmodem_transfer: Option<ZmodemTransfer> = None;
+    let mut zmodem_upload_drain = ZmodemUploadDrain::new();
+    let mut zmodem_download_oo_drain = ZmodemDownloadOoDrain::new();
     let zmodem_event_name = format!("zmodem-event-{session_id}");
 
     let initial_inject_deadline =
@@ -442,7 +444,9 @@ pub(super) async fn ssh_io_loop(
                         output.attach();
                     }
                     Some(SessionCommand::Write(mut data)) => {
-                        if zmodem_transfer.is_some() {
+                        if zmodem_transfer.is_some()
+                            || zmodem_upload_drain.should_suppress(std::time::Instant::now())
+                        {
                             continue;
                         }
                         if backspace_as_bs {
@@ -515,12 +519,28 @@ pub(super) async fn ssh_io_loop(
                     Some(ChannelMsg::Data { ref data }) => {
                         // ZMODEM: if a transfer is active, route raw bytes to it.
                         if let Some(ref mut transfer) = zmodem_transfer {
+                            let direction = transfer.direction();
                             let actions = transfer.feed_incoming(data);
                             handle_zmodem_actions(&app, &zmodem_event_name, &mut channel, actions).await;
                             if transfer.is_done() {
                                 zmodem_transfer = None;
                                 zmodem_detector.reset();
+                                if direction == ZmodemDirection::Upload {
+                                    zmodem_upload_drain.start(std::time::Instant::now());
+                                } else if direction == ZmodemDirection::Download {
+                                    zmodem_download_oo_drain.start(std::time::Instant::now());
+                                }
                             }
+                            continue;
+                        }
+
+                        let data = zmodem_upload_drain.filter(data, std::time::Instant::now());
+                        if data.is_empty() {
+                            continue;
+                        }
+                        let data = zmodem_download_oo_drain
+                            .filter(data, std::time::Instant::now());
+                        if data.is_empty() {
                             continue;
                         }
 

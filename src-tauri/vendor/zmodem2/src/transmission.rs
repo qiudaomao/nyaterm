@@ -18,10 +18,13 @@ use crate::{ZDLE, ZPAD};
 use core::cmp::min;
 use core::fmt::Write as _;
 
-/// Size of the unescaped subpacket payload. The size is picked from the
-/// original ZMODEM specification.
-const SUBPACKET_MAX_SIZE: usize = 1024;
-const SUBPACKET_PER_ACK: usize = 10;
+/// Size of the unescaped subpacket payload.
+///
+/// 8 KiB keeps the fixed-capacity buffers modest while avoiding the severe
+/// throughput penalty of 1 KiB frames over SSH and other high-latency links.
+const SUBPACKET_MAX_SIZE: usize = 8 * 1024;
+const SUBPACKET_PER_ACK: usize = 8;
+const RECEIVER_BUFFER_SIZE: u16 = u16::MAX;
 const MAX_HEADER_ESCAPED: usize = 128;
 const MAX_SUBPACKET_ESCAPED: usize = SUBPACKET_MAX_SIZE * 2 + 2 + 8;
 const WIRE_BUF_SIZE: usize = MAX_HEADER_ESCAPED + MAX_SUBPACKET_ESCAPED;
@@ -243,6 +246,14 @@ impl<'a> SliceReader<'a> {
     fn consumed(&self) -> usize {
         self.pos
     }
+
+    fn remaining(&self) -> &[u8] {
+        &self.buf[self.pos..]
+    }
+
+    fn advance(&mut self, n: usize) {
+        self.pos = min(self.pos.saturating_add(n), self.buf.len());
+    }
 }
 
 impl Read for SliceReader<'_> {
@@ -327,6 +338,14 @@ impl RxCrc {
             self.calc32.update_byte(byte);
         } else {
             self.calc16.update_byte(byte);
+        }
+    }
+
+    fn update_slice(&mut self, data: &[u8], encoding: Encoding) {
+        if encoding == Encoding::ZBIN32 {
+            self.calc32.update(data);
+        } else {
+            self.calc16.update(data);
         }
     }
 
@@ -1167,10 +1186,7 @@ impl Receiver {
     }
 
     /// Handles reading a single byte for the `SubpacketState::Reading` state.
-    fn receive_subpacket_data_byte<P>(&mut self, port: &mut P) -> Result<Option<()>, Error>
-    where
-        P: Read + ?Sized,
-    {
+    fn receive_subpacket_data_byte(&mut self, port: &mut SliceReader<'_>) -> Result<Option<()>, Error> {
         let handle_followup = |this: &mut Self, byte: u8| -> Result<Option<()>, Error> {
             if let Ok(packet) = SubpacketType::try_from(byte) {
                 this.crc.update(packet as u8, this.data_encoding);
@@ -1191,6 +1207,29 @@ impl Receiver {
             return handle_followup(self, byte);
         }
 
+        let available = port.remaining();
+        if !available.is_empty() {
+            let spare = SUBPACKET_MAX_SIZE.saturating_sub(self.buf.len());
+            if spare == 0 {
+                return Err(Error::OutOfMemory);
+            }
+            let run = available
+                .iter()
+                .position(|&byte| byte == ZDLE)
+                .unwrap_or(available.len())
+                .min(spare);
+
+            if run > 0 {
+                let data = &available[..run];
+                self.buf
+                    .extend_from_slice(data)
+                    .map_err(|_| Error::OutOfMemory)?;
+                self.crc.update_slice(data, self.data_encoding);
+                port.advance(run);
+                return Ok(Some(()));
+            }
+        }
+
         let Some(byte) = port.read_byte()? else {
             return Ok(None);
         };
@@ -1207,10 +1246,7 @@ impl Receiver {
         Ok(Some(()))
     }
 
-    fn process_subpacket<P>(&mut self, port: &mut P) -> Result<Option<()>, Error>
-    where
-        P: Read + ?Sized,
-    {
+    fn process_subpacket(&mut self, port: &mut SliceReader<'_>) -> Result<Option<()>, Error> {
         match self.subpacket_state {
             SubpacketState::Reading => self.receive_subpacket_data_byte(port),
             SubpacketState::Crc(packet) => {
@@ -1347,10 +1383,8 @@ fn write_zrinit<P>(port: &mut P) -> Result<Option<()>, Error>
 where
     P: Write + ?Sized,
 {
-    let zrinit = Zrinit::CANFDX | Zrinit::CANFC32;
-    let buffer_size = u16::try_from(SUBPACKET_MAX_SIZE)
-        .map_err(|_| Error::Unsupported)?
-        .to_le_bytes();
+    let zrinit = Zrinit::CANFDX | Zrinit::CANOVIO | Zrinit::CANFC32;
+    let buffer_size = RECEIVER_BUFFER_SIZE.to_le_bytes();
     Header::new(
         Encoding::ZHEX,
         Frame::ZRINIT,

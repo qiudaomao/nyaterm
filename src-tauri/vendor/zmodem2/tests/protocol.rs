@@ -3,7 +3,10 @@
 // Copyright (c) 2023-2026 Jarkko Sakkinen
 
 use rstest::rstest;
-use zmodem2::{Encoding, Frame, Header, Receiver, ReceiverEvent, Sender, XON, ZDLE, ZPAD};
+use zmodem2::{
+    Encoding, Frame, Header, Receiver, ReceiverEvent, Sender, SubpacketType, XON, ZDLE, ZPAD,
+    Zrinit,
+};
 
 #[rstest]
 #[case(Encoding::ZBIN, Frame::ZRQINIT, &[0; 4], &[ZPAD, ZDLE, Encoding::ZBIN as u8, 0, 0, 0, 0, 0, 0, 0])]
@@ -36,6 +39,102 @@ pub fn test_header_read(
     let port = &mut port.to_vec();
     let port = &mut port.as_slice();
     assert!(Header::read(port) == Ok(Some(Header::new(encoding, frame, flags))));
+}
+
+fn zhex_header_from_wire(wire: &[u8]) -> Header {
+    assert!(
+        wire.starts_with(&[ZPAD, ZPAD, ZDLE, Encoding::ZHEX as u8]),
+        "expected ZHEX header, got {wire:?}"
+    );
+    let mut port = &wire[3..];
+    Header::read(&mut port)
+        .expect("read header")
+        .expect("header")
+}
+
+fn write_zrinit(flags: &[u8; 4]) -> Vec<u8> {
+    let mut wire = Vec::new();
+    Header::new(Encoding::ZHEX, Frame::ZRINIT, flags)
+        .write(&mut wire)
+        .expect("write zrinit")
+        .expect("complete zrinit");
+    wire
+}
+
+fn write_zrpos(offset: u32) -> Vec<u8> {
+    let mut wire = Vec::new();
+    Header::new(Encoding::ZHEX, Frame::ZRPOS, &offset.to_le_bytes())
+        .write(&mut wire)
+        .expect("write zrpos")
+        .expect("complete zrpos");
+    wire
+}
+
+fn has_subpacket_kind(wire: &[u8], kind: SubpacketType) -> bool {
+    wire.windows(2).any(|window| window == [ZDLE, kind as u8])
+}
+
+#[test]
+fn test_receiver_zrinit_advertises_large_overlap_window() {
+    let receiver = Receiver::new().unwrap();
+    let header = zhex_header_from_wire(receiver.drain_outgoing());
+    let flags = header.count().to_le_bytes();
+    let advertised_buffer_size = u16::from_le_bytes([flags[0], flags[1]]);
+    let caps = Zrinit::from_bits_truncate(flags[2] | flags[3]);
+
+    assert!(header == Header::new(Encoding::ZHEX, Frame::ZRINIT, &flags));
+    assert_eq!(advertised_buffer_size, u16::MAX);
+    assert!(caps.contains(Zrinit::CANFDX));
+    assert!(caps.contains(Zrinit::CANOVIO));
+    assert!(caps.contains(Zrinit::CANFC32));
+}
+
+#[test]
+fn test_sender_requests_8k_file_chunks_after_large_zrinit() {
+    let mut sender = Sender::new().unwrap();
+    sender.start_file(b"large.bin", 20_000).unwrap();
+    sender.advance_outgoing(sender.drain_outgoing().len());
+
+    let flags = [0xff, 0xff, 0, (Zrinit::CANFDX | Zrinit::CANOVIO | Zrinit::CANFC32).bits()];
+    sender.feed_incoming(&write_zrinit(&flags)).unwrap();
+    sender.advance_outgoing(sender.drain_outgoing().len());
+
+    sender.feed_incoming(&write_zrpos(0)).unwrap();
+
+    let request = sender.poll_file().expect("file data request");
+    assert_eq!(request.offset, 0);
+    assert_eq!(request.len, 8 * 1024);
+}
+
+#[test]
+fn test_sender_uses_streaming_subpackets_until_ack_boundary() {
+    let mut sender = Sender::new().unwrap();
+    sender.start_file(b"window.bin", 70_000).unwrap();
+    sender.advance_outgoing(sender.drain_outgoing().len());
+
+    let flags = [0, 0, 0, (Zrinit::CANFDX | Zrinit::CANOVIO | Zrinit::CANFC32).bits()];
+    sender.feed_incoming(&write_zrinit(&flags)).unwrap();
+    sender.advance_outgoing(sender.drain_outgoing().len());
+
+    sender.feed_incoming(&write_zrpos(0)).unwrap();
+
+    for packet_index in 0..8 {
+        let request = sender.poll_file().expect("file data request");
+        assert_eq!(request.len, 8 * 1024);
+        sender.feed_file(&vec![0x55; request.len]).unwrap();
+        let wire = sender.drain_outgoing().to_vec();
+
+        if packet_index == 0 {
+            assert!(has_subpacket_kind(&wire, SubpacketType::ZCRCG));
+        }
+        if packet_index == 7 {
+            assert!(has_subpacket_kind(&wire, SubpacketType::ZCRCW));
+        }
+
+        sender.advance_outgoing(wire.len());
+    }
+
+    assert!(sender.poll_file().is_none());
 }
 
 #[test]

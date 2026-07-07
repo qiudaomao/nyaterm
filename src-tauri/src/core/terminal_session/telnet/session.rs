@@ -53,6 +53,10 @@ async fn telnet_session_task(
 
     let zmodem_state: Arc<TokioMutex<Option<ZmodemTransfer>>> = Arc::new(TokioMutex::new(None));
     let zmodem_state_reader = zmodem_state.clone();
+    let zmodem_upload_drain = Arc::new(TokioMutex::new(ZmodemUploadDrain::new()));
+    let zmodem_upload_drain_reader = zmodem_upload_drain.clone();
+    let zmodem_download_oo_drain = Arc::new(TokioMutex::new(ZmodemDownloadOoDrain::new()));
+    let zmodem_download_oo_drain_reader = zmodem_download_oo_drain.clone();
     let zmodem_event_name = format!("zmodem-event-{session_id}");
     let zmodem_event_reader = zmodem_event_name.clone();
     let (zmodem_out_tx, mut zmodem_out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -101,10 +105,21 @@ async fn telnet_session_task(
                         continue;
                     }
 
+                    let visible = if zmodem_upload_drain_reader.lock().await.is_active() {
+                        let mut drain = zmodem_upload_drain_reader.lock().await;
+                        drain.filter(&visible, std::time::Instant::now()).to_vec()
+                    } else {
+                        visible
+                    };
+                    if visible.is_empty() {
+                        continue;
+                    }
+
                     // ZMODEM: if active, route to transfer.
                     {
                         let mut zm = zmodem_state_reader.lock().await;
                         if let Some(ref mut transfer) = *zm {
+                            let direction = transfer.direction();
                             let actions = transfer.feed_incoming(&visible);
                             for action in actions {
                                 match action {
@@ -119,9 +134,32 @@ async fn telnet_session_task(
                             if transfer.is_done() {
                                 *zm = None;
                                 zmodem_detector.reset();
+                                if direction == ZmodemDirection::Upload {
+                                    zmodem_upload_drain_reader
+                                        .lock()
+                                        .await
+                                        .start(std::time::Instant::now());
+                                } else if direction == ZmodemDirection::Download {
+                                    zmodem_download_oo_drain_reader
+                                        .lock()
+                                        .await
+                                        .start(std::time::Instant::now());
+                                }
                             }
                             continue;
                         }
+                    }
+
+                    let visible = if zmodem_download_oo_drain_reader.lock().await.is_active() {
+                        let mut drain = zmodem_download_oo_drain_reader.lock().await;
+                        drain
+                            .filter(&visible, std::time::Instant::now())
+                            .to_vec()
+                    } else {
+                        visible
+                    };
+                    if visible.is_empty() {
+                        continue;
                     }
 
                     // ZMODEM: detect header.
@@ -245,7 +283,12 @@ async fn telnet_session_task(
                         output.attach();
                     }
                     Some(SessionCommand::Write(mut data)) => {
-                        if zmodem_state.lock().await.is_some() {
+                        if zmodem_state.lock().await.is_some()
+                            || zmodem_upload_drain
+                                .lock()
+                                .await
+                                .should_suppress(std::time::Instant::now())
+                        {
                             continue;
                         }
 

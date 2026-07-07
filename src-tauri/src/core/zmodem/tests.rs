@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use super::{
-        ProgressThrottle, ZMODEM_PROGRESS_BYTES, ZMODEM_PROGRESS_INTERVAL, ZmodemDetectResult,
-        ZmodemDetector, ZmodemDirection, ZmodemEvent,
+        ProgressThrottle, ZMODEM_FINISH_DRAIN_IDLE, ZMODEM_PROGRESS_BYTES,
+        ZMODEM_PROGRESS_INTERVAL, ZmodemDetectResult, ZmodemDetector, ZmodemDirection,
+        ZmodemDownloadOoDrain, ZmodemEvent, ZmodemUploadDrain,
     };
     use serde_json::json;
     use std::time::{Duration, Instant};
@@ -218,5 +219,73 @@ mod tests {
         let start = Instant::now();
         assert!(throttle.should_emit_at(128, false, start));
         assert!(throttle.should_emit_at(129, true, start + Duration::from_millis(1)));
+    }
+
+    #[test]
+    fn upload_drain_suppresses_residual_bytes_until_idle() {
+        let mut drain = ZmodemUploadDrain::new();
+        let start = Instant::now();
+
+        assert!(!drain.should_suppress(start));
+
+        drain.start(start);
+        assert!(drain.should_suppress(start + ZMODEM_FINISH_DRAIN_IDLE / 2));
+        assert!(drain.should_suppress(start + ZMODEM_FINISH_DRAIN_IDLE));
+        assert!(!drain.should_suppress(start + ZMODEM_FINISH_DRAIN_IDLE * 3));
+    }
+
+    #[test]
+    fn upload_drain_allows_prompt_text() {
+        let mut drain = ZmodemUploadDrain::new();
+        let start = Instant::now();
+
+        drain.start(start);
+        assert_eq!(
+            drain.filter(
+                b"\r\n[root@ubuntu ~]# ",
+                start + ZMODEM_FINISH_DRAIN_IDLE / 2
+            ),
+            b"\r\n[root@ubuntu ~]# "
+        );
+        assert_eq!(drain.filter(b"next", start + Duration::from_millis(1)), b"next");
+    }
+
+    #[test]
+    fn upload_drain_suppresses_binary_residue() {
+        let mut drain = ZmodemUploadDrain::new();
+        let start = Instant::now();
+
+        drain.start(start);
+        assert_eq!(
+            drain.filter(b"\x18\x18\x00\xff", start + Duration::from_millis(1)),
+            b""
+        );
+        assert!(drain.should_suppress(start + Duration::from_millis(2)));
+    }
+
+    #[test]
+    fn download_oo_drain_strips_only_zmodem_trailer() {
+        let mut drain = ZmodemDownloadOoDrain::new();
+        let start = Instant::now();
+
+        drain.start(start);
+        assert_eq!(drain.filter(b"O", start + Duration::from_millis(1)), b"");
+        assert_eq!(
+            drain.filter(b"Oprompt", start + Duration::from_millis(2)),
+            b"prompt"
+        );
+        assert_eq!(drain.filter(b"next", start + Duration::from_millis(3)), b"next");
+    }
+
+    #[test]
+    fn download_oo_drain_expires_without_stripping_prompt() {
+        let mut drain = ZmodemDownloadOoDrain::new();
+        let start = Instant::now();
+
+        drain.start(start);
+        assert_eq!(
+            drain.filter(b"Output", start + ZMODEM_FINISH_DRAIN_IDLE * 2),
+            b"Output"
+        );
     }
 }

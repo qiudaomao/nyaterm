@@ -20,6 +20,7 @@ enum TransferState {
         receiver: zmodem2::Receiver,
         save_dir: PathBuf,
         current_file: Option<ReceiveFile>,
+        stats: TransferStats,
     },
     /// Actively sending files (upload / remote `rz`).
     Sending {
@@ -27,6 +28,7 @@ enum TransferState {
         files: Vec<PathBuf>,
         file_index: usize,
         current_file: Option<SendFile>,
+        stats: TransferStats,
     },
     /// Transfer finished or aborted.
     Done,
@@ -35,7 +37,7 @@ enum TransferState {
 struct ReceiveFile {
     name: String,
     size: u64,
-    file: std::fs::File,
+    file: BufWriter<std::fs::File>,
     written: u64,
 }
 
@@ -83,6 +85,140 @@ impl ProgressThrottle {
         }
 
         false
+    }
+}
+
+struct TransferStats {
+    started_at: Instant,
+    bytes: u64,
+    ack_count: u64,
+    file_write_count: u64,
+}
+
+impl TransferStats {
+    fn new() -> Self {
+        Self {
+            started_at: Instant::now(),
+            bytes: 0,
+            ack_count: 0,
+            file_write_count: 0,
+        }
+    }
+
+    fn elapsed_secs(&self) -> f64 {
+        self.started_at.elapsed().as_secs_f64()
+    }
+
+    fn mbps(&self) -> f64 {
+        let elapsed = self.elapsed_secs();
+        if elapsed <= f64::EPSILON {
+            0.0
+        } else {
+            self.bytes as f64 / 1024.0 / 1024.0 / elapsed
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct ZmodemUploadDrain {
+    suppress_until: Option<Instant>,
+}
+
+impl ZmodemUploadDrain {
+    pub fn new() -> Self {
+        Self {
+            suppress_until: None,
+        }
+    }
+
+    pub fn start(&mut self, now: Instant) {
+        self.suppress_until = now.checked_add(ZMODEM_FINISH_DRAIN_IDLE);
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.suppress_until.is_some()
+    }
+
+    pub fn should_suppress(&mut self, now: Instant) -> bool {
+        let Some(until) = self.suppress_until else {
+            return false;
+        };
+
+        if now <= until {
+            self.start(now);
+            return true;
+        }
+
+        self.suppress_until = None;
+        false
+    }
+
+    pub fn filter<'a>(&mut self, data: &'a [u8], now: Instant) -> &'a [u8] {
+        let Some(until) = self.suppress_until else {
+            return data;
+        };
+
+        if now > until {
+            self.suppress_until = None;
+            return data;
+        }
+
+        if looks_like_terminal_text(data) {
+            self.suppress_until = None;
+            return data;
+        }
+
+        self.start(now);
+        &data[data.len()..]
+    }
+}
+
+#[derive(Default)]
+pub struct ZmodemDownloadOoDrain {
+    suppress_until: Option<Instant>,
+    remaining_o: usize,
+}
+
+impl ZmodemDownloadOoDrain {
+    pub fn new() -> Self {
+        Self {
+            suppress_until: None,
+            remaining_o: 0,
+        }
+    }
+
+    pub fn start(&mut self, now: Instant) {
+        self.suppress_until = now.checked_add(ZMODEM_FINISH_DRAIN_IDLE);
+        self.remaining_o = 2;
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.suppress_until.is_some()
+    }
+
+    pub fn filter<'a>(&mut self, data: &'a [u8], now: Instant) -> &'a [u8] {
+        let Some(until) = self.suppress_until else {
+            return data;
+        };
+
+        if now > until {
+            self.suppress_until = None;
+            self.remaining_o = 0;
+            return data;
+        }
+
+        let mut offset = 0;
+        while self.remaining_o > 0 && data.get(offset) == Some(&b'O') {
+            offset += 1;
+            self.remaining_o -= 1;
+        }
+
+        if self.remaining_o == 0 || offset < data.len() {
+            self.suppress_until = None;
+            self.remaining_o = 0;
+        }
+
+        &data[offset..]
     }
 }
 
@@ -141,6 +277,7 @@ impl ZmodemTransfer {
             receiver,
             save_dir,
             current_file: None,
+            stats: TransferStats::new(),
         };
 
         let mut actions = self.drain_outgoing();
@@ -171,6 +308,7 @@ impl ZmodemTransfer {
             files,
             file_index: 0,
             current_file: None,
+            stats: TransferStats::new(),
         };
 
         let mut actions = Vec::new();
@@ -221,6 +359,7 @@ impl ZmodemTransfer {
             receiver,
             save_dir,
             current_file,
+            stats,
         } = &mut self.state
         else {
             return actions;
@@ -258,6 +397,7 @@ impl ZmodemTransfer {
                 let out = out.to_vec();
                 let n = out.len();
                 actions.push(ZmodemAction::SendToRemote(out));
+                stats.ack_count += 1;
                 receiver.advance_outgoing(n);
             }
 
@@ -282,7 +422,10 @@ impl ZmodemTransfer {
                                 *current_file = Some(ReceiveFile {
                                     name: name.clone(),
                                     size,
-                                    file,
+                                    file: BufWriter::with_capacity(
+                                        ZMODEM_FILE_WRITE_BUFFER_SIZE,
+                                        file,
+                                    ),
                                     written: 0,
                                 });
                                 if self.progress_throttle.should_emit(0, true) {
@@ -324,6 +467,7 @@ impl ZmodemTransfer {
                         *current_file = None;
                     }
                     zmodem2::ReceiverEvent::SessionComplete => {
+                        log_transfer_complete(ZmodemDirection::Download, self.file_count, stats);
                         self.state = TransferState::Done;
                         actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Complete {
                             direction: ZmodemDirection::Download,
@@ -350,6 +494,8 @@ impl ZmodemTransfer {
                         return actions;
                     }
                     rf.written += len as u64;
+                    stats.bytes += len as u64;
+                    stats.file_write_count += 1;
                     if self.progress_throttle.should_emit(rf.written, false) {
                         actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Progress {
                             file_name: rf.name.clone(),
@@ -377,6 +523,7 @@ impl ZmodemTransfer {
             files,
             file_index,
             current_file,
+            stats,
         } = &mut self.state
         else {
             return actions;
@@ -434,6 +581,7 @@ impl ZmodemTransfer {
                             tracing::warn!("feed_file error: {e}");
                             break;
                         }
+                        stats.bytes += n as u64;
                         sf.sent = sf.sent.max(requested_offset + n as u64);
                         sf.position += n as u64;
                         if self.progress_throttle.should_emit(sf.sent, false) {
@@ -494,6 +642,7 @@ impl ZmodemTransfer {
                     }
                 }
                 zmodem2::SenderEvent::SessionComplete => {
+                    log_transfer_complete(ZmodemDirection::Upload, self.file_count, stats);
                     self.state = TransferState::Done;
                     actions.push(ZmodemAction::EmitEvent(ZmodemEvent::Complete {
                         direction: ZmodemDirection::Upload,
@@ -516,6 +665,7 @@ impl ZmodemTransfer {
             files,
             file_index,
             current_file,
+            ..
         } = &mut self.state
         else {
             return vec![];
@@ -628,5 +778,31 @@ fn drain_sender_outgoing(sender: &mut zmodem2::Sender, actions: &mut Vec<ZmodemA
         actions.push(ZmodemAction::SendToRemote(out));
         sender.advance_outgoing(n);
     }
+}
+
+fn log_transfer_complete(direction: ZmodemDirection, file_count: u32, stats: &TransferStats) {
+    tracing::info!(
+        ?direction,
+        file_count,
+        bytes = stats.bytes,
+        elapsed_secs = stats.elapsed_secs(),
+        mb_per_sec = stats.mbps(),
+        ack_count = stats.ack_count,
+        file_write_count = stats.file_write_count,
+        "ZMODEM transfer complete"
+    );
+}
+
+fn looks_like_terminal_text(data: &[u8]) -> bool {
+    if data.is_empty() || std::str::from_utf8(data).is_err() {
+        return false;
+    }
+
+    data.iter().all(|&byte| {
+        matches!(
+            byte,
+            b'\t' | b'\n' | b'\r' | 0x07 | 0x08 | 0x1b | 0x20..=0x7e | 0x80..=0xff
+        )
+    })
 }
 

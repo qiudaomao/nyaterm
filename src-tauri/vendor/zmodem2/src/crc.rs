@@ -3,7 +3,7 @@
 
 /// Computes the CRC-16-XMODEM checksum.
 #[must_use]
-pub const fn crc16_xmodem(data: &[u8]) -> u16 {
+pub fn crc16_xmodem(data: &[u8]) -> u16 {
     let mut crc: u16 = 0x0000;
     let mut i = 0;
     while i < data.len() {
@@ -15,14 +15,8 @@ pub const fn crc16_xmodem(data: &[u8]) -> u16 {
 
 /// Computes the CRC-32-ISO-HDLC checksum.
 #[must_use]
-pub const fn crc32_iso_hdlc(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFF_FFFF;
-    let mut i = 0;
-    while i < data.len() {
-        crc = crc32_update(crc, data[i]);
-        i += 1;
-    }
-    !crc
+pub fn crc32_iso_hdlc(data: &[u8]) -> u32 {
+    crc32fast::hash(data)
 }
 
 /// A stateful, iterative CRC-16-XMODEM calculator.
@@ -40,7 +34,7 @@ impl Crc16 {
     /// Updates the CRC state with a slice of bytes.
     pub fn update(&mut self, data: &[u8]) {
         for &byte in data {
-            self.update_byte(byte);
+            self.crc = crc16_update(self.crc, byte);
         }
     }
 
@@ -58,61 +52,59 @@ impl Crc16 {
 
 /// A stateful, iterative CRC-32-ISO-HDLC calculator.
 pub struct Crc32 {
-    crc: u32,
+    hasher: crc32fast::Hasher,
 }
 
 impl Crc32 {
     /// Creates a new CRC-32 calculator.
     #[must_use]
-    pub const fn new() -> Self {
-        Self { crc: 0xFFFF_FFFF }
+    pub fn new() -> Self {
+        Self {
+            hasher: crc32fast::Hasher::new(),
+        }
     }
 
     /// Updates the CRC state with a slice of bytes.
     pub fn update(&mut self, data: &[u8]) {
-        for &byte in data {
-            self.update_byte(byte);
-        }
+        self.hasher.update(data);
     }
 
     /// Updates the CRC state with a single byte.
     pub fn update_byte(&mut self, byte: u8) {
-        self.crc = crc32_update(self.crc, byte);
+        self.hasher.update(&[byte]);
     }
 
     /// Finalizes the CRC calculation and returns the checksum.
     #[must_use]
-    pub const fn finalize(&self) -> u32 {
-        !self.crc
+    pub fn finalize(&self) -> u32 {
+        self.hasher.clone().finalize()
     }
 }
 
 /// Performs a single byte update for CRC-16-XMODEM.
-const fn crc16_update(mut crc: u16, byte: u8) -> u16 {
-    crc ^= (byte as u16) << 8;
-    let mut i = 0;
-    while i < 8 {
-        if (crc & 0x8000) != 0 {
-            crc = (crc << 1) ^ 0x1021;
-        } else {
-            crc <<= 1;
-        }
-        i += 1;
-    }
-    crc
+const fn crc16_update(crc: u16, byte: u8) -> u16 {
+    let index = ((crc >> 8) as u8 ^ byte) as usize;
+    (crc << 8) ^ CRC16_XMODEM_TABLE[index]
 }
 
-/// Performs a single byte update for CRC-32-ISO-HDLC.
-const fn crc32_update(mut crc: u32, byte: u8) -> u32 {
-    crc ^= byte as u32;
-    let mut i = 0;
-    while i < 8 {
-        if (crc & 1) != 0 {
-            crc = (crc >> 1) ^ 0xEDB8_8320;
-        } else {
-            crc >>= 1;
+const fn make_crc16_xmodem_table() -> [u16; 256] {
+    let mut table = [0u16; 256];
+    let mut byte = 0usize;
+    while byte < 256 {
+        let mut crc = (byte as u16) << 8;
+        let mut bit = 0;
+        while bit < 8 {
+            if (crc & 0x8000) != 0 {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc <<= 1;
+            }
+            bit += 1;
         }
-        i += 1;
+        table[byte] = crc;
+        byte += 1;
     }
-    crc
+    table
 }
+
+const CRC16_XMODEM_TABLE: [u16; 256] = make_crc16_xmodem_table();

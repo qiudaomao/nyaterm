@@ -7,7 +7,7 @@
 //! transitions to an active [`ZmodemTransfer`] that owns the protocol state.
 
 use serde::Serialize;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -26,6 +26,8 @@ const CANCEL_SEQ_LEN: usize = 5;
 
 const ZMODEM_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const ZMODEM_PROGRESS_BYTES: u64 = 256 * 1024;
+const ZMODEM_FINISH_DRAIN_IDLE: Duration = Duration::from_millis(250);
+const ZMODEM_FILE_WRITE_BUFFER_SIZE: usize = 1024 * 1024;
 
 include!("types.rs");
 include!("detector.rs");
