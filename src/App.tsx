@@ -2720,7 +2720,7 @@ function App() {
           broadcastToAll,
           onOpenCommandPalette: handleOpenSessionSwitcher,
           onClearTerminal: () => window.dispatchEvent(new CustomEvent("nyaterm:clear-terminal")),
-          onResetTerminalSize: () =>
+          onRefitTerminals: () =>
             window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals")),
         }}
         mobile={{

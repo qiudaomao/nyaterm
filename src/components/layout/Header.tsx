@@ -129,7 +129,7 @@ interface HeaderProps {
   broadcastToAll?: boolean;
   onOpenCommandPalette?: () => void;
   onClearTerminal?: () => void;
-  onResetTerminalSize?: () => void;
+  onRefitTerminals?: () => void;
 }
 
 interface MenuItem {
@@ -160,7 +160,7 @@ export default function Header({
   broadcastToAll,
   onOpenCommandPalette,
   onClearTerminal,
-  onResetTerminalSize,
+  onRefitTerminals,
 }: HeaderProps) {
   const [appWindow] = useState(() => getCurrentWindow());
   const { themeName, setTheme, themeNames } = useTheme();
@@ -358,9 +358,9 @@ export default function Header({
         shortcut: dk("terminal.clear"),
       },
       {
-        label: t("menu.resetTerminalSize"),
+        label: t("menu.refitTerminals"),
         icon: "fit_screen",
-        action: () => onResetTerminalSize?.(),
+        action: () => onRefitTerminals?.(),
       },
     ],
     help: [
