@@ -129,14 +129,17 @@ jobs:
       - name: Install Python dependencies
         shell: bash
         run: |
-          python3 -m pip install --upgrade requests requests-toolbelt
+          python3 -m venv "$RUNNER_TEMP/gitee-release-venv"
+          "$RUNNER_TEMP/gitee-release-venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/gitee-release-venv/bin/python" -m pip install requests requests-toolbelt
+          echo "PYTHON_BIN=$RUNNER_TEMP/gitee-release-venv/bin/python" >> "$GITHUB_ENV"
 
       - name: Create or update Gitee release and upload assets
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         shell: bash
         run: |
-          python3 <<'PY'
+          "$PYTHON_BIN" <<'PY'
           import json
           import mimetypes
           import os
