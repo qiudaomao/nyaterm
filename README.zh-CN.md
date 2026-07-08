@@ -347,7 +347,9 @@ pnpm tauri dev
 <a name="contributors"></a>
 # 贡献者
 
-<img src="https://contrib-wall.coderkang.workers.dev/image?snapshot=kAwrwg2ScchjP7BfSUo1CRC1&amp;sealed_token=eyJ2IjoxLCJ0eXBlIjoic25hcHNob3QiLCJzbmFwc2hvdCI6ImtBd3J3ZzJTY2NoalA3QmZTVW8xQ1JDMSIsImV4cCI6MTgxNTAzNTk5MH0.TJLai_CDxSPq2P87wkvhcZWNZMlyaEG4ae-38GMwWUA&amp;sealed_github_token=GwZ52_aI0Ag4oPtR.YeRoS2e62LHjBpMu1wc0naL0G6Q6N2pDjKFx1GSFFSNIm4mL-e_AkDY6q56pJ1K1k3lHbiC8gCWGRsQ0__3IjU3NX20uZuLXdabysg0Lxe6Kgx7ZStmap0bAlmNhrBj4XTSGmaDXZoNLiYNTDM0VNlrkud7XAklusE_9PXzO8pYT4Mrd8gH8vlojBrdCebe0HQrchcLg9VOLPbGmps_oCfss1vNyTHaamu15Nhai4nE" alt="贡献者" />
+<a href="https://github.com/nyakang/nyaterm/graphs/contributors">
+  <img src="https://contrib-wall.coderkang.workers.dev/image?snapshot=tQPH3XaVAWIw41hXZ4V9Xd97&amp;sealed_token=eyJ2IjoxLCJ0eXBlIjoic25hcHNob3QiLCJzbmFwc2hvdCI6InRRUEgzWGFWQVdJdzQxaFhaNFY5WGQ5NyIsImV4cCI6MTgxNTAzNjI5Nn0.9-dqi08YYwadlKeNUEeoBnTyAPhF5hs83OOFgeT8cPs&amp;sealed_github_token=TKIdMnw6IIsp1TI-.ip9G3OywnI_nGDAKhFJUFCSnFyWfWL_HK9JlihiBedCkEXKCKNLt007stBH5MJKbCGQALquRAi8xxG1o3EfewtTTcs3zV12YEBCBLuWJTf4o3IgaIpA2oVTGROrO7vZh79sJEhJMM2NSRU6E6DpXk73JtHT0HDSFfY4Yyot3lBSaFNQ_VKmeo6hfP8c-oMMXn4vvUs1usWS4XHtp3AddeKHr1RjYl1rzOLGhUasRj60" alt="贡献者们" />
+</a>
 
 ---
 

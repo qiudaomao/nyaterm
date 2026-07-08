@@ -353,7 +353,9 @@ If NyaTerm helps your daily development, operations, or remote terminal workflow
 <a name="contributors"></a>
 # Contributors
 
-<img src="https://contrib-wall.coderkang.workers.dev/image?snapshot=RXK2ZNMCcEnfVYtliRMLj0B6&amp;sealed_token=eyJ2IjoxLCJ0eXBlIjoic25hcHNob3QiLCJzbmFwc2hvdCI6IlJYSzJaTk1DY0VuZlZZdGxpUk1MajBCNiIsImV4cCI6MTgxNTAzNTg4Mn0.txVlixBEaVph3VH6bONee0i7Vkbx9SXg_mUD4K7jZQY&amp;sealed_github_token=imc9SYHpDTvq-pbT.ltHQMZ1DoZGc_HedYEKlJRKXzfSKVWTCNpnH_QmYjLKXsEnCs4EXO5ziWCJ2i-ZaZy_hQFuhk24DOMXzxeYITC4h5yqletQgJi0dZU3UqY4mEJ0WCZCyBJ2ssqngODiZlWO7SvuEf2rPkh95bQspvT5_bsdKtXLlUImoYOFtJTUAYkGZEV1GR8_X0A4m7_wpf20kQAhaR43URPOSInqizeNvo_QHYhfYPLsle4EA-4Y" alt="Contributors" />
+<a href="https://github.com/nyakang/nyaterm/graphs/contributors">
+  <img src="https://contrib-wall.coderkang.workers.dev/image?snapshot=EEZNlyhjBOrARLki-MUhXqKk&amp;sealed_token=eyJ2IjoxLCJ0eXBlIjoic25hcHNob3QiLCJzbmFwc2hvdCI6IkVFWk5seWhqQk9yQVJMa2ktTVVoWHFLayIsImV4cCI6MTgxNTAzNjQ0NH0.UwegiwfiT3KSKQ17n5ivt24EFwAtoaHZGRwx97t0ODA&amp;sealed_github_token=A6pS93BW-53hz_Cs.8rPY0yM6koNS_UowTbu8qkWzmPLRco8HJRJO2_yp5MZH9yz9o1Ob2g5MUL4aLFK24gjbDexjdErw6eR72ruRbNcsFciYuM4DghLZJgi9V5D9f1-_xFT-sGYK6ibc1A4aWz8EyvFIQo0byPAXv-d410cJmhwsH-bqc963L8J-z0kU6oIi-2zCSszxllze23WmJsWnTJBFUBrQbllg5cLwuHm6q-BMkjoVxChLdOMVwEs" alt="Contributors" />
+</a>
 
 ---
 
