@@ -267,7 +267,10 @@ export default function ResourceMonitor({ activeSessionId }: ResourceMonitorProp
           <div className="space-y-2">
             {/* System */}
             <SectionCard icon={<MdComputer />} title={t("resourceMonitor.system")}>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              <div
+                className="grid gap-x-4 gap-y-1"
+                style={{ gridTemplateColumns: "minmax(0, 1fr) max-content" }}
+              >
                 <InfoCell label={t("resourceMonitor.hostname")} value={stats.system.hostname} />
                 <InfoCell label={t("resourceMonitor.arch")} value={stats.system.arch} />
                 <InfoCell label={t("resourceMonitor.os")} value={stats.system.os} />
