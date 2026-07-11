@@ -510,6 +510,13 @@
     "volumeDriver": "드라이버 {{driver}}",
     "volumes": "볼륨"
   },
+  "dockerSudo": {
+    "description": "\"{{name}}\"에서 Docker 소켓에 접근하려면 sudo가 필요합니다.",
+    "hint": "비밀번호는 stdin으로 sudo에 전달되며 현재 SSH 세션에만 임시로 캐시됩니다.",
+    "password": "sudo 비밀번호",
+    "submit": "계속",
+    "title": "Docker sudo 필요"
+  },
   "error": {
     "reloadApplication": "애플리케이션 다시 로드",
     "somethingWentWrong": "문제가 발생했습니다"
