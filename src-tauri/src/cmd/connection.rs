@@ -554,6 +554,12 @@ pub fn get_ssh_key_passphrase(app: tauri::AppHandle, id: String) -> AppResult<Op
 }
 
 #[tauri::command]
+pub fn get_ssh_key_private_key(app: tauri::AppHandle, id: String) -> AppResult<Option<String>> {
+    let key = config::load_key_by_id(&app, &id)?;
+    config::decrypt_key_pem(&key)
+}
+
+#[tauri::command]
 pub fn save_ssh_key(app: tauri::AppHandle, mut key: SshKey) -> AppResult<String> {
     let mut cfg = config::load_keys(&app)?;
 

@@ -93,11 +93,13 @@ export default function SecurityAuthPanel({ activeSessionId = null }: SecurityAu
               onUnlockSecrets={() => setSecretsUnlocked(true)}
             />
           </TabsContent>
-          <TabsContent
-            value="keys"
-            className="mt-3 min-h-0 overflow-y-auto px-3 pb-3 terminal-scroll"
-          >
-            <KeyManagementTab onCountChange={setKeyCount} />
+          <TabsContent value="keys" className="mt-3 flex min-h-0 flex-1 overflow-hidden">
+            <KeyManagementTab
+              onCountChange={setKeyCount}
+              secretsUnlocked={secretsUnlocked}
+              onLockSecrets={() => setSecretsUnlocked(false)}
+              onUnlockSecrets={() => setSecretsUnlocked(true)}
+            />
           </TabsContent>
           <TabsContent
             value="otp"

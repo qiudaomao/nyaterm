@@ -276,8 +276,10 @@ export function CredentialManagementTab({
   const [draggingCredentialId, setDraggingCredentialId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<CredentialDropTarget | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [unlockRequestNonce, setUnlockRequestNonce] = useState(0);
   const editRequestRef = useRef(0);
   const dragSourceIdRef = useRef<string | null>(null);
+  const pendingUnlockedActionRef = useRef<(() => void | Promise<void>) | null>(null);
 
   const loadCredentials = useCallback(async () => {
     try {
@@ -424,6 +426,30 @@ export function CredentialManagementTab({
     }
     setDeletingEntry(null);
   }, [deletingEntry, loadCredentials]);
+
+  const runUnlockedAction = useCallback(
+    (action: () => void | Promise<void>) => {
+      if (secretsUnlocked) {
+        void action();
+        return;
+      }
+
+      pendingUnlockedActionRef.current = action;
+      setUnlockRequestNonce((value) => value + 1);
+    },
+    [secretsUnlocked],
+  );
+
+  const handleSecretsUnlocked = useCallback(() => {
+    onUnlockSecrets?.();
+    const pendingAction = pendingUnlockedActionRef.current;
+    pendingUnlockedActionRef.current = null;
+    if (pendingAction) {
+      window.setTimeout(() => {
+        void pendingAction();
+      }, 0);
+    }
+  }, [onUnlockSecrets]);
 
   const resetDragState = useCallback(() => {
     dragSourceIdRef.current = null;
@@ -614,12 +640,14 @@ export function CredentialManagementTab({
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                onClick={() => void handleToggleReveal(entry.id)}
-                                disabled={
-                                  !secretsUnlocked ||
-                                  actionsDisabled ||
-                                  revealLoadingIds.has(entry.id)
-                                }
+                                onClick={() => {
+                                  if (revealedIds.has(entry.id)) {
+                                    void handleToggleReveal(entry.id);
+                                  } else {
+                                    runUnlockedAction(() => handleToggleReveal(entry.id));
+                                  }
+                                }}
+                                disabled={actionsDisabled || revealLoadingIds.has(entry.id)}
                                 aria-label={
                                   revealedIds.has(entry.id)
                                     ? t("credentialManager.hidePassword")
@@ -635,10 +663,9 @@ export function CredentialManagementTab({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top">
-                            {lockedHint ??
-                              (revealedIds.has(entry.id)
-                                ? t("credentialManager.hidePassword")
-                                : t("credentialManager.showPassword"))}
+                            {revealedIds.has(entry.id)
+                              ? t("credentialManager.hidePassword")
+                              : t("credentialManager.showPassword")}
                           </TooltipContent>
                         </Tooltip>
                         <Tooltip>
@@ -699,7 +726,8 @@ export function CredentialManagementTab({
       <SecretUnlockFooter
         unlocked={secretsUnlocked}
         onLock={onLockSecrets ?? (() => {})}
-        onUnlocked={onUnlockSecrets ?? (() => {})}
+        onUnlocked={handleSecretsUnlocked}
+        unlockRequestNonce={unlockRequestNonce}
       />
 
       <CredentialDeleteDialog
