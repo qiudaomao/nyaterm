@@ -137,6 +137,14 @@
     "quickPrompt": "예: CPU 사용량이 가장 높은 프로세스 찾기",
     "quote": "인용",
     "reasoning": "추론",
+    "reasoningEffort": {
+      "auto": "자동",
+      "high": "높음",
+      "low": "가벼움",
+      "medium": "보통",
+      "none": "끄기",
+      "xhigh": "매우 높음"
+    },
     "recordHistory": "AI 채팅 기록 저장",
     "redaction": "민감한 데이터 마스킹",
     "refreshModels": "모델 목록 새로고침",
