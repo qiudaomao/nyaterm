@@ -856,6 +856,7 @@ export interface DiagnosticsSettings {
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type AIMode = "ask" | "agent";
 export type AIAgentCommandExecutionMode = "confirm_each" | "smart" | "auto";
+export type AIReasoningEffort = "auto" | "none" | "low" | "medium" | "high" | "xhigh";
 export type AIModelSource = "rust-genai" | "manual";
 
 export type AIProviderKind =
@@ -919,6 +920,7 @@ export interface AISettings {
   active_profile_id: string;
   provider_profiles: AIProviderProfile[];
   default_mode: AIMode;
+  default_reasoning_effort?: AIReasoningEffort;
   default_model_id?: string | null;
   models: AIModelConfigItem[];
   provider_credentials: AIProviderCredential[];
