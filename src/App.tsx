@@ -1162,8 +1162,17 @@ function App() {
     [persistTabsNow],
   );
 
+  const notifyLockedTabCloseBlocked = useCallback(() => {
+    toast.info(t("tabCtx.lockedCloseBlocked"));
+  }, [t]);
+
   const handleCloseWorkspaceTab = useCallback(
     async (tab: Tab) => {
+      if (tab.locked) {
+        notifyLockedTabCloseBlocked();
+        return;
+      }
+
       const allClosed = await closeWorkspaceTabSessions(tab);
       if (!allClosed) {
         toast.error(t("tabCtx.closeFailed"));
@@ -1172,7 +1181,7 @@ function App() {
       closeTabs([tab.id]);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t],
+    [closeTabs, closeWorkspaceTabSessions, notifyLockedTabCloseBlocked, persistWorkspaceNow, t],
   );
 
   const handleCloseDisconnectedPane = useCallback(
@@ -1180,6 +1189,10 @@ function App() {
       const tab = tabs.find((item) => item.id === tabId);
       const pane = tab ? findSessionPaneById(tab.root, paneId) : null;
       if (!tab || !pane) return;
+      if (tab.locked) {
+        notifyLockedTabCloseBlocked();
+        return;
+      }
 
       const closed = await closePaneBackendSession(pane);
       if (!closed) {
@@ -1190,7 +1203,7 @@ function App() {
       closePane(tab.id, pane.id);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closePane, closePaneBackendSession, persistWorkspaceNow, t, tabs],
+    [closePane, closePaneBackendSession, notifyLockedTabCloseBlocked, persistWorkspaceNow, t, tabs],
   );
 
   const handleSessionClick = useCallback(
@@ -1312,8 +1325,12 @@ function App() {
 
   const handleCloseActiveTab = useCallback(() => {
     if (!activeTab) return;
+    if (activeTab.locked) {
+      notifyLockedTabCloseBlocked();
+      return;
+    }
     void handleCloseWorkspaceTab(activeTab);
-  }, [activeTab, handleCloseWorkspaceTab]);
+  }, [activeTab, handleCloseWorkspaceTab, notifyLockedTabCloseBlocked]);
 
   const handleNextTab = useCallback(() => {
     if (tabs.length < 2 || !activeTabId) return;
@@ -2043,6 +2060,11 @@ function App() {
 
   const handleCloseSession = useCallback(
     async (tab: Tab) => {
+      if (tab.locked) {
+        notifyLockedTabCloseBlocked();
+        return;
+      }
+
       const pane = getActivePane(tab);
       if (!pane) return;
 
@@ -2055,7 +2077,7 @@ function App() {
       closePane(tab.id, pane.id);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     },
-    [closePane, closePaneBackendSession, persistWorkspaceNow, t],
+    [closePane, closePaneBackendSession, notifyLockedTabCloseBlocked, persistWorkspaceNow, t],
   );
 
   const handleDisconnectSessionById = useCallback(
@@ -2102,15 +2124,21 @@ function App() {
   );
 
   const handleCloseAllTabs = useCallback(async () => {
-    const results = await Promise.all(tabs.map((tab) => closeWorkspaceTabSessions(tab)));
-    const successfulTabIds = tabs.filter((_, index) => results[index]).map((tab) => tab.id);
+    const tabsToClose = tabs.filter((tab) => !tab.locked);
+    const skippedLockedCount = tabs.length - tabsToClose.length;
+    const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
+    const successfulTabIds = tabsToClose.filter((_, index) => results[index]).map((tab) => tab.id);
 
     if (successfulTabIds.length > 0) {
       closeTabs(successfulTabIds);
       await persistWorkspaceNow(t("tabCtx.closeFailed"));
     }
 
-    if (successfulTabIds.length !== tabs.length) {
+    if (skippedLockedCount > 0) {
+      toast.info(t("tabCtx.lockedTabsSkipped"));
+    }
+
+    if (successfulTabIds.length !== tabsToClose.length) {
       toast.error(t("tabCtx.closeFailed"));
     }
   }, [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs]);
@@ -2121,7 +2149,11 @@ function App() {
         ? findTerminalWindowLeafByTabId(terminalWindows, keepTabId)
         : null;
       const targetTabs = leaf?.tabIds ?? tabs.map((tab) => tab.id);
-      const tabsToClose = tabs.filter((tab) => targetTabs.includes(tab.id) && tab.id !== keepTabId);
+      const targetTabsToClose = tabs.filter(
+        (tab) => targetTabs.includes(tab.id) && tab.id !== keepTabId,
+      );
+      const tabsToClose = targetTabsToClose.filter((tab) => !tab.locked);
+      const skippedLockedCount = targetTabsToClose.length - tabsToClose.length;
       const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
 
       const successfulTabIds = tabsToClose
@@ -2135,6 +2167,10 @@ function App() {
 
       if (!successfulTabIds.length && activeTabId !== keepTabId) {
         setActiveTabId(keepTabId);
+      }
+
+      if (skippedLockedCount > 0) {
+        toast.info(t("tabCtx.lockedTabsSkipped"));
       }
 
       if (successfulTabIds.length !== tabsToClose.length) {
@@ -2161,7 +2197,9 @@ function App() {
       if (idx === -1) return;
 
       const rightTabIds = tabOrder.slice(idx + 1);
-      const tabsToClose = tabs.filter((tab) => rightTabIds.includes(tab.id));
+      const targetTabsToClose = tabs.filter((tab) => rightTabIds.includes(tab.id));
+      const tabsToClose = targetTabsToClose.filter((tab) => !tab.locked);
+      const skippedLockedCount = targetTabsToClose.length - tabsToClose.length;
       const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
 
       const successfulTabIds = tabsToClose
@@ -2171,6 +2209,10 @@ function App() {
       if (successfulTabIds.length > 0) {
         closeTabs(successfulTabIds);
         await persistWorkspaceNow(t("tabCtx.closeFailed"));
+      }
+
+      if (skippedLockedCount > 0) {
+        toast.info(t("tabCtx.lockedTabsSkipped"));
       }
 
       if (successfulTabIds.length !== tabsToClose.length) {

@@ -87,6 +87,8 @@ export interface Tab {
   customName?: string;
   /** Hex color string for the tab accent line and background tint. */
   tabColor?: string;
+  /** True when the tab is protected from accidental close actions. */
+  locked?: boolean;
 }
 
 /** SSH connection config for creating a session. */
@@ -343,6 +345,7 @@ export interface RestorableTab {
   connection_id?: string;
   custom_name?: string;
   tab_color?: string;
+  locked?: boolean;
 }
 
 export type LeftPanelId = "fileExplorer" | "network" | "securityAuth" | "syncBackupHistory";
