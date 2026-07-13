@@ -882,7 +882,7 @@ export default function SendCommandPanel({
         {dataType === "text" ? (
           <Textarea
             ref={textInputRef}
-            className="min-h-0 h-full resize-none pr-12 pb-10 font-mono text-xs leading-5 md:text-xs"
+            className="min-h-0 h-full resize-none pr-12 pb-10 text-xs leading-5 md:text-xs"
             placeholder={t(
               "serialSend.shellPlaceholder",
               "Enter text to send...\nCtrl/Cmd + Enter to send",
