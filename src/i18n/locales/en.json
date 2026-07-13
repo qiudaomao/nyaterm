@@ -420,6 +420,7 @@
     "telnetLocalEchoDesc": "Show typed input locally when the device does not echo.",
     "telnetLocalLineEdit": "Local line editing / Send line on Enter",
     "telnetLocalLineEditDesc": "Edit input locally and send the full command when Enter is pressed. Useful for debug ports that do not support remote Backspace.",
+    "telnetNoAuthenticationDescription": "Connect without sending a saved Telnet password automatically.",
     "telnetRawTcpCli": "Embedded debug port / Raw TCP CLI",
     "telnetRawTcpCliDesc": "Suitable for non-standard Telnet, embedded debug ports, and device CLIs. When enabled, Telnet negotiation is disabled and input is passed through directly.",
     "telnetRawTcpCliLongDesc": "Disables Telnet negotiation and passes input directly through for TVs, routers, switches, and embedded debug ports.",
