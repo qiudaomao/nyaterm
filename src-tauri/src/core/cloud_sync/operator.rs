@@ -130,6 +130,7 @@ impl CloudRemote {
 }
 
 pub(super) fn build_remote(settings: &CloudSyncSettings) -> AppResult<CloudRemote> {
+    opendal::install_default();
     match settings.provider.as_str() {
         "webdav" => build_webdav_operator(settings).map(CloudRemote::OpenDal),
         "s3" => build_s3_operator(settings).map(CloudRemote::OpenDal),
@@ -146,7 +147,6 @@ pub(super) fn build_remote(settings: &CloudSyncSettings) -> AppResult<CloudRemot
 }
 
 fn build_webdav_operator(settings: &CloudSyncSettings) -> AppResult<Operator> {
-    opendal::install_default();
     let endpoint = normalize_storage_endpoint(&settings.webdav.endpoint);
     let mut builder = Webdav::default().endpoint(&endpoint);
     if !settings.webdav.root.trim().is_empty() {
